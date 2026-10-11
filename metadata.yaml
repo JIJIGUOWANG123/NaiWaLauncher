@@ -1,0 +1,34 @@
+name: astrbot_plugin_custom_entertainment
+display_name: "自定义娱乐"
+desc: "群娱乐合集：接口系统（图片/视频/文本）+ 每日运势 / 今日老公 / 今日人品 + 早安晚安打卡与排行 + Minecraft 版本检测 + 电脑状态与定时推送 + 每日读报 + 自定义词库与戳一戳回复 + 每日签到 / 偷积分 / 银行 / 保险箱 / 坐骑商店 / 打工 / 体力 + 宠物系统 + 猜拳 / 猜数 + 发言统计 + 整点报时 + 群员管理 + 数据备份。全部功能可按群独立开关与拉黑。"
+version: "1.0"
+author: "chicken butt"
+repo: "https://github.com/wanglaoji123/astrbot_plugin_custom_entertainment"
+astrbot_version: ">=4.27"
+
+# 版本更新记录
+# ★ 插件里的「更新日志」指令就读这一段（core/changelog.py），
+#   改这里等于改更新日志，不用再动 README。
+#   字段：version（版本号）/ date（日期）/ desc（说明，建议写成单行）
+#   ★ 最新的写在**最上面**（指令默认只显示最新一天的内容）
+version_history:
+  - version: v1.0
+    date: 2026-10-10
+    desc: 测试结束了，正式版1.0已经发布了。
+
+tags:
+- entertainment
+- fortune
+- luck
+- greeting
+- checkin
+- bank
+- steal
+- pet
+- rps
+- chime
+- minecraft
+- api
+support_platforms:
+- aiocqhttp
+- qq_official

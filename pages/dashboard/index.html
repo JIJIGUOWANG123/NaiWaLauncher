@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>自定义娱乐 · 控制台</title>
+  <link rel="stylesheet" href="./style.css?v=c778a011" />
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">🐔</div>
+        <div class="brand">
+          <div class="brand-title">自定义娱乐</div>
+          <div class="brand-subtitle">v1.7.7</div>
+        </div>
+      </div>
+
+      <nav class="nav" id="navList">
+        <div class="nav-item active" data-view="menu">
+          <span class="nav-icon">📋</span><span>菜单指令</span>
+        </div>
+        <div class="nav-item" data-view="meme">
+          <span class="nav-icon">🖼️</span><span>接口系统</span>
+        </div>
+        <div class="nav-item" data-view="mc">
+          <span class="nav-icon">⛏️</span><span>MC 系统</span>
+        </div>
+        <div class="nav-item" data-view="greeting">
+          <span class="nav-icon">🌅</span><span>打卡系统</span>
+        </div>
+        <div class="nav-item" data-view="checkin">
+          <span class="nav-icon">💰</span><span>签到系统</span>
+        </div>
+        <div class="nav-item" data-view="steal">
+          <span class="nav-icon">🦸‍♂️</span><span>神偷功能</span>
+        </div>
+        <div class="nav-item" data-view="bank">
+          <span class="nav-icon">🏦</span><span>银行功能</span>
+        </div>
+        <div class="nav-item" data-view="lottery">
+          <span class="nav-icon">🎰</span><span>抽奖功能</span>
+        </div>
+        <div class="nav-item" data-view="mount">
+          <span class="nav-icon">🐴</span><span>坐骑功能</span>
+        </div>
+        <div class="nav-item" data-view="job">
+          <span class="nav-icon">🔨</span><span>打工功能</span>
+        </div>
+        <div class="nav-item" data-view="shop">
+          <span class="nav-icon">🧰</span><span>签到商店</span>
+        </div>
+        <div class="nav-item" data-view="pet">
+          <span class="nav-icon">🐾</span><span>宠物功能</span>
+        </div>
+        <div class="nav-item" data-view="fortune">
+          <span class="nav-icon">🔮</span><span>今日运势</span>
+        </div>
+        <div class="nav-item" data-view="husband">
+          <span class="nav-icon">💑</span><span>今日老公</span>
+        </div>
+        <div class="nav-item" data-view="luck">
+          <span class="nav-icon">🍀</span><span>今日人品</span>
+        </div>
+        <div class="nav-item" data-view="entertain">
+          <span class="nav-icon">🎈</span><span>娱乐功能</span>
+        </div>
+        <div class="nav-item" data-view="news">
+          <span class="nav-icon">📰</span><span>每日读报</span>
+        </div>
+        <div class="nav-item" data-view="chime">
+          <span class="nav-icon">🕐</span><span>整点报时</span>
+        </div>
+        <div class="nav-item" data-view="word">
+          <span class="nav-icon">📚</span><span>词库系统</span>
+        </div>
+        <div class="nav-item" data-view="poke">
+          <span class="nav-icon">👉</span><span>戳一戳回复</span>
+        </div>
+        <div class="nav-item" data-view="speak">
+          <span class="nav-icon">💬</span><span>发言统计</span>
+        </div>
+        <div class="nav-item" data-view="status">
+          <span class="nav-icon">🖥️</span><span>电脑状态</span>
+        </div>
+        <div class="nav-item" data-view="data">
+          <span class="nav-icon">🗄️</span><span>数据管理</span>
+        </div>
+        <div class="nav-item" data-view="admin">
+          <span class="nav-icon">🔧</span><span>管理系统</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="footer-btn" id="themeToggleBtn">
+          <span>🌓</span><span>切换主题</span>
+        </button>
+        <button class="footer-btn" id="reloadBtn">
+          <span>🔄</span><span>重新加载</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <header class="topbar">
+        <h1 id="pageTitle">菜单指令</h1>
+        <div class="topbar-actions" id="topbarActions">
+          <span class="bridge-status" id="bridgeStatus">连接中...</span>
+        </div>
+      </header>
+
+      <div class="content" id="content">
+        <div class="loading">加载中...</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Edit Modal (generic, 用于 template_list 编辑) -->
+  <div class="modal-overlay" id="editModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="editModalTitle">编辑</h3>
+        <button class="modal-close" id="closeEditModal">&times;</button>
+      </div>
+      <div id="editModalBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="submitEditBtn">保存</button>
+        <button class="btn btn-muted" id="cancelEditBtn">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Modal -->
+  <div class="modal-overlay" id="exportModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>💾 导出数据</h3>
+        <button class="modal-close" id="closeExportModal">&times;</button>
+      </div>
+
+      <div class="backup-section">
+        <div class="backup-label">备份到服务器目录</div>
+        <div class="backup-hint">
+          可填任意可写目录；留空则用下方默认目录。目录已存在时会在其下自动创建带时间戳的子目录，不会覆盖已有备份。
+        </div>
+        <input type="text" id="backupDirInput" placeholder="留空使用默认目录" />
+        <div class="backup-default">默认：<span id="backupDefaultDir">读取中...</span></div>
+        <div class="backup-actions">
+          <button class="btn btn-primary btn-sm" id="doBackupBtn">备份到该目录</button>
+        </div>
+      </div>
+
+      <div class="backup-section">
+        <div class="backup-label">下载到本机</div>
+        <div class="backup-hint">
+          把全部数据导出为一个 JSON 文件下载到浏览器（保存位置由浏览器决定）。适合直接存到自己电脑上。
+        </div>
+        <div class="backup-actions">
+          <button class="btn btn-info btn-sm" id="doDownloadBtn">下载 JSON 备份</button>
+        </div>
+      </div>
+
+      <div class="backup-section">
+        <div class="backup-label">将备份的内容</div>
+        <div class="backup-files" id="backupFiles">读取中...</div>
+      </div>
+
+      <div class="backup-result" id="backupResult"></div>
+
+      <div class="modal-footer">
+        <button class="btn btn-muted" id="closeExportBtn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>📥 导入数据</h3>
+        <button class="modal-close" id="closeImportModal">&times;</button>
+      </div>
+
+      <div class="backup-section">
+        <div class="backup-label">从备份目录或备份包还原</div>
+        <div class="backup-hint">
+          填入备份目录，或「导出数据」下载的 JSON 备份包路径。导入前会<b>自动备份当前数据</b>，
+          可随时回退；只写入本插件的数据文件，其余文件一律忽略。
+        </div>
+        <input type="text" id="importSourceInput" placeholder="例如：D:\backup\astrbot_plugin_custom_entertainment_20261001_120000" />
+        <div class="backup-actions">
+          <button class="btn btn-muted btn-sm" id="doImportPreviewBtn">先预检</button>
+          <button class="btn btn-danger btn-sm" id="doImportBtn">确认导入</button>
+        </div>
+        <label class="backup-check">
+          <input type="checkbox" id="importMergeSkip" />
+          仅补充缺失的文件（不覆盖已有数据）
+        </label>
+        <div class="backup-files" id="importPreview" style="margin-top:10px"></div>
+      </div>
+
+      <div class="backup-result" id="importResult"></div>
+
+      <div class="modal-footer">
+        <button class="btn btn-muted" id="closeImportBtn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error overlay -->
+  <div class="error-overlay" id="errorOverlay">
+    <div class="error-box">
+      <div class="error-title">⚠️ 配置加载失败</div>
+      <div class="error-msg" id="errorMsg"></div>
+      <div class="error-actions">
+        <button class="btn btn-primary" id="retryBtn">重新加载</button>
+      </div>
+      <div class="error-hint">桥接状态：<span id="errorBridgeStatus">未知</span></div>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js?v=p0d1e2f3"></script>
+</body>
+</html>
