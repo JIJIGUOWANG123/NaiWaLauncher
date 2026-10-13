@@ -3,7 +3,6 @@ import json
 import time
 import asyncio
 import datetime
-import ssl
 import threading
 import aiohttp
 from astrbot.api import logger
@@ -54,7 +53,6 @@ async def _get_json(
     session: aiohttp.ClientSession,
     url: str,
     timeout: int = 15,
-    ssl=None,
     token: str = "",
 ):
     t = aiohttp.ClientTimeout(total=timeout)
@@ -64,9 +62,9 @@ async def _get_json(
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    # ★★ 1.7：不再接受 `ssl=` 覆盖 —— 一律用 aiohttp 默认的
+    #   证书校验（系统受信任 CA），杜绝「为了绕开报错直接关校验」。
     kwargs = {"timeout": t, "headers": headers}
-    if ssl is not None:
-        kwargs["ssl"] = ssl
     async with session.get(url, **kwargs) as resp:
         if resp.status == 403:
             raise PermissionError("HTTP 403（GitHub 限速或网络受限）")
@@ -123,17 +121,16 @@ async def fetch_bedrock(token: str = "", retry: int = 2) -> dict:
     只在手动查询 MC版本 时调用，自动检测不会再触发。
     保留重试机制应对偶发 403。
     """
-    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
-
+    # ★★ 1.7：**这里原来关掉了证书校验**
+    #   （`check_hostname = False` + `verify_mode = CERT_NONE`）。
+    #   已恢复默认校验：`aiohttp` 不传 `ssl=` 参数时就会用系统的
+    #   受信任 CA 库验证服务器证书，和 `fetch_java` 保持一致。
     last_err = None
     for attempt in range(retry + 1):
         try:
-            connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-            async with aiohttp.ClientSession(connector=connector) as session:
+            async with aiohttp.ClientSession() as session:
                 releases = await _get_json(
-                    session, BE_RELEASES_URL, ssl=False, token=token
+                    session, BE_RELEASES_URL, token=token
                 )
             break
         except PermissionError as e:
