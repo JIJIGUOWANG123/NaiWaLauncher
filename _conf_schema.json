@@ -1,0 +1,2576 @@
+{
+  "title_prefix": {
+    "description": "【全局】统一标题前缀（所有指令输出，留空则不显示）",
+    "type": "string",
+    "default": "铁剑娘系统：",
+    "hint": "所有指令输出的标题都会带这个前缀，例如填「铁剑娘系统」就会显示「铁剑娘系统：机器人运行状态」。留空 = 完全不要前缀；末尾的「：」会自动补上。"
+  },
+  "greeting_groups": {
+    "description": "【打卡系统】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能打卡（早安与晚安共用一个名单）。多个群号用英文逗号分隔"
+  },
+  "meme_feature_enable": {
+    "description": "【接口系统】启用接口系统",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后接口系统不再响应（含接口列表、图片接口、视频接口）。单个群可用「关闭功能 接口系统」关闭。"
+  },
+  "meme_groups": {
+    "description": "【接口系统】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能调用接口。多个群号用英文逗号分隔"
+  },
+  "status_feature_enable": {
+    "description": "【电脑状态】启用电脑状态",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后电脑状态不再响应（含定时推送）。单个群可用「关闭功能 电脑状态」关闭。"
+  },
+  "status_groups": {
+    "description": "【电脑状态】手动查询不生效的群号（黑名单）",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都能查电脑状态；填写后这些群不能查。多个群号用英文逗号分隔。可用「关闭功能 电脑状态」加入本群"
+  },
+  "daily_status_push_interval_min": {
+    "description": "【定时状态推送】推送间隔（分钟）",
+    "type": "string",
+    "default": "60",
+    "hint": "每隔多少分钟推送一次机器人运行状态，例如 60 = 每 60 分钟推一次。最小 1 分钟；单个群可用指令单独改间隔。"
+  },
+  "daily_status_push_groups": {
+    "description": "【状态推送】生效的群号（自动推送）",
+    "type": "text",
+    "default": "",
+    "hint": "填写才会自动推送电脑状态：多个群号用英文逗号分隔。留空 = 不自动推送。可用「关闭功能 状态推送」移除本群"
+  },
+  "cmd_daily_push_on": {
+    "description": "【定时状态推送】开启推送指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "状态推送开",
+    "hint": "可带群号远程开启：状态推送开 123456"
+  },
+  "cmd_daily_push_off": {
+    "description": "【定时状态推送】关闭推送指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "状态推送关",
+    "hint": "可带群号远程关闭：状态推送关 123456"
+  },
+  "cmd_daily_push_time": {
+    "description": "【定时状态推送】设置推送间隔指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "状态推送间隔",
+    "hint": "用法：状态推送间隔 60 或 状态推送间隔 群号 60（单位分钟）；不带参数则查询"
+  },
+  "cmd_daily_push_list": {
+    "description": "【定时状态推送】查看推送列表指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "状态推送列表",
+    "hint": "显示总开关、默认时间与各群推送时间"
+  },
+  "cmd_main": {
+    "description": "【菜单】总菜单指令",
+    "type": "string",
+    "default": "自定义娱乐",
+    "hint": "显示所有功能入口"
+  },
+  "cmd_entertain_menu": {
+    "description": "【娱乐功能】菜单入口指令名",
+    "type": "string",
+    "default": "娱乐功能",
+    "hint": "主菜单里的「娱乐功能」入口。可写多个，英文逗号分隔"
+  },
+  "cmd_meme_menu": {
+    "description": "【菜单】接口系统子菜单指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "接口系统",
+    "hint": "显示接口系统的图片 / 视频两个入口"
+  },
+  "cmd_meme_image": {
+    "description": "【接口系统】图片接口列表指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "图片接口",
+    "hint": "只看图片类接口。可加页码：图片接口 2"
+  },
+  "cmd_meme_video": {
+    "description": "【接口系统】视频接口列表指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "视频接口",
+    "hint": "只看视频类接口。可加页码：视频接口 2"
+  },
+  "cmd_mc_menu": {
+    "description": "【菜单】MC系统子菜单指令",
+    "type": "string",
+    "default": "MC系统",
+    "hint": "显示 Minecraft 相关指令"
+  },
+  "cmd_greeting_menu": {
+    "description": "【菜单】打卡系统子菜单指令",
+    "type": "string",
+    "default": "打卡系统",
+    "hint": "显示早安晚安相关指令"
+  },
+  "cmd_checkin_menu": {
+    "description": "【菜单】签到系统子菜单指令",
+    "type": "string",
+    "default": "签到系统",
+    "hint": "显示签到相关指令"
+  },
+  "cmd_daily_menu": {
+    "description": "【菜单】每日系列子菜单指令",
+    "type": "string",
+    "default": "每日系列",
+    "hint": "显示今日运势/老公/人品指令"
+  },
+  "cmd_admin": {
+    "description": "【菜单】管理员菜单指令",
+    "type": "string",
+    "default": "管理员指令",
+    "hint": "显示所有管理员功能"
+  },
+  "cmd_list": {
+    "description": "【接口系统】接口列表指令",
+    "type": "string",
+    "default": "表情包列表",
+    "hint": "显示接口规则列表，支持分页"
+  },
+  "cmd_add": {
+    "description": "【接口系统】添加规则指令",
+    "type": "string",
+    "default": "添加表情",
+    "hint": "管理员/群主/群管/插件专属管理员用"
+  },
+  "cmd_del": {
+    "description": "【接口系统】删除规则指令",
+    "type": "string",
+    "default": "删除规则",
+    "hint": "管理员/群主/群管/插件专属管理员用"
+  },
+  "cmd_save": {
+    "description": "【接口系统】保存规则指令",
+    "type": "string",
+    "default": "保存规则",
+    "hint": "管理员/群主/群管/插件专属管理员用"
+  },
+  "default_key": {
+    "description": "【接口系统】API 默认 KEY（留空 = 不带 key）",
+    "type": "string",
+    "default": "",
+    "hint": "★ 留空即可 —— 大部分公开接口不需要 key。\n只有你用的接口明确要求 key 时才在这里填（会以 &key=xxx 追加到请求里）。\n★ 本插件**不内置任何第三方 key**，请使用你自己的。"
+  },
+  "api_list": {
+    "description": "【接口系统】接口规则（只读）",
+    "type": "text",
+    "default": "",
+    "hint": "数据已迁移到独立文件，请在「独立配置页面 → 接口系统」里增删改（此处只读展示当前数据）"
+  },
+  "group_block_keywords": {
+    "description": "【接口系统】每群屏蔽关键词",
+    "type": "text",
+    "default": "",
+    "hint": "一行一条，格式：群号: 关键词1,关键词2"
+  },
+  "cmd_minecraft": {
+    "description": "【MC系统】Minecraft Java 版本查询指令",
+    "type": "string",
+    "default": "MC版本",
+    "hint": "发送该指令查询最新 Java 正式版 / 测试版"
+  },
+  "cmd_mc_auto": {
+    "description": "【MC系统】切换当前群 MC 自动检测",
+    "type": "string",
+    "default": "MC自动检测",
+    "hint": "管理员/群主/群管用"
+  },
+  "cmd_mc_test": {
+    "description": "【MC系统】手动测试推送指令",
+    "type": "string",
+    "default": "MC测试推送",
+    "hint": "手动拉取最新版本并推送到所有开启 MC 自动检测的群，用于验证推送链路"
+  },
+  "minecraft_enable": {
+    "description": "【MC系统】启用MC系统",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后 MC 版本检测不再响应。单个群可用「关闭功能 MC系统」关闭。"
+  },
+  "minecraft_check_interval": {
+    "description": "【MC系统】自动检测间隔（秒）",
+    "type": "string",
+    "default": "3600",
+    "hint": "0 表示不自动检测"
+  },
+  "minecraft_auto_groups": {
+    "description": "【MC系统】已开启 MC 自动检测推送的群号（一行一个）",
+    "type": "text",
+    "default": "",
+    "hint": "管理员可在群里发「MC自动检测」开启/关闭本群"
+  },
+  "minecraft_test_groups": {
+    "description": "【MC系统】MC测试推送指定群（一行一个）",
+    "type": "text",
+    "default": "",
+    "hint": "只推送给这里填的群。留空则推送给所有已开启自动检测的群"
+  },
+  "cmd_greeting_morning": {
+    "description": "【打卡系统】早安指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "早安,早上好,起床",
+    "hint": "记录起床时间，可自定义多个触发词"
+  },
+  "cmd_greeting_night": {
+    "description": "【打卡系统】晚安指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "晚安,睡觉,睡了",
+    "hint": "记录睡觉时间，可自定义多个触发词"
+  },
+  "cmd_greeting_rank": {
+    "description": "【打卡系统】打卡排行榜指令",
+    "type": "string",
+    "default": "打卡排行",
+    "hint": "所有人可用。显示次数榜和时间榜各前十"
+  },
+  "cmd_greeting_stats": {
+    "description": "【打卡系统】打卡统计指令",
+    "type": "string",
+    "default": "打卡统计",
+    "hint": "不跟参数查自己，可跟 @某人 或 QQ号 查他人。显示早安/晚安累计、连续打卡、累计打卡"
+  },
+  "greeting_enable": {
+    "description": "【打卡系统】启用打卡系统",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后早安晚安不再响应。单个群可用「关闭功能 打卡系统」关闭。"
+  },
+  "greeting_time_format": {
+    "description": "【打卡系统】时长显示格式",
+    "type": "string",
+    "default": "hms",
+    "hint": "hms=几时几分几秒 / seconds=多少秒"
+  },
+  "greeting_min_awake_seconds": {
+    "description": "【打卡系统】打晚安前最少需要清醒的秒数（0=无要求）",
+    "type": "string",
+    "default": "0",
+    "hint": "例如 3600 表示起床后至少 1 小时才能打晚安"
+  },
+  "greeting_max_repeat_remind": {
+    "description": "【打卡系统】重复打卡最多提醒次数（0=无限次）",
+    "type": "string",
+    "default": "0",
+    "hint": "超过此次数后静默不回复。0 表示每次都提醒"
+  },
+  "greeting_day_start_hour": {
+    "description": "【打卡系统】打卡逻辑一天起始小时（最小强制6）",
+    "type": "string",
+    "default": "6",
+    "hint": "每天6点重置早晚安打卡周期，不能小于6"
+  },
+  "greeting_morning_cutoff_hour": {
+    "description": "【打卡系统】早安打卡截止小时（超过此小时打早安不算起床）",
+    "type": "string",
+    "default": "12",
+    "hint": "例如填12，则 00:00–11:59 可以打早安，12:00 及以后打早安会被拒绝。默认 12"
+  },
+  "greeting_night_cutoff_hour": {
+    "description": "【打卡系统】晚安打卡截止小时",
+    "type": "string",
+    "default": "23",
+    "hint": "超过该小时不能打晚安，默认23"
+  },
+  "greeting_night_cutoff_minute": {
+    "description": "【打卡系统】晚安打卡截止分钟",
+    "type": "string",
+    "default": "59",
+    "hint": "默认23点59分后禁止晚安打卡"
+  },
+  "greeting_morning_messages": {
+    "description": "【打卡系统】早安文案（只读）",
+    "type": "text",
+    "default": "",
+    "hint": "数据已迁移到独立文件，请在「独立配置页面 → 打卡系统」里增删改（此处只读展示当前数据）"
+  },
+  "greeting_night_messages": {
+    "description": "【打卡系统】晚安文案（只读）",
+    "type": "text",
+    "default": "",
+    "hint": "数据已迁移到独立文件，请在「独立配置页面 → 打卡系统」里增删改（此处只读展示当前数据）"
+  },
+  "checkin_enable": {
+    "description": "【签到系统】启用签到系统",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后签到不再响应（偷积分/银行/坐骑/打工也会随之失效）。单个群可用「关闭功能 签到系统」关闭。"
+  },
+  "checkin_trigger_names": {
+    "description": "【签到系统】每日签到指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "签到",
+    "hint": "任意一个都能触发，每天每人一次"
+  },
+  "checkin_rank_count_names": {
+    "description": "【签到系统-升级】签到次数排行指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "签到次数排行,次数排行",
+    "hint": "1.7.6 新增。按累计签到次数排名，在「查询指令」下级菜单里"
+  },
+  "checkin_rank_wealth_names": {
+    "description": "【签到系统-升级】总财富排行指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "总财富排行,财富排行",
+    "hint": "1.7.6 新增。总财富 = 钱包 + 银行 − 欠款"
+  },
+  "checkin_rank_debt_names": {
+    "description": "【签到系统-升级】负债排行指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "负债排行,欠款排行",
+    "hint": "1.7.6 新增。欠得越多排名越靠前"
+  },
+  "checkin_info_trigger_names": {
+    "description": "【签到系统】签到统计指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "签到统计,我的签到,查询签到",
+    "hint": "任意一个都能触发。不跟参数=查自己；@某人 或 加QQ号=查别人"
+  },
+  "steal_enable": {
+    "description": "【神偷功能】启用神偷功能",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后偷积分不再响应。单个群可用「关闭功能 神偷功能」关闭。"
+  },
+  "steal_trigger_names": {
+    "description": "【签到系统-偷积分】触发词（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "偷积分,偷分",
+    "hint": "任意一个都能触发。用法：偷积分 @某人 / QQ号"
+  },
+  "cmd_score_add_names": {
+    "description": "【签到系统】加积分指令名",
+    "type": "string",
+    "default": "加积分,增加积分",
+    "hint": "管理员专用，多个用英文逗号分隔。用法：「加积分 @某人 数量」或「加积分 QQ号 数量」"
+  },
+  "cmd_score_sub_names": {
+    "description": "【签到系统】减积分指令名",
+    "type": "string",
+    "default": "减积分,减少积分",
+    "hint": "管理员专用，多个用英文逗号分隔。用法：「减积分 @某人 数量」或「减积分 QQ号 数量」；扣到 0 为止不会变负"
+  },
+  "score_admin_feature_enable": {
+    "description": "【签到系统】积分调整功能总开关",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后加积分 / 减积分指令完全不响应（静默）"
+  },
+  "score_admin_groups": {
+    "description": "【签到系统】积分调整不生效的群号",
+    "type": "string",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群里不能用加积分 / 减积分。多个群号用英文逗号分隔"
+  },
+  "steal_min": {
+    "description": "【签到系统-偷积分】偷取积分最小值",
+    "type": "string",
+    "default": "1",
+    "hint": "成功时从对方身上偷走的最少积分"
+  },
+  "steal_max": {
+    "description": "【签到系统-偷积分】偷取积分最大值",
+    "type": "string",
+    "default": "100",
+    "hint": "成功时从对方身上偷走的最多积分"
+  },
+  "steal_success_rate": {
+    "description": "【签到系统-偷积分】偷取成功概率（%）",
+    "type": "string",
+    "default": "50",
+    "hint": "0-100，默认 50 表示一半概率成功"
+  },
+  "steal_fail_punish_rate": {
+    "description": "【签到系统-偷积分】偷取失败时被对方反拿的概率（%）",
+    "type": "string",
+    "default": "50",
+    "hint": "0-100，失败后有一定概率被对方拿走自己的积分"
+  },
+  "steal_punish_min": {
+    "description": "【签到系统-偷积分】失败被反拿积分最小值",
+    "type": "string",
+    "default": "1",
+    "hint": "被对方反拿走的最少积分"
+  },
+  "steal_punish_max": {
+    "description": "【签到系统-偷积分】失败被反拿积分最大值",
+    "type": "string",
+    "default": "100",
+    "hint": "被对方反拿走的最多积分"
+  },
+  "bank_enable": {
+    "description": "【银行功能】启用银行功能",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后银行不再响应。单个群可用「关闭功能 银行功能」关闭。"
+  },
+  "bank_trigger_names": {
+    "description": "【签到系统-银行】银行信息触发词（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "银行,我的银行",
+    "hint": "查看银行余额和总资产"
+  },
+  "bank_deposit_names": {
+    "description": "【签到系统-银行】存钱触发词（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "存钱,存款",
+    "hint": "用法：存钱 100 / 存钱 all"
+  },
+  "bank_withdraw_names": {
+    "description": "【签到系统-银行】取钱触发词（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "取钱,取款",
+    "hint": "用法：取钱 100 / 取钱 all"
+  },
+  "bank_interest_rate": {
+    "description": "【签到系统-银行】银行日利率（小数）",
+    "type": "string",
+    "default": "0.01",
+    "hint": "0.01 = 1%，每天结算一次利息，向下取整"
+  },
+  "bank_interest_hour": {
+    "description": "【签到系统-银行】利息结算小时（0-23）",
+    "type": "string",
+    "default": "0",
+    "hint": "每天该小时后的首次触发会结算利息，默认 0 点"
+  },
+  "loan_enable": {
+    "description": "【签到系统-银行】启用借款功能",
+    "type": "bool",
+    "default": true,
+    "hint": "1.7.6 新增。关闭后「借款/还款」不再响应。"
+  },
+  "loan_trigger_names": {
+    "description": "【签到系统-银行】借款指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "借款,贷款,借钱",
+    "hint": "1.7.6 新增。用法：借款 1000（不带数量 = 借满上限）"
+  },
+  "loan_repay_names": {
+    "description": "【签到系统-银行】还款指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "还款,还钱,还债",
+    "hint": "1.7.6 新增。用法：还款 500 / 还款 all"
+  },
+  "loan_due_days": {
+    "description": "【签到系统-借款】还款期限（天）",
+    "type": "string",
+    "default": "7",
+    "hint": "1.7.6 新增。借款后多少天内要还清，超过就开始加逾期罚息。**填 0 = 不设期限**（永不逾期）。"
+  },
+  "loan_overdue_step_hours": {
+    "description": "【签到系统-借款】逾期后每隔几小时加一次罚息",
+    "type": "string",
+    "default": "24",
+    "hint": "1.7.6 新增。默认 24 = 每天加一次。填 12 = 每 12 小时加一次（加得更快）。"
+  },
+  "loan_overdue_rate": {
+    "description": "【签到系统-借款】每期逾期罚息比例（按本金算）",
+    "type": "string",
+    "default": "0.05",
+    "hint": "1.7.6 新增。默认 0.05 = 每期收**本金**的 5%。逾期越久期数越多，利息逐步累加。填 0 = 不罚息。"
+  },
+  "loan_deadbeat_days": {
+    "description": "【签到系统-借款】逾期几天开始挂「老赖」标签",
+    "type": "string",
+    "default": "0",
+    "hint": "1.7.6 新增。默认 0 = **一逾期就挂标签**；填 3 = 逾期满 3 天才挂。标签会出现在「借款信息」和「负债排行」里。"
+  },
+  "loan_deadbeat_tag": {
+    "description": "【签到系统-借款】老赖标签文字",
+    "type": "string",
+    "default": "🐍 老赖",
+    "hint": "1.7.6 新增。显示在借款信息和负债排行里，可自定义（如「🚫失信人员」）。"
+  },
+  "loan_overdue_notice": {
+    "description": "【签到系统-借款】逾期时是否在输出里提醒",
+    "type": "bool",
+    "default": true,
+    "hint": "1.7.6 新增。关掉后仍会正常计算罚息，只是不在借款信息/还款里显示逾期那几行。"
+  },
+  "loan_info_names": {
+    "description": "【签到系统-银行】查看借款指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "借款信息,我的借款,欠款",
+    "hint": "1.7.6 新增。查看欠款 / 净值 / 总资产"
+  },
+  "loan_max": {
+    "description": "【签到系统-银行】单次借款上限",
+    "type": "string",
+    "default": "10000",
+    "hint": "1.7.6 新增。想多借就分几次，利息照算 😈"
+  },
+  "loan_interest_rate": {
+    "description": "【签到系统-银行】借款还款利息率（小数）",
+    "type": "string",
+    "default": "0.30",
+    "hint": "1.7.6 新增。0.30 = 三成，借款时一次性计入欠款。默认偏高，显得银行不是好人 😈"
+  },
+  "use_bank_pay": {
+    "description": "【签到系统-银行】钱包不够时自动从银行扣款",
+    "type": "bool",
+    "default": true,
+    "hint": "1.7.6 新增。开启后，买东西/抽奖等消费先扣钱包，钱包不够自动扣银行；关掉则只扣钱包（可扣成负债）"
+  },
+  "notice_debug": {
+    "description": "【提示功能】诊断模式（把收到的 Notice 原样发到群里）",
+    "type": "bool",
+    "default": false,
+    "hint": "1.7.6 新增。排查用：打开后群里**任何** Notice 事件都会把原始数据发出来（不看白名单），看清楚事件类型和字段后请关掉。"
+  },
+  "notice_groups_card": {
+    "description": "【提示功能】改群昵称 的群号白名单（留空=关闭）",
+    "type": "text",
+    "default": "",
+    "hint": "1.7.6 新增。★ 白名单语义：只在这些群里提示；**留空 = 该提示全部关闭**（默认就是空的）。多个群号用英文逗号分隔。"
+  },
+  "notice_groups_mute": {
+    "description": "【提示功能】禁言/解禁 的群号白名单（留空=关闭）",
+    "type": "text",
+    "default": "",
+    "hint": "1.7.6 新增。留空 = 该提示全部关闭。多个群号用英文逗号分隔。"
+  },
+  "notice_groups_leave": {
+    "description": "【提示功能】退群/被踢 的群号白名单（留空=关闭）",
+    "type": "text",
+    "default": "",
+    "hint": "1.7.6 新增。留空 = 该提示全部关闭。多个群号用英文逗号分隔。"
+  },
+  "notice_groups_admin": {
+    "description": "【提示功能】管理员变动 的群号白名单（留空=关闭）",
+    "type": "text",
+    "default": "",
+    "hint": "1.7.6 新增。留空 = 该提示全部关闭。多个群号用英文逗号分隔。"
+  },
+  "notice_groups_title": {
+    "description": "【提示功能】专属称号变动 的群号白名单（留空=关闭）",
+    "type": "text",
+    "default": "",
+    "hint": "1.7.6 新增。留空 = 该提示全部关闭。多个群号用英文逗号分隔。"
+  },
+  "notice_cmd_card": {
+    "description": "【提示功能】改群昵称 的开关短名",
+    "type": "string",
+    "default": "昵称",
+    "hint": "1.7.6 新增。完整指令 = 「开启提示」+ 短名，例如「开启提示昵称」"
+  },
+  "notice_cmd_mute": {
+    "description": "【提示功能】禁言/解禁 的开关短名",
+    "type": "string",
+    "default": "禁言",
+    "hint": "1.7.6 新增。例如「关闭提示禁言」"
+  },
+  "notice_cmd_leave": {
+    "description": "【提示功能】退群/被踢 的开关短名",
+    "type": "string",
+    "default": "退群",
+    "hint": "1.7.6 新增。例如「开启提示退群」"
+  },
+  "notice_cmd_admin": {
+    "description": "【提示功能】管理员变动 的开关短名",
+    "type": "string",
+    "default": "管理员",
+    "hint": "1.7.6 新增。例如「开启提示管理员」"
+  },
+  "notice_cmd_title": {
+    "description": "【提示功能】专属称号变动 的开关短名",
+    "type": "string",
+    "default": "称号",
+    "hint": "1.7.6 新增。例如「开启提示称号」"
+  },
+  "notice_text_card": {
+    "description": "【提示功能】改群昵称 的输出内容",
+    "type": "text",
+    "default": "📝 群昵称变更\n👤 $old\n➡️ $new\n🕐 $time",
+    "hint": "占位符：$old 旧昵称 $new 新昵称 $user $uid $qq $time $group"
+  },
+  "notice_text_mute": {
+    "description": "【提示功能】禁言/解禁 的输出内容",
+    "type": "text",
+    "default": "🔇 禁言变更\n👤 $user\n⏱ $duration\n🛡 操作人：$operator\n🕐 $time",
+    "hint": "占位符：$user $uid $duration（已解除/时长）$kind（禁言/解禁）$operator $time"
+  },
+  "notice_text_leave": {
+    "description": "【提示功能】退群/被踢 的输出内容",
+    "type": "text",
+    "default": "🚪 成员离开\n👤 $user\n📋 剩余人数：$count\n🕐 $time",
+    "hint": "占位符：$user $uid $action（主动退群/被踢出）$time"
+  },
+  "notice_text_admin": {
+    "description": "【提示功能】管理员变动 的输出内容",
+    "type": "text",
+    "default": "🛡 管理员变动\n👤 $user\n🎖 $action\n🛡 操作人：$operator\n🕐 $time",
+    "hint": "占位符：$user $uid $action（成为管理员/被取消管理员）$operator $time"
+  },
+  "notice_text_title": {
+    "description": "【提示功能】专属称号变动 的输出内容",
+    "type": "text",
+    "default": "🏅 专属称号变动\n👤 $user\n➡️ $title\n🛡 操作人：$operator\n🕐 $time",
+    "hint": "占位符：$user $uid $title（新称号，取消时显示「已取消」）$operator $time"
+  },
+  "rob_enable": {
+    "description": "【签到系统-抢银行】启用抢银行",
+    "type": "bool",
+    "default": true,
+    "hint": "1.7.6 新增。银行子功能：每天一次、没有参数。单个群可用「关闭功能 抢银行」关闭。"
+  },
+  "rob_trigger_names": {
+    "description": "【签到系统-抢银行】抢银行指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "抢银行,抢劫银行,打劫银行",
+    "hint": "1.7.6 新增。**没有参数**，直接发指令就抢"
+  },
+  "rob_success_rate": {
+    "description": "【签到系统-抢银行】成功概率（%）",
+    "type": "string",
+    "default": "5",
+    "hint": "1.7.6 新增。0-100。默认 5% —— 很低，故意让人心疼"
+  },
+  "rob_min": {
+    "description": "【签到系统-抢银行】抢到的钱下限",
+    "type": "string",
+    "default": "1",
+    "hint": "1.7.6 新增"
+  },
+  "rob_max": {
+    "description": "【签到系统-抢银行】抢到的钱上限",
+    "type": "string",
+    "default": "10000",
+    "hint": "1.7.6 新增。成功时在 下限~上限 之间随机；钱从全群银行余额里出，够不够看池子"
+  },
+  "rob_freeze_days": {
+    "description": "【签到系统-抢银行】失败冻结银行的天数",
+    "type": "string",
+    "default": "3",
+    "hint": "1.7.6 新增。冻结期间存/取/借/还/查询全部不可用"
+  },
+  "rob_fail_penalty_rate": {
+    "description": "【签到系统-抢银行】失败没收财产的比例",
+    "type": "string",
+    "default": "0.5",
+    "hint": "1.7.6 新增。0.5 = 没收一半财产（钱包+银行 的一半）"
+  },
+  "rob_groups": {
+    "description": "【签到系统-抢银行】不生效的群号（留空=所有群都生效）",
+    "type": "text",
+    "default": "",
+    "hint": "1.7.6 新增。多个群号用英文逗号分隔；也可在群里用「关闭功能 抢银行」"
+  },
+  "lottery_enable": {
+    "description": "【签到系统-抽奖】启用抽奖功能",
+    "type": "bool",
+    "default": true,
+    "hint": "1.7.6 新增。这是「抽奖功能」的总开关；单个群可用「关闭功能 抽奖功能」关闭。关闭后「开始抽奖」不再响应，签到末尾也不再提示。"
+  },
+  "lottery_trigger_names": {
+    "description": "【签到系统-抽奖】抽奖指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "开始抽奖,抽奖",
+    "hint": "1.7.6 新增。指令**不带参数**，直接发「开始抽奖」即可"
+  },
+  "lottery_all_trigger_names": {
+    "description": "【抽奖】全部抽奖指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "全部抽奖,一键抽奖",
+    "hint": "★ 1.7.6 新增：一个指令把**当天剩余次数全部抽完**（每天上限由「每天最多抽几次」决定，默认 10 次）。不限次数时该指令会提示改用普通抽奖。"
+  },
+  "lottery_cost": {
+    "description": "【签到系统-抽奖】每次抽奖花多少",
+    "type": "string",
+    "default": "100",
+    "hint": "1.7.6 新增。每次发「开始抽奖」固定扣这么多"
+  },
+  "lottery_groups": {
+    "description": "【签到系统-抽奖】不生效的群号（留空=所有群都生效）",
+    "type": "text",
+    "default": "",
+    "hint": "1.7.6 新增。多个群号用英文逗号分隔；填了的群不触发抽奖。也可在群里用「关闭功能 抽奖功能」"
+  },
+  "lottery_prize_max": {
+    "description": "【签到系统-抽奖】奖品上限",
+    "type": "string",
+    "default": "500",
+    "hint": "1.7.6 新增。中奖时在 0 ~ 这个值之间随机；下限固定为 0（可能空手而归）"
+  },
+  "lottery_win_rate": {
+    "description": "【签到系统-抽奖】中奖概率（%）",
+    "type": "string",
+    "default": "30",
+    "hint": "1.7.6 新增。0-100，默认 30%"
+  },
+  "lottery_daily_limit": {
+    "description": "【签到系统-抽奖】每天最多抽几次",
+    "type": "string",
+    "default": "10",
+    "hint": "1.7.6 新增。填 0 = 不限次数；默认 10 次"
+  },
+  "lottery_pool_enable": {
+    "description": "【签到系统-奖池】启用奖池",
+    "type": "bool",
+    "default": true,
+    "hint": "1.7.6 新增。抽奖子功能：发「参与抽奖」加入，名额满了立刻开奖。"
+  },
+  "lottery_pool_trigger_names": {
+    "description": "【签到系统-奖池】参与指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "参与抽奖,参与奖池,加入奖池",
+    "hint": "1.7.6 新增。**没有参数**，直接发指令就参与"
+  },
+  "lottery_pool_info_names": {
+    "description": "【签到系统-奖池】查询奖池指令",
+    "type": "string",
+    "default": "奖池,今日奖池,奖池信息",
+    "hint": "1.7.6 新增。查看今日奖池金额、已参与人数、名额"
+  },
+  "lottery_pool_fee": {
+    "description": "【签到系统-奖池】入门费（归系统）",
+    "type": "string",
+    "default": "500",
+    "hint": "1.7.6 新增。参与要交的钱，**直接归系统、不退**，不进奖池"
+  },
+  "lottery_pool_slots": {
+    "description": "【签到系统-奖池】参与名额",
+    "type": "string",
+    "default": "10",
+    "hint": "1.7.6 新增。名额满了**立刻开奖**；每人每天只能参与一次"
+  },
+  "lottery_pool_min": {
+    "description": "【签到系统-奖池】奖池每日随机下限",
+    "type": "string",
+    "default": "1000",
+    "hint": "1.7.6 新增。奖池的钱由系统出，每天在这个区间里随机"
+  },
+  "lottery_pool_max": {
+    "description": "【签到系统-奖池】奖池每日随机上限",
+    "type": "string",
+    "default": "10000",
+    "hint": "1.7.6 新增。开奖时奖池**全额随机分完**，各自进钱包"
+  },
+  "lottery_pool_timeout_hours": {
+    "description": "【签到系统-奖池】名额没满时，多少小时后自动开奖",
+    "type": "string",
+    "default": "1",
+    "hint": "1.7.6 新增。**以小时为单位**，默认 1 小时；填 0 = 不自动开奖（只能等人满）。允许小数如 0.5 = 半小时。★ 没人参与时不会自动开奖。"
+  },
+  "lottery_pool_per_day": {
+    "description": "【签到系统-奖池】每人每天可参与几轮",
+    "type": "string",
+    "default": "1",
+    "hint": "1.7.6 新增。默认 1 = 每人每天只能参与一轮；填 0 = 不限轮数。开奖后仍用**当天同一个奖池金额**开下一轮，所以这个值 >1 时也不会让金额变。"
+  },
+  "lottery_pool_groups": {
+    "description": "【签到系统-奖池】不生效的群号（留空=所有群都生效）",
+    "type": "text",
+    "default": "",
+    "hint": "1.7.6 新增。多个群号用英文逗号分隔；也可在群里用「关闭功能 奖池」"
+  },
+  "mount_enable": {
+    "description": "【坐骑功能】启用坐骑功能",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后坐骑不再响应。单个群可用「关闭功能 坐骑功能」关闭。"
+  },
+  "mount_trigger_names": {
+    "description": "【签到系统-坐骑】查看坐骑指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "我的坐骑,坐骑",
+    "hint": "查看已拥有坐骑和当前骑乘。★「坐骑功能」是**指令菜单**入口，别填在这里。"
+  },
+  "mount_menu_names": {
+    "description": "【签到系统-坐骑】坐骑指令菜单入口（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "坐骑功能,坐骑帮助",
+    "hint": "发这个指令会输出「坐骑相关指令菜单」（就是坐骑功能总览）。★ 注意别和「查看坐骑指令」填同一个词，否则会互相抢。"
+  },
+  "mount_list_trigger_names": {
+    "description": "【签到系统-坐骑】坐骑商店指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "坐骑列表,坐骑商店",
+    "hint": "查看可购买的坐骑列表"
+  },
+  "mount_buy_trigger_names": {
+    "description": "【签到系统-坐骑】购买坐骑指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "购买坐骑,买坐骑",
+    "hint": "用法：购买坐骑 坐骑名"
+  },
+  "cmd_mount_add_names": {
+    "description": "【签到系统-坐骑】添加坐骑指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "添加坐骑,新增坐骑",
+    "hint": "管理员用。格式：添加坐骑 坐骑名 | 价格 | 描述"
+  },
+  "cmd_mount_del_names": {
+    "description": "【签到系统-坐骑】删除坐骑指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "删除坐骑,删坐骑",
+    "hint": "管理员用。格式：删除坐骑 坐骑名或序号"
+  },
+  "mount_list": {
+    "description": "【坐骑功能】坐骑列表（只读）",
+    "type": "text",
+    "default": "",
+    "hint": "数据已迁移到独立文件，请在「独立配置页面 → 坐骑功能」里增删改（此处只读展示当前数据）"
+  },
+  "job_enable": {
+    "description": "【打工功能】启用打工功能",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后打工不再响应。单个群可用「关闭功能 打工功能」关闭。"
+  },
+  "job_trigger_names": {
+    "description": "【签到系统-打工】打工指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "打工,干活",
+    "hint": "用法：打工 工种名。只发「打工」显示工种列表"
+  },
+  "job_info_trigger_names": {
+    "description": "【签到系统-打工】打工列表指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "打工列表,工作列表,工种",
+    "hint": "查看可用工种和收益"
+  },
+  "job_all_trigger_names": {
+    "description": "【打工】全部打工 · 触发词（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "全部打工,一键打工",
+    "hint": "★ 1.7.6 新增。发这个指令会**一次把所有工种各打一遍**（各自按冷却判断，冷却中的跳过）。输出只列前 10 个工种，其余用省略号带过，但**全部都会真实结算**，最下面显示本次总计赚到的金额。"
+  },
+  "job_list": {
+    "description": "【打工功能】工种列表（只读）",
+    "type": "text",
+    "default": "",
+    "hint": "数据已迁移到独立文件，请在「独立配置页面 → 打工功能」里增删改（此处只读展示当前数据）"
+  },
+  "cmd_job_add_names": {
+    "description": "【签到系统-打工】添加工种指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "添加工种,新增工种",
+    "hint": "管理员用。格式：添加工种 工种名 | 冷却小时 | 最少收益 | 最多收益"
+  },
+  "cmd_job_del_names": {
+    "description": "【签到系统-打工】删除工种指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "删除工种,删工种",
+    "hint": "管理员用。格式：删除工种 工种名或序号"
+  },
+  "fortune_trigger_names": {
+    "description": "【每日系列】今日运势触发词（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "今日运势,运势,抽签",
+    "hint": "任意一个都能触发，每天每人一次"
+  },
+  "fortune_enable": {
+    "description": "【每日系列】启用今日运势",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后运势触发词不再响应（含今日运势）。单个群可用「关闭功能 今日运势」关闭。"
+  },
+  "fortune_list": {
+    "description": "【每日系列】今日运势内容（只读）",
+    "type": "text",
+    "default": "",
+    "hint": "数据已迁移到独立文件，请在「独立配置页面 → 今日运势」里增删改（此处只读展示当前数据）"
+  },
+  "husband_trigger_names": {
+    "description": "【每日系列】今日老公触发词（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "今日老公,老公",
+    "hint": "任意一个都能触发，每天每人一次"
+  },
+  "husband_allow_bot": {
+    "description": "【每日系列】机器人是否参与随机抽取",
+    "type": "bool",
+    "default": false,
+    "hint": "关闭（默认）时「今日老公」不会抽到机器人自己；开启后机器人也可能成为老公"
+  },
+  "husband_exclude_ids": {
+    "description": "【每日系列】随机抽取排除的 QQ 号",
+    "type": "string",
+    "default": "",
+    "hint": "填在这里的 QQ 号永远不会被抽到（多个用英文逗号分隔）。留空 = 不排除任何人；建议把自己或不想被抽的人也填进去"
+  },
+  "husband_enable": {
+    "description": "【每日系列】启用今日老公",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后老公触发词不再响应（含今日老公）。单个群可用「关闭功能 今日老公」关闭。"
+  },
+  "luck_trigger_names": {
+    "description": "【每日系列】今日人品触发词（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "今日人品",
+    "hint": "任意一个都能触发，每天每人一次"
+  },
+  "luck_enable": {
+    "description": "【每日系列】启用今日人品",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后人品触发词不再响应（含今日人品）。单个群可用「关闭功能 今日人品」关闭。"
+  },
+  "cmd_status": {
+    "description": "【管理系统】查看运行状态指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "电脑状态,运行状态,服务器状态",
+    "hint": "管理员/群主/群管/插件专属管理员用"
+  },
+  "cmd_status_tail": {
+    "description": "【电脑状态】回复末尾附加提示",
+    "type": "text",
+    "default": "",
+    "hint": "会追加在电脑状态最后，支持多行。留空则不加"
+  },
+  "cmd_status_show_basic": {
+    "description": "【电脑状态】显示基础信息（群号/QQ/版本/消息数/时间）",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后不显示群号、机器人QQ、版本、消息统计、北京时间"
+  },
+  "cmd_status_show_uptime": {
+    "description": "【电脑状态】显示电脑开机时长",
+    "type": "bool",
+    "default": true,
+    "hint": "需要安装 psutil"
+  },
+  "cmd_status_show_cpu": {
+    "description": "【电脑状态·CPU】显示 CPU 数据总开关",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后下面所有 CPU 细分项都不显示。"
+  },
+  "cmd_status_show_mem": {
+    "description": "【电脑状态】内存数据",
+    "type": "bool",
+    "default": true,
+    "hint": "运行内存占用（已用 / 总量），**由 psutil 提供**，无外部依赖。"
+  },
+  "cmd_status_show_disk": {
+    "description": "【电脑状态】磁盘数据",
+    "type": "bool",
+    "default": true,
+    "hint": "各磁盘占用（盘符 + 已用 / 总量）。本机 psutil 读取。"
+  },
+  "cmd_status_show_cpu_temp": {
+    "description": "【电脑状态·CPU】CPU 温度",
+    "type": "bool",
+    "default": true,
+    "hint": "CPU 当前温度（°C）。⚠️ **本版本不提供** —— Windows 上 psutil 拿不到温度数据，开关打开时该项不显示。"
+  },
+  "cmd_status_show_net": {
+    "description": "【电脑状态】网络速率",
+    "type": "bool",
+    "default": true,
+    "hint": "实时上传 / 下载速率，用 psutil 的网卡累计字节**差分**计算（首次调用无基线，不显示）。"
+  },
+  "cmd_status_show_traffic": {
+    "description": "【电脑状态】流量统计",
+    "type": "bool",
+    "default": true,
+    "hint": "今日累计上传 / 下载总量。⚠️ **本版本不提供**（psutil 拿不到「今日流量」，该项不显示）。"
+  },
+  "cmd_status_show_gpu": {
+    "description": "【电脑状态】GPU 数据",
+    "type": "bool",
+    "default": false,
+    "hint": "GPU 占用率 + 显存占用，由 psutil 提供。默认关闭（没有独显时不会有数据）。"
+  },
+  "daily_news_enable": {
+    "description": "【每日读报】总开关",
+    "type": "bool",
+    "default": false,
+    "hint": "打开后，已开启读报的群会在设定时间收到 60s 读报"
+  },
+  "daily_news_time": {
+    "description": "【每日读报】全局默认推送时间",
+    "type": "string",
+    "default": "08:00",
+    "hint": "24 小时制，支持整点（8）或精确到分钟（08:30）；单个群可用指令单独改时间"
+  },
+  "daily_news_interval": {
+    "description": "【每日读报】后台检查间隔（秒）",
+    "type": "string",
+    "default": "30",
+    "hint": "默认 30 秒检查一次，最小 10 秒，一般不用改"
+  },
+  "cmd_daily_news": {
+    "description": "【每日读报】手动读报指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "每日读报",
+    "hint": "所有人可用。发送后立即获取并发送今日 60s 读报"
+  },
+  "cmd_daily_news_on": {
+    "description": "【每日读报】开启推送指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "读报推送开",
+    "hint": "可带群号远程开启：读报推送开 123456"
+  },
+  "cmd_daily_news_off": {
+    "description": "【每日读报】关闭推送指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "读报推送关",
+    "hint": "可带群号远程关闭：读报推送关 123456"
+  },
+  "cmd_daily_news_time": {
+    "description": "【每日读报】设置推送时间指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "读报推送时间",
+    "hint": "用法：读报推送时间 08:00 或 读报推送时间 群号 08:00；不带参数则查询"
+  },
+  "cmd_daily_news_list": {
+    "description": "【每日读报】查看推送列表指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "读报推送列表",
+    "hint": "显示总开关、默认时间与各群推送时间"
+  },
+  "cmd_enable": {
+    "description": "【管理系统】开启本群娱乐系统指令",
+    "type": "string",
+    "default": "娱乐系统开",
+    "hint": "管理员/群主/群管/插件专属管理员用"
+  },
+  "cmd_disable": {
+    "description": "【管理系统】关闭本群娱乐系统指令",
+    "type": "string",
+    "default": "娱乐系统关",
+    "hint": "管理员/群主/群管/插件专属管理员用"
+  },
+  "cmd_enable_feature": {
+    "description": "【管理系统】开启单个功能指令",
+    "type": "string",
+    "default": "开启功能",
+    "hint": "格式：开启功能 运势"
+  },
+  "cmd_disable_feature": {
+    "description": "【管理系统】关闭单个功能指令",
+    "type": "string",
+    "default": "关闭功能",
+    "hint": "格式：关闭功能 运势"
+  },
+  "cmd_feature_status": {
+    "description": "【管理系统】查看功能开关状态指令",
+    "type": "string",
+    "default": "功能状态",
+    "hint": "只显示当前群（或指定群）的开关，默认全部开启"
+  },
+  "must_at_bot": {
+    "description": "【管理系统】全局默认：必须艾特机器人才触发所有功能",
+    "type": "bool",
+    "default": false,
+    "hint": "作为每个群的默认值；可在群里用「必须艾特开 / 必须艾特关」单独覆盖"
+  },
+  "cmd_must_at_bot_on": {
+    "description": "【管理系统】开启「必须艾特机器人」指令",
+    "type": "string",
+    "default": "必须艾特开",
+    "hint": "格式：必须艾特开 [群号]，不跟群号=当前群"
+  },
+  "cmd_must_at_bot_off": {
+    "description": "【管理系统】关闭「必须艾特机器人」指令",
+    "type": "string",
+    "default": "必须艾特关",
+    "hint": "格式：必须艾特关 [群号]，不跟群号=当前群"
+  },
+  "cmd_must_at_bot_status": {
+    "description": "【管理系统】查看「必须艾特机器人」状态指令",
+    "type": "string",
+    "default": "必须艾特状态",
+    "hint": "格式：必须艾特状态 [群号]"
+  },
+  "cmd_view_admin": {
+    "description": "【管理系统】查看当前管理员指令",
+    "type": "string",
+    "default": "查看管理员",
+    "hint": "所有人可用"
+  },
+  "cmd_refresh_admin": {
+    "description": "【管理系统】刷新本群群管缓存指令",
+    "type": "string",
+    "default": "刷新群管",
+    "hint": "管理员/群主/群管/插件专属管理员用"
+  },
+  "cmd_add_admin": {
+    "description": "【管理系统】添加插件专属管理员指令",
+    "type": "string",
+    "default": "加管理员",
+    "hint": "格式：加管理员 QQ号"
+  },
+  "cmd_del_admin": {
+    "description": "【管理系统】删除插件专属管理员指令",
+    "type": "string",
+    "default": "删管理员",
+    "hint": "格式：删管理员 QQ号"
+  },
+  "cmd_admin_list": {
+    "description": "【管理系统】查看插件专属管理员列表指令",
+    "type": "string",
+    "default": "管理员列表",
+    "hint": "所有人可用"
+  },
+  "plugin_admins": {
+    "description": "【管理系统】插件专属管理员 QQ 列表（一行一个）",
+    "type": "text",
+    "default": "",
+    "hint": "与 AstrBot 全局管理员、本群群主/管理员并列生效"
+  },
+  "group_admin_cache_ttl": {
+    "description": "【管理系统】群管识别缓存时长（秒）",
+    "type": "string",
+    "default": "600",
+    "hint": "默认 10 分钟。设为 0 表示每次都重新拉取"
+  },
+  "moderation_enable": {
+    "description": "【群员管理】启用踢出 / 禁言 / 拉黑功能",
+    "type": "bool",
+    "default": true,
+    "hint": "需要机器人是群主或管理员才能执行踢人/禁言"
+  },
+  "mute_duration": {
+    "description": "【群员管理】默认禁言时长（秒）",
+    "type": "string",
+    "default": "600",
+    "hint": "指令里不填秒数时使用，最小 60 秒"
+  },
+  "blacklist_default_action": {
+    "description": "【群员管理】拉黑时不填动作的默认处理",
+    "type": "string",
+    "default": "ignore",
+    "hint": "kick=再发言就踢出 / mute=再发言就禁言 / ignore=无视其指令"
+  },
+  "member_blacklist": {
+    "description": "【群员管理】成员黑名单（一行一条）",
+    "type": "text",
+    "default": "",
+    "hint": "格式：QQ号:动作，动作可填 kick / mute / ignore，不填用上面的默认动作。例：123456:mute"
+  },
+  "cmd_kick": {
+    "description": "【群员管理】踢出群员指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "踢出群员",
+    "hint": "用法：踢出群员 @某人 或 踢出群员 QQ号"
+  },
+  "cmd_mute": {
+    "description": "【群员管理】禁言群员指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "禁言群员",
+    "hint": "用法：禁言群员 @某人 [秒数]，不填秒数用默认时长"
+  },
+  "cmd_unmute": {
+    "description": "【群员管理】解除禁言指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "解除禁言",
+    "hint": "用法：解除禁言 @某人"
+  },
+  "cmd_blacklist": {
+    "description": "【群员管理】拉黑成员指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "拉黑成员",
+    "hint": "用法：拉黑成员 @某人 [kick|mute|ignore]"
+  },
+  "cmd_unblacklist": {
+    "description": "【群员管理】解除拉黑指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "解除拉黑",
+    "hint": "用法：解除拉黑 @某人 或 解除拉黑 QQ号"
+  },
+  "cmd_blacklist_list": {
+    "description": "【群员管理】黑名单列表指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "黑名单列表",
+    "hint": "查看当前黑名单与各自的动作"
+  },
+  "disabled_groups": {
+    "description": "【管理系统】已关闭娱乐系统的群号",
+    "type": "text",
+    "default": "",
+    "hint": "一行一个群号"
+  },
+  "hourly_chime_enable": {
+    "description": "【管理系统-整点报时】启用整点报时",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后所有群的整点报时都不推送"
+  },
+  "hourly_chime_interval": {
+    "description": "【管理系统-整点报时】轮询间隔（秒）",
+    "type": "string",
+    "default": "30",
+    "hint": "建议 15-60，最小 5"
+  },
+  "hourly_chime_template": {
+    "description": "【管理系统-整点报时】默认报时文案（第一行）",
+    "type": "string",
+    "default": "🕐 现在是 {hour} 点整",
+    "hint": "可用 {hour} 占位符，群内可用「整点报时文案」覆盖。★ 建议**写短一点**，太长在图片模式里会折成两行。"
+  },
+  "hourly_chime_yiyan_enable": {
+    "description": "【管理系统-整点报时】第二行显示「每日一言」",
+    "type": "bool",
+    "default": false,
+    "hint": "1.7.6 新增。开启后整点报时取一次文本接口，结果放在**第二行**。接口失败时只发第一行，不影响报时。"
+  },
+  "hourly_chime_yiyan_api": {
+    "description": "【管理系统-整点报时】每日一言接口地址",
+    "type": "string",
+    "default": "https://api.yviii.com/yiyan/yi.php",
+    "hint": "返回**纯文本**的接口。返回内容会压成单行；带引号会自动去掉。"
+  },
+  "hourly_chime_yiyan_prefix": {
+    "description": "【管理系统-整点报时】每日一言前缀",
+    "type": "string",
+    "default": "",
+    "hint": "放在每日一言前面。★ **默认空（不带图标）**，想加图标/符号自己填，例如「・」。"
+  },
+  "hourly_chime_yiyan_timeout": {
+    "description": "【管理系统-整点报时】每日一言超时（秒）",
+    "type": "string",
+    "default": "8",
+    "hint": "接口超过这个时间没返回就跳过（只发第一行），避免卡住报时。范围 3~30。"
+  },
+  "hourly_chime_card_max_w": {
+    "description": "【管理系统-整点报时】图片模式卡片宽度上限（像素）",
+    "type": "string",
+    "default": "720",
+    "hint": "报时是「两行短句」，卡片窄了两行都会被折行。默认 720（比普通卡片的 540 宽）。范围 360~900。"
+  },
+  "reply_tail_enable": {
+    "description": "【管理系统-全局回复尾巴】总开关",
+    "type": "bool",
+    "default": false,
+    "hint": "1.7.6 新增。开启后本插件的**所有回复**末尾会追加尾巴。★ 默认关闭；**不填内容就完全不会有尾巴**。"
+  },
+  "reply_tail_mode": {
+    "description": "【管理系统-全局回复尾巴】尾巴来源",
+    "type": "string",
+    "default": "api",
+    "hint": "text = 只用固定文字；api = 只用接口；both = 两个都要（固定文字在上，接口内容在下）。"
+  },
+  "reply_tail_text": {
+    "description": "【管理系统-全局回复尾巴】固定文字",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 不加固定文字。支持多行。"
+  },
+  "reply_tail_api": {
+    "description": "【管理系统-全局回复尾巴】文本接口地址",
+    "type": "string",
+    "default": "",
+    "hint": "留空 = 不调接口（也就没有尾巴）。返回**纯文本**即可，例如每日一言接口。"
+  },
+  "reply_tail_prefix": {
+    "description": "【管理系统-全局回复尾巴】接口内容前缀",
+    "type": "string",
+    "default": "",
+    "hint": "放在接口内容前面，例如「💬 」；留空则直接显示接口原文。"
+  },
+  "reply_tail_timeout": {
+    "description": "【管理系统-全局回复尾巴】接口超时（秒）",
+    "type": "string",
+    "default": "6",
+    "hint": "接口超过这个时间没返回就跳过尾巴，不影响正常回复。范围 3~30。"
+  },
+  "reply_tail_sep": {
+    "description": "【管理系统-全局回复尾巴】尾巴与正文的分隔",
+    "type": "string",
+    "default": "\n",
+    "hint": "默认换行。想用别的（比如一行短横线）就填这里。"
+  },
+  "reply_tail_only_group": {
+    "description": "【管理系统-全局回复尾巴】只在群聊追加",
+    "type": "bool",
+    "default": true,
+    "hint": "开启 = 私聊不加尾巴；关闭 = 私聊也加。"
+  },
+  "reply_tail_max_len": {
+    "description": "【管理系统-全局回复尾巴】尾巴最大长度",
+    "type": "string",
+    "default": "200",
+    "hint": "接口内容会被截断到这个长度，防止刷屏。范围 20~1000。"
+  },
+  "cmd_chime_on": {
+    "description": "【管理系统-整点报时】开启指令",
+    "type": "string",
+    "default": "整点报时开",
+    "hint": "格式：整点报时开 [群号]，不跟群号=当前群"
+  },
+  "cmd_chime_off": {
+    "description": "【管理系统-整点报时】关闭指令",
+    "type": "string",
+    "default": "整点报时关",
+    "hint": "格式：整点报时关 [群号]，不跟群号=当前群"
+  },
+  "cmd_chime_status": {
+    "description": "【管理系统-整点报时】查看状态指令",
+    "type": "string",
+    "default": "整点报时状态",
+    "hint": "格式：整点报时状态 [群号]"
+  },
+  "cmd_chime_hours": {
+    "description": "【管理系统-整点报时】设置报时时段指令",
+    "type": "string",
+    "default": "整点报时时段",
+    "hint": "格式：整点报时时段 8,12,20；整点报时时段 all 恢复全部"
+  },
+  "cmd_chime_text": {
+    "description": "【管理系统-整点报时】设置报时文案指令",
+    "type": "string",
+    "default": "整点报时文案",
+    "hint": "格式：整点报时文案 自定义文案（可用 {hour} 占位符）"
+  },
+  "cmd_chime_list": {
+    "description": "【管理系统-整点报时】查看开启列表指令",
+    "type": "string",
+    "default": "整点报时列表",
+    "hint": "管理员可用"
+  },
+  "cmd_chime_test": {
+    "description": "【管理系统-整点报时】手动测试推送指令",
+    "type": "string",
+    "default": "整点报时测试",
+    "hint": "格式：整点报时测试 [群号]，不跟群号=当前群。用于立即验证推送链路是否正常"
+  },
+  "cmd_word_add": {
+    "description": "【词库系统】添加词库指令",
+    "type": "string",
+    "default": "加词",
+    "hint": "管理员/群主/群管/插件专属管理员用"
+  },
+  "cmd_word_del": {
+    "description": "【词库系统】删除词库指令",
+    "type": "string",
+    "default": "删词",
+    "hint": "管理员/群主/群管/插件专属管理员用"
+  },
+  "cmd_word_list": {
+    "description": "【词库系统】查看词库列表指令",
+    "type": "string",
+    "default": "词库列表",
+    "hint": "所有人可用"
+  },
+  "word_reply_enable": {
+    "description": "【词库系统】启用词库系统",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后词库触发词不再响应。单个群可用「关闭功能 词库系统」关闭。"
+  },
+  "word_reply_list": {
+    "description": "【词库系统】自定义词库（只读）",
+    "type": "text",
+    "default": "",
+    "hint": "数据已迁移到独立文件，请在「独立配置页面 → 词库系统」里增删改（此处只读展示当前数据）"
+  },
+  "hourly_chime_groups": {
+    "description": "【整点报时】生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "填写才会报时：一行/逗号分隔多个群号，例如：123456,789012。留空 = 不报时。可用「关闭功能 整点报时」移除本群"
+  },
+  "daily_news_groups": {
+    "description": "【读报功能】手动读报不生效的群号（黑名单）",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都能手动发读报；填写后这些群不能手动发。多个群号用英文逗号分隔。可用「关闭功能 读报功能」加入本群"
+  },
+  "checkin_groups": {
+    "description": "【签到系统】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能用签到系统（作用于整个签到系统）。多个群号用英文逗号分隔，例如：123456,789012"
+  },
+  "steal_groups": {
+    "description": "【神偷功能】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能偷积分。多个群号用英文逗号分隔"
+  },
+  "bank_groups": {
+    "description": "【银行功能】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能用银行。多个群号用英文逗号分隔"
+  },
+  "mount_equip_names": {
+    "description": "【签到系统-坐骑】装备坐骑指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "装备坐骑,骑乘坐骑",
+    "hint": "1.7.6 新增。用法：「装备坐骑 坐骑名」或「装备坐骑 序号」，**必须已购买**。序号按你已拥有列表的顺序。装备后每天群里第一句话会提示登场。"
+  },
+  "mount_view_names": {
+    "description": "【签到系统-坐骑】坐骑查看指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "坐骑查看,查看坐骑",
+    "hint": "1.7.6 新增。用法：「坐骑查看 坐骑名」或「坐骑查看 序号」，**必须已购买**。序号按你已拥有列表的顺序。坐骑图和文字在同一套输出里（图在坐骑名称前面）。"
+  },
+  "mount_greet_enable": {
+    "description": "【签到系统-坐骑】每天第一句话提示谁骑着什么坐骑登场",
+    "type": "bool",
+    "default": true,
+    "hint": "1.7.6 新增。每个群每天只会提示一次（当天第一条消息触发）；发消息的人没装备坐骑就静默跳过。"
+  },
+  "mount_greet_text": {
+    "description": "【签到系统-坐骑】登场提示文案",
+    "type": "text",
+    "default": "🌟 $name 骑着「$mount」闪亮登场！",
+    "hint": "占位符：$name / $user 发言者昵称，$mount 坐骑名，$group 群号，$uid QQ号。支持 $名 和 {名} 两种写法。"
+  },
+  "mount_groups": {
+    "description": "【坐骑功能】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能用坐骑。多个群号用英文逗号分隔"
+  },
+  "job_groups": {
+    "description": "【打工功能】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能打工。多个群号用英文逗号分隔"
+  },
+  "web_admin_token": {
+    "description": "【安全】配置/备份/导入等写操作的访问令牌（留空=仅依赖同源与面板登录防护）",
+    "type": "string",
+    "default": "",
+    "hint": "填写后，调用保存配置 / 备份 / 导入接口必须携带 X-Plugin-Token 头。不填则这些接口仅接受来自本机面板的同源请求。"
+  },
+  "global_groups": {
+    "description": "【全局】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不生效。多个群号用英文逗号分隔，例如：123456,789012"
+  },
+  "fortune_groups": {
+    "description": "【今日运势】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能用运势。多个群号用英文逗号分隔"
+  },
+  "husband_groups": {
+    "description": "【今日老公】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能用今日老公。多个群号用英文逗号分隔"
+  },
+  "luck_groups": {
+    "description": "【今日人品】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能用人品。多个群号用英文逗号分隔"
+  },
+  "word_reply_groups": {
+    "description": "【词库系统】不生效的群号",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能用词库。多个群号用英文逗号分隔"
+  },
+  "daily_news_auto_groups": {
+    "description": "【每日读报】生效的群号（自动推送）",
+    "type": "text",
+    "default": "",
+    "hint": "填写才会自动推送读报：多个群号用英文逗号分隔。留空 = 不自动推送。可用「关闭功能 每日读报」移除本群"
+  },
+  "cmd_meme_text": {
+    "description": "【接口系统】文本接口列表指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "文本接口",
+    "hint": "只看文本类接口。可加页码：文本接口 2"
+  },
+  "speak_stats_enable": {
+    "description": "【发言统计】总开关",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后停止记录发言，也不再响应排行榜指令。单个群可用「关闭功能 发言功能」关闭"
+  },
+  "cmd_speak_rank_names": {
+    "description": "【发言统计】本群发言排行指令（昨日）",
+    "type": "string",
+    "default": "本群发言排行,发言排行",
+    "hint": "多个用英文逗号分隔。统计**昨日**各群员发言次数前十（标题显示「（昨日）」）。「发言功能」菜单里会展示这些名称"
+  },
+  "cmd_active_rank_names": {
+    "description": "【发言统计】本群活跃排行指令",
+    "type": "string",
+    "default": "本群活跃排行,活跃排行",
+    "hint": "多个用英文逗号分隔。统计连续活跃天数前十（断一天重新计算）"
+  },
+  "cmd_week_rank_names": {
+    "description": "【发言统计】本群上周排行指令",
+    "type": "string",
+    "default": "本群上周排行,上周排行",
+    "hint": "多个用英文逗号分隔。统计前 7 天发言次数前十"
+  },
+  "cmd_month_rank_names": {
+    "description": "【发言统计】本群上月排行指令",
+    "type": "string",
+    "default": "本群上月排行,上月排行",
+    "hint": "多个用英文逗号分隔。统计近 30 天发言次数前十"
+  },
+  "cmd_my_speak_names": {
+    "description": "【发言统计】个人发言统计指令",
+    "type": "string",
+    "default": "个人发言统计,我的发言统计,发言统计",
+    "hint": "多个用英文逗号分隔。查看自己的累计发言、活跃天数、一周内与一个月内发言"
+  },
+  "speak_stats_groups": {
+    "description": "【发言统计】不生效的群号（黑名单）",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不记录也不响应。多个群号用英文逗号分隔。可用「关闭功能 发言功能」加入本群"
+  },
+  "output_mode_enable": {
+    "description": "【输出模式】启用输出模式（★ 本版不生效）",
+    "type": "bool",
+    "default": false,
+    "hint": "★ **本版本只支持文字模式**，这项不生效。\n保留它只是为了让「原版 ↔ 本版本」来回切换时配置不丢。\n（本版本已固定为纯文本输出）"
+  },
+  "output_default_mode": {
+    "description": "【输出模式】全局默认模式（★ 本版不生效）",
+    "type": "string",
+    "default": "text",
+    "options": [
+      "text",
+      "image",
+      "image_light"
+    ],
+    "labels": [
+      "文本模式",
+      "图片模式（深色）",
+      "图片模式（白底黑字）"
+    ],
+    "hint": "★ **本版本只支持文字模式**，这项不生效。\n保留它只是为了让「原版 ↔ 本版本」来回切换时配置不丢。"
+  },
+  "output_group_modes": {
+    "description": "【输出模式】各群模式（★ 本版不生效·自动维护）",
+    "type": "string",
+    "default": "",
+    "hint": "★ **本版本只支持文字模式**，这项不生效。\n保留它只是为了让「原版 ↔ 本版本」来回切换时配置不丢。"
+  },
+  "cmd_output_mode": {
+    "description": "【输出模式】切换指令名",
+    "type": "string",
+    "default": "切换输出模式,输出模式",
+    "hint": "可写多个，英文逗号分隔。用法：切换输出模式 图片。只发指令名则显示当前模式"
+  },
+  "output_render_base": {
+    "description": "【输出模式】渲染服务地址（★ 本版不生效）",
+    "type": "string",
+    "default": "",
+    "hint": "★ **本版本只支持文字模式**，这项不生效。\n保留它只是为了让「原版 ↔ 本版本」来回切换时配置不丢。\n（本版本**不会**连接任何本地渲染服务）"
+  },
+  "output_bg_image": {
+    "description": "【输出模式】图片背景图（★ 本版不生效）",
+    "type": "string",
+    "default": "original",
+    "options": [
+      "original",
+      "Background1.jpg",
+      "Background2.png",
+      "Background3.jpg",
+      "Background4.jpg",
+      "white"
+    ],
+    "labels": [
+      "原来的深色底",
+      "背景1（Background1.jpg）",
+      "背景2（Background2.png）",
+      "背景3（Background3.jpg）",
+      "背景4（Background4.jpg）",
+      "纯白底（白底黑字）"
+    ],
+    "hint": "★ **本版本只支持文字模式**，这项不生效。\n保留它只是为了让「原版 ↔ 本版本」来回切换时配置不丢。"
+  },
+  "output_card_title": {
+    "description": "【输出模式】图片固定标题（★ 本版不生效）",
+    "type": "string",
+    "default": "",
+    "hint": "★ **本版本只支持文字模式**，这项不生效。\n保留它只是为了让「原版 ↔ 本版本」来回切换时配置不丢。"
+  },
+  "pet_enable": {
+    "description": "【宠物功能】总开关",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后所有宠物指令都不再响应（静默，仅记日志）。单个群可用「关闭功能 宠物功能」关闭"
+  },
+  "cmd_pet_buy_names": {
+    "description": "【宠物】购买宠物指令",
+    "type": "string",
+    "default": "购买宠物,买宠物",
+    "hint": "用法：购买宠物 宠物名（多个指令用英文逗号分隔）"
+  },
+  "cmd_pet_mine_names": {
+    "description": "【宠物】我的宠物指令",
+    "type": "string",
+    "default": "我的宠物",
+    "hint": "查看自己已拥有的宠物列表"
+  },
+  "cmd_pet_sell_names": {
+    "description": "【宠物】出售宠物指令",
+    "type": "string",
+    "default": "出售宠物",
+    "hint": "用法：出售宠物 宠物名（返还市场价 75%，即扣除 25%）"
+  },
+  "cmd_pet_release_names": {
+    "description": "【宠物】放生宠物指令",
+    "type": "string",
+    "default": "放生宠物",
+    "hint": "用法：放生宠物 宠物名（免费，不返还积分）"
+  },
+  "cmd_pet_shop_names": {
+    "description": "【宠物】宠物商店指令",
+    "type": "string",
+    "default": "宠物商店",
+    "hint": "用法：宠物商店 [页码]（每页 20 种，不带页码为第一页）"
+  },
+  "cmd_pet_add_names": {
+    "description": "【宠物】添加宠物指令（管理员）",
+    "type": "string",
+    "default": "添加宠物",
+    "hint": "用法：添加宠物 名字|介绍|价格|属性"
+  },
+  "cmd_pet_del_names": {
+    "description": "【宠物】删除宠物指令（管理员）",
+    "type": "string",
+    "default": "删除宠物",
+    "hint": "用法：删除宠物 序号（序号见宠物商店）"
+  },
+  "cmd_pet_adventure_names": {
+    "description": "【宠物】宠物冒险指令",
+    "type": "string",
+    "default": "宠物冒险",
+    "hint": "用法：宠物冒险 [宠物名]（消耗体力与血量，随机获得经验，有概率掉落直升一级卡）"
+  },
+  "cmd_pet_view_names": {
+    "description": "【宠物】宠物查看指令",
+    "type": "string",
+    "default": "宠物查看",
+    "hint": "用法：宠物查看 宠物名（查看等级、经验、属性、冷却）"
+  },
+  "cmd_pet_rest_names": {
+    "description": "【宠物】宠物休息指令",
+    "type": "string",
+    "default": "宠物休息",
+    "hint": "用法：宠物休息 [宠物名]（不带名字则全部休息，恢复体力与血量）"
+  },
+  "cmd_pet_duel_names": {
+    "description": "【宠物】宠物决斗指令",
+    "type": "string",
+    "default": "宠物决斗",
+    "hint": "宠物决斗支持三种写法：\n· 宠物决斗 @某人 = 双方随机各出一只\n· 影 宠物决斗 @某人 = 指定自己的宠物（对方随机）\n· 影 宠物决斗 @某人 雷龙 = 双方都指定\n（「影」「雷龙」是宠物名，换成你自己的即可）"
+  },
+  "cmd_pet_work_names": {
+    "description": "【宠物】宠物上班指令",
+    "type": "string",
+    "default": "宠物上班",
+    "hint": "用法：宠物上班 [宠物名]（随机事件，获得经验与积分）"
+  },
+  "cmd_item_shop_names": {
+    "description": "【宠物】物品商店指令",
+    "type": "string",
+    "default": "物品商店",
+    "hint": "查看可购买的道具"
+  },
+  "cmd_item_buy_names": {
+    "description": "【宠物】购买物品指令",
+    "type": "string",
+    "default": "购买物品,买物品",
+    "hint": "用法：购买物品 物品名 [数量]"
+  },
+  "cmd_item_use_names": {
+    "description": "【宠物】使用物品指令",
+    "type": "string",
+    "default": "使用物品,喂药",
+    "hint": "用法：使用物品 物品名 [宠物名]"
+  },
+  "pet_cd_adventure_hours": {
+    "description": "【宠物】冒险冷却（小时）",
+    "type": "string",
+    "default": "2",
+    "hint": "填数字，支持小数，例如 0.5 = 半小时"
+  },
+  "pet_cd_rest_hours": {
+    "description": "【宠物】休息冷却（小时）",
+    "type": "string",
+    "default": "1",
+    "hint": "填数字"
+  },
+  "pet_cd_work_hours": {
+    "description": "【宠物】上班冷却（小时）",
+    "type": "string",
+    "default": "4",
+    "hint": "填数字"
+  },
+  "pet_cd_duel_hours": {
+    "description": "【宠物】决斗冷却（小时）",
+    "type": "string",
+    "default": "1",
+    "hint": "填数字"
+  },
+  "pet_elem_random_on_buy": {
+    "description": "【宠物功能】五行购买时随机分配",
+    "type": "bool",
+    "default": true,
+    "hint": "开启（默认）时，宠物的金木水火土在购买那一刻按购买者随机分配，商店与图鉴都不展示；关闭后则沿用图鉴里配置的五行"
+  },
+  "pet_exp_per_level": {
+    "description": "【宠物】每级基础所需经验",
+    "type": "string",
+    "default": "100",
+    "hint": "实际升级所需 = 该值 × 当前等级 × (1 + 等级/20)，满级 100 级"
+  },
+  "pet_adventure_exp_min": {
+    "description": "【宠物】冒险获得经验下限",
+    "type": "string",
+    "default": "1",
+    "hint": "填整数"
+  },
+  "pet_adventure_exp_max": {
+    "description": "【宠物】冒险获得经验上限",
+    "type": "string",
+    "default": "200",
+    "hint": "填整数"
+  },
+  "pet_adventure_mp_cost": {
+    "description": "【宠物】冒险消耗体力",
+    "type": "string",
+    "default": "5",
+    "hint": "每次冒险扣除的体力"
+  },
+  "pet_adventure_hp_cost": {
+    "description": "【宠物】冒险消耗血量",
+    "type": "string",
+    "default": "5",
+    "hint": "每次冒险扣除的血量"
+  },
+  "pet_levelup_card_rate": {
+    "description": "【宠物】掉落直升一级卡概率（%）",
+    "type": "string",
+    "default": "5",
+    "hint": "0~100，填 5 表示 5% 概率直接升一级"
+  },
+  "pet_counter_bonus": {
+    "description": "【宠物】五行克制伤害加成（%）",
+    "type": "string",
+    "default": "30",
+    "hint": "克制方伤害加成，被克方减半"
+  },
+  "pet_groups": {
+    "description": "【宠物功能】不生效的群号（黑名单）",
+    "type": "text",
+    "default": "",
+    "hint": "留空 = 所有群都生效；填写后这些群不能用宠物。多个群号用英文逗号分隔"
+  },
+  "pet_list": {
+    "description": "【宠物功能】宠物图鉴（只读）",
+    "type": "text",
+    "default": "",
+    "hint": "数据已迁移到独立文件，请在「独立配置页面 → 宠物功能」里增删改（此处只读展示当前数据）"
+  },
+  "pet_work_events": {
+    "description": "【宠物功能】宠物上班事件（只读）",
+    "type": "text",
+    "default": "",
+    "hint": "数据已迁移到独立文件，请在「独立配置页面 → 宠物功能」里增删改（此处只读展示当前数据）"
+  },
+  "pet_item_list": {
+    "description": "【宠物功能】物品商店（只读）",
+    "type": "text",
+    "default": "",
+    "hint": "数据已迁移到独立文件，请在「独立配置页面 → 宠物功能」里增删改（此处只读展示当前数据）"
+  },
+  "bot_self_id": {
+    "description": "【电脑状态】机器人QQ（自动记录，只读）",
+    "type": "text",
+    "default": "",
+    "hint": "首次收到消息时自动记录，定时推送与状态预览会显示这个值；手工填写也可"
+  },
+  "husband_force_trigger_names": {
+    "description": "【每日系列】逼迫指令名",
+    "type": "string",
+    "default": "逼迫",
+    "hint": "强行指定老公的指令名（多个用英文逗号分隔）。用法：逼迫 @某人；不指定目标则随机抽一个群成员。今天已经有老公时会拒绝，避免与「今日老公」冲突"
+  },
+  "score_name": {
+    "description": "积分显示名称",
+    "type": "string",
+    "default": "积分",
+    "hint": "积分在群里显示成什么名字。填「金币」就显示「金币：1000」，填「点券」就显示「点券：1000」。留空或填「积分」= 默认。覆盖：签到统计 / 排行榜 / 偷积分 / 银行 / 坐骑 / 打工 / 宠物 / 猜拳 / 积分调整 等所有显示文案。（加积分、减积分、偷积分这些**指令名**不受影响，另有配置项）"
+  },
+  "minecraft_groups": {
+    "description": "MC系统·群号黑名单",
+    "type": "string",
+    "default": "",
+    "hint": "填了群号 = 这些群不能用 MC 指令。留空 = 所有群都能用。多个群号用英文逗号隔开，例如：123456,789012"
+  },
+  "cmd_weather_menu": {
+    "description": "天气查询 · 菜单入口指令",
+    "type": "string",
+    "default": "天气查询",
+    "hint": "发这个指令打开「天气查询」菜单（说明怎么用）。和天气查询本身的关键词（天气/天气图片）不是一回事。"
+  },
+  "cmd_status_show_gid": {
+    "description": "【电脑状态】显示 当前群群号",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后不显示「当前群群号」这一行"
+  },
+  "cmd_status_show_bot_qq": {
+    "description": "【电脑状态】显示 机器人QQ",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后不显示「机器人QQ」这一行"
+  },
+  "cmd_status_show_version": {
+    "description": "【电脑状态】显示 版本（插件/AstrBot/NapCat/PCQQ/系统）",
+    "type": "bool",
+    "default": true,
+    "hint": "这里是**版本总开关**：关掉 = 下面 5 个版本全部不显示。下面还有插件 / AstrBot / NapCat / PCQQ / 系统 五个单独开关。"
+  },
+  "cmd_status_show_msg_stats": {
+    "description": "【电脑状态】显示 消息统计",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后不显示「收到消息数量 / 发出消息数量」"
+  },
+  "cmd_status_show_time": {
+    "description": "【电脑状态】显示 北京时间",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后不显示「北京时间」这一行（北京时间固定输出在状态信息的最下面）"
+  },
+  "score_admin_whitelist": {
+    "description": "【签到系统】加减积分 · 允许使用的 QQ 白名单（一行一个）",
+    "type": "text",
+    "default": "",
+    "hint": "填了的 QQ 无需群主/管理员身份就能用「加积分 / 减积分」。一行一个 QQ 号。留空 = 只认 AstrBot 全局管理员，其余一律不认（群主、群管理员也不行）。"
+  },
+  "cmd_status_show_ver_plugin": {
+    "description": "【电脑状态】显示 插件版本",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后不显示「插件版本」这一行"
+  },
+  "cmd_status_show_ver_astrbot": {
+    "description": "【电脑状态】显示 AstrBot 版本",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后不显示「AstrBot版本」这一行"
+  },
+  "cmd_status_show_ver_napcat": {
+    "description": "【电脑状态】显示 NapCat 版本",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后不显示「NapCat版本」这一行（NapCat 版本要先和协议端通信过一次才有值）"
+  },
+  "cmd_status_show_ver_framework": {
+    "description": "【电脑状态】显示 框架版本",
+    "type": "bool",
+    "default": true,
+    "hint": "★ 1.7.6 新增。显示**本地已安装的机器人框架**版本，输出在「NapCat版本」的上一行（例如「框架版本：萌QNT 7.6.0.0」）。它和「NapCat版本」（协议端接口自报的内核版本）不是一回事。读不到就整行不显示。"
+  },
+  "framework_version_exe": {
+    "description": "【电脑状态】框架版本 · 自定义 exe 路径",
+    "type": "string",
+    "default": "",
+    "hint": "★ 1.7.6 新增。留空则自动探测（萌QNT 的 D:\\萌Q\\MQNT.exe、NapCatQQ Desktop 的 NapCatQQ-Desktop.exe）。若你的框架装在别处，把主程序 exe 的完整路径填这里。"
+  },
+  "cmd_status_show_ver_pcqq": {
+    "description": "【电脑状态】显示 PCQQ 版本",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后不显示「PCQQ版本」这一行"
+  },
+  "cmd_status_show_ver_os": {
+    "description": "【电脑状态】显示 系统版本",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后不显示「系统版本」这一行"
+  },
+  "qqinfo_enable": {
+    "description": "【查询功能】启用 查询功能（QQ 用户信息）",
+    "type": "bool",
+    "default": true,
+    "hint": "关掉后完全不响应查询指令。也可以在群里发 `关闭功能 查询功能` 关掉本群"
+  },
+  "qqinfo_groups": {
+    "description": "【查询功能】群号黑名单（留空=所有群都生效）",
+    "type": "text",
+    "default": "",
+    "hint": "填了群号 = 这些群**不生效**。多个群号用英文逗号隔开，例如 123456,789012"
+  },
+  "cmd_qqinfo": {
+    "description": "【查询功能】查询指令名（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "查询,查QQ,查qq,查用户",
+    "hint": "用法：「查询 @某人」或「查询 QQ号」= 查这个人的资料。**必须带 @某人 或 QQ号** —— 光发「查询」不触发（这词太常见，避免群里随便一句话就出图）。多个指令名用英文逗号隔开，例如：查询,查QQ,查用户。输出为**带头像的图片**。"
+  },
+  "cmd_qqinfo_menu": {
+    "description": "【查询功能】子菜单指令名",
+    "type": "string",
+    "default": "查询功能",
+    "hint": "在「娱乐功能」菜单里点进来的入口名"
+  },
+  "checkin_score_min": {
+    "description": "【签到系统】每次签到随机积分 · 下限",
+    "type": "string",
+    "default": "1",
+    "hint": "签到随机积分的**最小值**（含）。填正整数，例如 100。默认 1"
+  },
+  "checkin_score_max": {
+    "description": "【签到系统】每次签到随机积分 · 上限",
+    "type": "string",
+    "default": "1000",
+    "hint": "签到随机积分的**最大值**（含）。填正整数，例如 5000。默认 1000。上限小于下限时会自动按下限算"
+  },
+  "cmd_pet_his_names": {
+    "description": "【宠物功能】查看对方宠物的指令名",
+    "type": "string",
+    "default": "他的宠物",
+    "hint": "用法：他的宠物 @某人 —— 列出对方在这个群的所有宠物（按战力排序）。多个指令名用英文逗号隔开"
+  },
+  "cmd_status_show_cpu_load_rate": {
+    "description": "【电脑状态·CPU】CPU 占用率",
+    "type": "bool",
+    "default": true,
+    "hint": "整颗 CPU 的使用率百分比。数据由 psutil 提供的 CPU.Load，连不上时用本机 psutil。"
+  },
+  "cmd_status_show_cpu_cores": {
+    "description": "【电脑状态·CPU】CPU 核心数",
+    "type": "bool",
+    "default": true,
+    "hint": "物理核心数 / 逻辑线程数，例如「6 物理核 / 12 逻辑核」。本机 psutil 读取。"
+  },
+  "cmd_status_show_cpu_clock": {
+    "description": "【电脑状态·CPU】CPU 频率",
+    "type": "bool",
+    "default": true,
+    "hint": "当前主频，例如 4.2GHz。优先取 psutil 的 CPU.Clock，拿不到用 psutil。"
+  },
+  "cmd_status_show_cpu_cores_load": {
+    "description": "【电脑状态·CPU】CPU 分核占用",
+    "type": "bool",
+    "default": true,
+    "hint": "每个逻辑核心各自的占用率（一行 4 个）。只有本机 psutil 能提供，psutil 没有这项。"
+  },
+  "cmd_status_show_cpu_load": {
+    "description": "【电脑状态·CPU】CPU 负载",
+    "type": "bool",
+    "default": true,
+    "hint": "系统 1 / 5 / 15 分钟平均负载。Windows 不支持该指标，会自动不显示。"
+  },
+  "cmd_status_show_cpu_power": {
+    "description": "【电脑状态·CPU】CPU 功耗",
+    "type": "bool",
+    "default": true,
+    "hint": "CPU 当前功耗（W），由 psutil 提供的 CPU.Power。"
+  },
+  "cmd_status_show_cpu_voltage": {
+    "description": "【电脑状态·CPU】CPU 电压",
+    "type": "bool",
+    "default": true,
+    "hint": "CPU 当前电压（V），由 psutil 提供的 CPU.Voltage。"
+  },
+  "cmd_status_show_cpu_fan": {
+    "description": "【电脑状态·CPU】CPU 风扇转速",
+    "type": "bool",
+    "default": true,
+    "hint": "CPU 风扇转速（RPM），由 psutil 提供的 CPU.Fan。"
+  },
+  "shop_enable": {
+    "description": "【签到商店】功能开关",
+    "type": "bool",
+    "default": true,
+    "hint": "★ 1.7.6 新增。关闭后「签到商店」指令不响应。"
+  },
+  "shop_groups": {
+    "description": "【签到商店】不生效的群号（留空=所有群都能用）",
+    "type": "string",
+    "default": "",
+    "hint": "黑名单语义：填了群号 = 这些群不生效。多个用英文逗号分隔。"
+  },
+  "shop_trigger_names": {
+    "description": "【签到商店】查看商店指令",
+    "type": "string",
+    "default": "签到商店,积分商店,商店",
+    "hint": "★ 1.7.6 新增。多个用英文逗号分隔。"
+  },
+  "shop_buy_trigger_names": {
+    "description": "【签到商店】购买指令",
+    "type": "string",
+    "default": "购买商品,买商品",
+    "hint": "★ 1.7.6 新增。后面接商品名或序号，例如「购买商品 保险箱」、「购买商品1」。⚠️ 不能用「购买物品 / 买物品」——那是**宠物物品商店**的指令，会冲突。"
+  },
+  "shop_save_trigger_names": {
+    "description": "【签到商店】存钱指令（存进保险箱）",
+    "type": "string",
+    "default": "存入保险箱",
+    "hint": "★ 1.7.6 新增。后面接金额或「全部」。需要先买保险箱。⚠️ 不要用「存钱」——那是银行功能的指令，会冲突。"
+  },
+  "shop_take_trigger_names": {
+    "description": "【签到商店】取钱指令（从保险箱取出）",
+    "type": "string",
+    "default": "取出保险箱",
+    "hint": "★ 1.7.6 新增。后面接金额或「全部」。需要先买保险箱。⚠️ 不要用「取钱」——那是银行功能的指令，会冲突。"
+  },
+  "vault_steal_reduce": {
+    "description": "【签到商店】保险箱降低被偷概率（%）",
+    "type": "float",
+    "default": 15.0,
+    "hint": "★ 1.7.6 新增。买了保险箱的玩家，被偷概率降低这么多。"
+  },
+  "shop_defense_cap": {
+    "description": "【签到商店】防御加成上限（%）",
+    "type": "float",
+    "default": 60.0,
+    "hint": "★ 1.7.6 新增。武器防御加成最多叠加到这么多，防止堆到无人可偷。"
+  },
+  "fund_enable": {
+    "description": "【银行理财】功能开关",
+    "type": "bool",
+    "default": true,
+    "hint": "★ 1.7.6 新增。关闭后理财相关指令不响应。"
+  },
+  "fund_trigger_names": {
+    "description": "【银行理财】查看理财指令",
+    "type": "string",
+    "default": "理财,我的理财",
+    "hint": "★ 1.7.6 新增。查看自己的理财亏盈 + 今天是亏还是盈。"
+  },
+  "fund_buy_names": {
+    "description": "【银行理财】买入理财指令",
+    "type": "string",
+    "default": "购买理财,买入理财,买理财",
+    "hint": "★ 1.7.6 新增。后面接金额或 all，例如「购买理财 10000」。"
+  },
+  "fund_sell_names": {
+    "description": "【银行理财】取出理财指令",
+    "type": "string",
+    "default": "取出理财,卖出理财,赎回理财",
+    "hint": "★ 1.7.6 新增。取出的钱进**银行账户**；不带参数=全部取出。"
+  },
+  "fund_profit_max": {
+    "description": "【银行理财】单日最大盈利（%）",
+    "type": "float",
+    "default": 8.0,
+    "hint": "★ 1.7.6 新增。每天随机盈亏，盈利直接加到买入金额上。"
+  },
+  "fund_loss_max": {
+    "description": "【银行理财】单日最大亏损（%）",
+    "type": "float",
+    "default": 6.0,
+    "hint": "★ 1.7.6 新增。亏损从买入金额扣；本金不够会从你的资产（钱包→银行）补扣。"
+  },
+  "menu_checkin_signin_names": {
+    "description": "【菜单入口·签到系统】签到指令",
+    "type": "string",
+    "default": "签到指令",
+    "hint": "签到系统菜单里这个入口的名字（可多个，英文逗号分隔）。改了立刻生效；旧名字仍然可用。"
+  },
+  "menu_checkin_query_names": {
+    "description": "【菜单入口·签到系统】查询指令",
+    "type": "string",
+    "default": "查询指令",
+    "hint": "同上。"
+  },
+  "menu_checkin_bank_names": {
+    "description": "【菜单入口·签到系统】银行功能",
+    "type": "string",
+    "default": "银行功能",
+    "hint": "同上。"
+  },
+  "menu_checkin_lottery_names": {
+    "description": "【菜单入口·签到系统】抽奖功能",
+    "type": "string",
+    "default": "抽奖功能",
+    "hint": "同上。"
+  },
+  "menu_checkin_steal_names": {
+    "description": "【菜单入口·签到系统】神偷功能",
+    "type": "string",
+    "default": "神偷功能",
+    "hint": "同上。"
+  },
+  "menu_checkin_job_names": {
+    "description": "【菜单入口·签到系统】打工功能",
+    "type": "string",
+    "default": "打工功能",
+    "hint": "同上。"
+  },
+  "menu_checkin_shop_help_names": {
+    "description": "【菜单入口·签到系统】商店帮助",
+    "type": "string",
+    "default": "商店帮助",
+    "hint": "同上。注意别和「签到商店」那条指令重名。"
+  },
+  "menu_bank_save_names": {
+    "description": "【菜单入口·银行下级】存钱取钱",
+    "type": "string",
+    "default": "存钱取钱",
+    "hint": "银行功能菜单里下级入口的名字。改了立刻生效。"
+  },
+  "menu_bank_loan_names": {
+    "description": "【菜单入口·银行下级】借款还款",
+    "type": "string",
+    "default": "借款还款",
+    "hint": "同上。"
+  },
+  "menu_bank_fund_names": {
+    "description": "【菜单入口·银行下级】理财功能",
+    "type": "string",
+    "default": "理财功能",
+    "hint": "同上。"
+  },
+  "menu_bank_rob_names": {
+    "description": "【菜单入口·银行下级】抢银行帮助",
+    "type": "string",
+    "default": "抢银行帮助",
+    "hint": "同上。注意别和「抢银行」那条指令重名。"
+  },
+  "menu_pet_names": {
+    "description": "【菜单入口】宠物功能",
+    "type": "string",
+    "default": "宠物功能",
+    "hint": "宠物功能菜单的入口名。"
+  },
+  "menu_pet_care_names": {
+    "description": "【菜单入口·宠物下级】宠物养成",
+    "type": "string",
+    "default": "宠物养成",
+    "hint": "宠物功能菜单里下级入口的名字。改了立刻生效。"
+  },
+  "menu_pet_fight_names": {
+    "description": "【菜单入口·宠物下级】宠物玩法",
+    "type": "string",
+    "default": "宠物玩法",
+    "hint": "同上。"
+  },
+  "menu_pet_item_names": {
+    "description": "【菜单入口·宠物下级】宠物道具",
+    "type": "string",
+    "default": "宠物道具",
+    "hint": "同上。"
+  },
+  "bank_unfreeze_list": {
+    "description": "【银行】批量解冻：要解除冻结的 QQ 号",
+    "type": "string",
+    "default": "",
+    "hint": "1.7.7 新增。多个 QQ 号用**英文逗号**分隔，例如 123456,234567。保存后**自动执行**解冻（该 QQ 在**所有群**的冻结一起解），输入框随后自动清空。留空 = 不解冻。只想解某一个群，用上面「🧊 冻结账号」列表里的按钮。"
+  },
+  "menu_mount_manage_names": {
+    "description": "【菜单入口·坐骑下级】坐骑管理",
+    "type": "string",
+    "default": "坐骑管理",
+    "hint": "坐骑功能菜单里下级入口的名字。装备坐骑 / 坐骑查看详情 / 翻页说明。"
+  },
+  "menu_mount_admin_names": {
+    "description": "【菜单入口·坐骑下级】坐骑设置",
+    "type": "string",
+    "default": "坐骑设置",
+    "hint": "坐骑功能菜单里下级入口的名字。管理员指令 / 图片目录 / 登场提示。"
+  },
+  "shop_equip_trigger_names": {
+    "description": "【签到商店】启用武器指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "启用武器,装备武器",
+    "hint": "★ 1.7.7 新增。用法：「启用武器 名字」或「启用武器 序号」。⚠️ 武器**必须启用才加成** —— 买了不启用只是收藏。默认「启用武器」，「装备武器」作为旧名也认。"
+  },
+  "my_equip_trigger_names": {
+    "description": "【签到商店】我的装备指令（查看当前装备与加成）",
+    "type": "string",
+    "default": "我的装备,我的武器",
+    "hint": "★ 1.7.7 新增。无参数，显示当前启用的坐骑 / 武器 + 全部加成明细。"
+  },
+  "guess_enable": {
+    "description": "【猜数游戏】总开关",
+    "type": "bool",
+    "default": true,
+    "hint": "★ 1.7.7 新增（娱乐功能）。关闭后「猜数」不响应。"
+  },
+  "cmd_guess": {
+    "description": "【猜数游戏】指令（多个用英文逗号分隔）",
+    "type": "string",
+    "default": "猜数,猜数字",
+    "hint": "★ 1.7.7 新增。开一局直接发指令；猜的时候后面接数字，例如「猜数 50」。"
+  },
+  "cmd_guess_menu": {
+    "description": "【猜数游戏】菜单入口指令",
+    "type": "string",
+    "default": "猜数功能",
+    "hint": "★ 1.7.7 新增。「娱乐功能」菜单里那个入口的名字。"
+  },
+  "guess_groups": {
+    "description": "【猜数游戏】不触发的群号（黑名单）",
+    "type": "string",
+    "default": "",
+    "hint": "留空 = 所有群生效。多个群号用英文逗号分隔。"
+  },
+  "guess_min": {
+    "description": "【猜数游戏】题目下限",
+    "type": "int",
+    "default": 1,
+    "hint": "★ 1.7.7 新增。机器人想的数从这个值开始。"
+  },
+  "guess_max": {
+    "description": "【猜数游戏】题目上限",
+    "type": "int",
+    "default": 100,
+    "hint": "★ 1.7.7 新增。范围越大越难猜，建议别超过 1000。"
+  },
+  "guess_cost": {
+    "description": "【猜数游戏】每猜一次花多少积分",
+    "type": "int",
+    "default": 0,
+    "hint": "★ 1.7.7 起已弃用（改为「猜错扣积分 guess_penalty」）"
+  },
+  "guess_reward": {
+    "description": "【猜数游戏】猜对奖励多少积分",
+    "type": "int",
+    "default": 100,
+    "hint": "★ 1.7.7 起已弃用（改为「奖励区间 guess_reward_min/max」）"
+  },
+  "guess_daily_limit": {
+    "description": "【猜数游戏】每人每天最多猜几次",
+    "type": "int",
+    "default": 0,
+    "hint": "★ 1.7.7 起已弃用（改为「每人每局次数 guess_max_tries」）"
+  },
+  "guess_allow_negative": {
+    "description": "【猜数游戏】允许扣成负积分",
+    "type": "bool",
+    "default": true,
+    "hint": "★ 1.7.7 新增。关掉后积分不够就不能猜（不会变负债）。"
+  },
+  "vault_break_rate": {
+    "description": "【签到商店】武器破保险箱概率（%）（武器可单独覆盖）",
+    "type": "float",
+    "default": "0",
+    "hint": "★ 1.7.7 新增。偷积分时，**已启用武器**有这么多概率撬开对方保险箱并夺走里面的钱。默认 0（= 关闭这个玩法）。想给某把武器单独设概率：在「商店列表」该武器的 vault_break_rate 字段里填。"
+  },
+  "vault_break_ratio": {
+    "description": "【签到商店】破箱后夺走保险箱的比例（0~1）",
+    "type": "float",
+    "default": "1",
+    "hint": "★ 1.7.7 新增。1 = 全部抢走；0.5 = 抢一半。默认 1（全抢）。"
+  },
+  "vault_break_destroy": {
+    "description": "【签到商店】破箱时砸毁保险箱",
+    "type": "bool",
+    "default": false,
+    "hint": "★ 1.7.7 新增。开启后，破箱成功会把对方保险箱**砸掉**（对方要重新购买）。默认关闭（只抢钱、箱子还在）。"
+  },
+  "stamina_enable": {
+    "description": "【体力系统】总开关",
+    "type": "bool",
+    "default": true,
+    "hint": "★ 1.7.7 新增。关闭后不消耗体力、不显示体力行，「吃食物 / 加班」也不响应。"
+  },
+  "stamina_max": {
+    "description": "【体力系统】每人每天体力上限",
+    "type": "int",
+    "default": 100,
+    "hint": "★ 1.7.7 新增。每天 0 点回满到该值，**不累积**（昨天没用完的不会留到今天）。"
+  },
+  "job_stamina_min": {
+    "description": "【体力系统】每个打工最少消耗体力",
+    "type": "int",
+    "default": 1,
+    "hint": "★ 1.7.7 新增。默认 1。单个工种可在「工种列表」里用 stamina_min 字段覆盖。"
+  },
+  "job_stamina_max": {
+    "description": "【体力系统】每个打工最多消耗体力",
+    "type": "int",
+    "default": 5,
+    "hint": "★ 1.7.7 新增。默认 5。实际每次在该区间内随机；单工种可用 stamina_max 覆盖。"
+  },
+  "stamina_food_restore": {
+    "description": "【体力系统】食物默认恢复体力",
+    "type": "int",
+    "default": 30,
+    "hint": "★ 1.7.7 新增。商店里 kind=food 的商品默认恢复这么多；单个食物可用 stamina_restore 字段覆盖。"
+  },
+  "stamina_refill_per_hour": {
+    "description": "【体力系统】加班清 1 小时冷却的体力（每小时）",
+    "type": "int",
+    "default": 10,
+    "hint": "★ 1.7.7 新增。「加班 工种名」花体力一键清掉冷却。消耗 = 剩余小时数（不足 1 小时按 1 算）× 这个值。"
+  },
+  "stamina_refill_min": {
+    "description": "【体力系统】加班最低消耗体力",
+    "type": "int",
+    "default": 5,
+    "hint": "★ 1.7.7 新增。防止冷却很短时几乎不花体力。"
+  },
+  "stamina_view_trigger_names": {
+    "description": "【体力系统】体力查询指令",
+    "type": "string",
+    "default": "我的体力,体力",
+    "hint": "★ 1.7.7 新增。多个用英文逗号分隔。无参数，显示当前体力 + 背包食物。"
+  },
+  "food_eat_trigger_names": {
+    "description": "【体力系统】吃食物指令",
+    "type": "string",
+    "default": "吃食物,吃东西",
+    "hint": "★ 1.7.7 新增。用法：「吃食物 名字」「吃食物 序号」「吃食物 全部」。"
+  },
+  "stamina_refill_trigger_names": {
+    "description": "【加班】单个工种加班指令名（默认「加班」）",
+    "type": "string",
+    "default": "加班",
+    "hint": "★ 1.7.7。用法「加班 工种名」—— 只清**一个**工种的冷却。不带参数 = 输出加班状态。"
+  },
+  "wipe_wealth_trigger_names": {
+    "description": "【管理】清空财富指令（管理员专用）",
+    "type": "string",
+    "default": "清空财富,清零财富",
+    "hint": "★ 1.7.7 新增。用法：「清空财富 @某人」或「清空财富 QQ号」。**不可撤销**：把该群员的钱包 / 银行 / 保险箱 / 欠款 / 理财本金全部清零，但**保留**签到次数、连签、坐骑、武器、食物、打工冷却。权限与「加积分 / 减积分」一致（只认 AstrBot 全局管理员 + 后台白名单）。"
+  },
+  "cmd_guess_start": {
+    "description": "【猜数游戏】开新局指令（默认「开始猜数」）",
+    "type": "string",
+    "default": "开始猜数",
+    "hint": "★ 1.7.7 重写。发这个开一局，**所有人都能参与**。后面不用接参数。"
+  },
+  "guess_max_tries": {
+    "description": "【猜数游戏】每人每局最多猜几次",
+    "type": "int",
+    "default": 3,
+    "hint": "★ 1.7.7 新增。默认 3 次。用完了这局就轮不到你猜了。"
+  },
+  "guess_timeout_sec": {
+    "description": "【猜数游戏】多少秒没人猜就关闭（0=不自动关）",
+    "type": "int",
+    "default": 60,
+    "hint": "★ 1.7.7 新增。默认 60 秒。每次有人猜都重新计时，所以是「**多久没人猜**」；填 0 = 永不自动关闭。"
+  },
+  "guess_reward_min": {
+    "description": "【猜数游戏】猜对奖励下限（随机）",
+    "type": "int",
+    "default": 100,
+    "hint": "★ 1.7.7 新增。真猜对时在这个区间里**随机**给一个金额。"
+  },
+  "guess_reward_max": {
+    "description": "【猜数游戏】猜对奖励上限（随机）",
+    "type": "int",
+    "default": 500,
+    "hint": "★ 1.7.7 新增。上下限填反了会自动交换。"
+  },
+  "guess_penalty": {
+    "description": "【猜数游戏】猜错扣多少积分",
+    "type": "int",
+    "default": 1000,
+    "hint": "★ 1.7.7 新增。**默认 1000**。填 0 = 猜错不扣。注意：每猜错一次都扣一次。"
+  },
+  "stamina_refill_menu_names": {
+    "description": "【加班】主菜单入口名（默认「加班功能」）",
+    "type": "string",
+    "default": "加班功能",
+    "hint": "★ 1.7.7。发这个名字 -> 输出**下级菜单**。★ 必须和执行指令名不同，否则会互相吃掉。"
+  },
+  "stamina_refill_status_names": {
+    "description": "【加班】状态指令名（默认「加班状态」）",
+    "type": "string",
+    "default": "加班状态",
+    "hint": "★ 1.7.7。发这个名字 -> 只列**可加班 / 不可加班**工种。★ 裸「加班」（不带参数）也会输出这个状态。"
+  },
+  "stamina_refill_all_names": {
+    "description": "【加班】全部加班指令名（默认「全部加班」）",
+    "type": "string",
+    "default": "全部加班,加班全部,一键全部冷却",
+    "hint": "★ 1.7.7。发这个名字 -> **加班所有**冷却中的工种。"
+  },
+  "poke_reply_enable": {
+    "description": "【戳一戳】启用戳一戳随机回复",
+    "type": "bool",
+    "default": true,
+    "hint": "★★ 1.7.8 新增。别人**戳一戳机器人**时，随机回一句词。NapCat / OneBot v11 的 poke 通知。"
+  },
+  "poke_reply_window_sec": {
+    "description": "【戳一戳】限频窗口（秒）",
+    "type": "int",
+    "default": 60,
+    "hint": "★ 默认 60 秒。和下面的「次数」一起构成限频：**窗口内最多回几次**。"
+  },
+  "poke_reply_max_per_window": {
+    "description": "【戳一戳】窗口内最多回复几次",
+    "type": "int",
+    "default": 5,
+    "hint": "★ 默认 5 次。★ **所有群一起算**（全局限频，不是每群各算）。填 0 = 不限频。"
+  },
+  "poke_reply_only_self": {
+    "description": "【戳一戳】只在戳「机器人自己」时回复",
+    "type": "bool",
+    "default": true,
+    "hint": "★ 默认开。关掉后：群里任何人戳任何人都会触发回复。"
+  },
+  "poke_reply_groups": {
+    "description": "【戳一戳】群号黑名单（留空=所有群生效）",
+    "type": "text",
+    "default": "",
+    "hint": "★ 填了群号则**排除**这些群；多个用英文逗号分隔。留空 = 所有群都能触发。"
+  },
+  "racing_enable": {
+    "type": "bool",
+    "default": true,
+    "description": "【赛车】启用赛车功能"
+  },
+  "racing_groups": {
+    "type": "text",
+    "default": "",
+    "description": "【赛车】不生效的群号（留空=所有群都生效）",
+    "hint": "逗号分隔。填了群号 = 这些群**不生效**。"
+  },
+  "cmd_race_menu": {
+    "type": "string",
+    "default": "赛车功能",
+    "description": "【赛车】菜单入口指令"
+  },
+  "cmd_race_join": {
+    "type": "string",
+    "default": "参与比赛",
+    "description": "【赛车】报名参赛指令"
+  },
+  "cmd_race_fast": {
+    "type": "string",
+    "default": "快速比赛",
+    "description": "【赛车】快速比赛指令（对手全是 NPC）"
+  },
+  "cmd_race_my": {
+    "type": "string",
+    "default": "我的赛车",
+    "description": "【赛车】我的赛车指令"
+  },
+  "cmd_race_equip": {
+    "type": "string",
+    "default": "装备赛车",
+    "description": "【赛车】装备赛车指令"
+  },
+  "cmd_race_view": {
+    "type": "string",
+    "default": "赛车查看",
+    "description": "【赛车】赛车查看指令"
+  },
+  "cmd_race_shop": {
+    "type": "string",
+    "default": "赛车商店",
+    "description": "【赛车】赛车商店指令（看列表 / 翻页）"
+  },
+  "cmd_race_buy": {
+    "type": "string",
+    "default": "购买赛车",
+    "description": "【赛车】购买赛车指令"
+  },
+  "cmd_race_lucky": {
+    "type": "string",
+    "default": "赛车抽奖",
+    "description": "【赛车】抽奖指令"
+  },
+  "cmd_race_lucky_all": {
+    "type": "string",
+    "default": "赛车一键抽奖,赛车全部抽奖",
+    "description": "【赛车】一键抽奖指令（把当天剩余次数一次抽完）"
+  },
+  "race_players": {
+    "type": "string",
+    "default": "5",
+    "description": "【赛车】几人开赛（2~20）"
+  },
+  "race_wait_sec": {
+    "type": "string",
+    "default": "3600",
+    "description": "【赛车】多久没满就补 NPC（秒，0=一直等人）"
+  },
+  "race_daily_limit": {
+    "type": "string",
+    "default": "10",
+    "description": "【赛车】每人每天可跑几场（0=不限）"
+  },
+  "race_entry_fee": {
+    "type": "string",
+    "default": "500",
+    "description": "【赛车】报名费（不退，进奖池）"
+  },
+  "race_pool_bonus_min": {
+    "type": "string",
+    "default": "1000",
+    "description": "【赛车】奖池每日随机下限",
+    "hint": "💰 **赛车有独立的奖池**（机制和签到系统的抽奖奖池一样，但数值分开）。\n\n· 每场比赛奖池 = **报名费总和 + 当天的系统加成**\n· 系统加成**每天随机一次、当天固定**，跨天才重新随机\n· 随机区间就是这里的「下限 ~ 上限」"
+  },
+  "race_pool_bonus_max": {
+    "type": "string",
+    "default": "5000",
+    "description": "【赛车】奖池每日随机上限"
+  },
+  "race_fast_npc": {
+    "type": "string",
+    "default": "5",
+    "description": "【赛车】快速比赛的 NPC 数量（1~20）"
+  },
+  "race_npc_fill": {
+    "type": "bool",
+    "default": true,
+    "description": "【赛车】人不够时补 NPC"
+  },
+  "race_npc_power": {
+    "type": "string",
+    "default": "100",
+    "description": "【赛车】NPC 强度（%）：100=原样，80=弱，120=强",
+    "hint": "🤖 **NPC 强度**（整体缩放 NPC 车的 5 项属性）\n\n· `100` = 用「数据管理 → 赛车功能 → NPC 用车」里的原始属性\n· `80`  = 全部属性 ×0.8（NPC 变弱，玩家更容易赢）\n· `120` = 全部属性 ×1.2（NPC 变强，玩家更难赢）\n· 实测 200% 时玩家夺冠率约 0%，建议 100%~130%"
+  },
+  "race_show_time": {
+    "type": "bool",
+    "default": true,
+    "description": "【赛车】结果里显示用时（秒）"
+  },
+  "race_lucky_fee": {
+    "type": "string",
+    "default": "2000",
+    "description": "【赛车】每次抽奖费用"
+  },
+  "race_lucky_daily_limit": {
+    "type": "string",
+    "default": "1",
+    "description": "【赛车】每人每天可抽几次（0=不限）",
+    "hint": "🎰 抽到过的限定车**会自动从池子里移除**，所以**同一台车不会重复抽中**；\n限定车全收集后只剩积分奖。"
+  },
+  "race_shop_list": {
+    "type": "text",
+    "default": "",
+    "description": "【赛车·兼容兜底】商店车列表（推荐用数据管理）",
+    "hint": "⚠️ 真值在「数据管理 → 赛车功能 → 商店在售」，这里只是迁移来源。"
+  },
+  "race_lottery_cars": {
+    "type": "text",
+    "default": "",
+    "description": "【赛车·兼容兜底】抽奖限定车（推荐用数据管理）",
+    "hint": "⚠️ 真值在「数据管理 → 赛车功能 → 抽奖限定」。"
+  },
+  "race_img_dir": {
+    "type": "string",
+    "default": "",
+    "description": "【赛车】插图目录（市场版不使用，仅保留配置项）",
+    "hint": "⚠️ **市场版只发文本，不支持赛车插图**，这项填了也没效果。"
+  },
+  "greeting_rank_days_names": {
+    "type": "text",
+    "default": "打卡天数排行,天数排行",
+    "description": "【打卡·排行1】天数排行指令（逗号分隔，可多个别名）",
+    "hint": "📊 **三条独立排行指令**，各输出一个**前十**榜，格式和「签到排行」一致：\n\n```\n打卡天数排行   完整打卡天数榜 · 前十（早晚都打才算一天）\n清醒时长排行   累计清醒时长榜 · 前十（早安 → 当晚晚安）\n睡眠时长排行   累计睡眠时长榜 · 前十（晚安 → 次日早安）\n```\n\n★ 多个别名用**英文逗号**分隔\n★ 数据来自**所有群共享**的打卡记录"
+  },
+  "greeting_rank_awake_names": {
+    "type": "text",
+    "default": "清醒时长排行,清醒排行",
+    "description": "【打卡·排行2】清醒排行指令（逗号分隔，可多个别名）",
+    "hint": "📊 **三条独立排行指令**，各输出一个**前十**榜，格式和「签到排行」一致：\n\n```\n打卡天数排行   完整打卡天数榜 · 前十（早晚都打才算一天）\n清醒时长排行   累计清醒时长榜 · 前十（早安 → 当晚晚安）\n睡眠时长排行   累计睡眠时长榜 · 前十（晚安 → 次日早安）\n```\n\n★ 多个别名用**英文逗号**分隔\n★ 数据来自**所有群共享**的打卡记录"
+  },
+  "greeting_rank_sleep_names": {
+    "type": "text",
+    "default": "睡眠时长排行,睡眠排行",
+    "description": "【打卡·排行3】睡眠排行指令（逗号分隔，可多个别名）",
+    "hint": "📊 **三条独立排行指令**，各输出一个**前十**榜，格式和「签到排行」一致：\n\n```\n打卡天数排行   完整打卡天数榜 · 前十（早晚都打才算一天）\n清醒时长排行   累计清醒时长榜 · 前十（早安 → 当晚晚安）\n睡眠时长排行   累计睡眠时长榜 · 前十（晚安 → 次日早安）\n```\n\n★ 多个别名用**英文逗号**分隔\n★ 数据来自**所有群共享**的打卡记录"
+  }
+}
