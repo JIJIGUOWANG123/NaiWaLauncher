@@ -69,11 +69,9 @@ import random
 import time
 from datetime import datetime
 
-try:
-    from astrbot.api import logger
-except Exception:  # pragma: no cover
-    import logging
-    logger = logging.getLogger("racing")
+# ★★ 市场版 1.1.0：日志记录器**必须且只能**从 astrbot.api 导入。
+#   原来这里有一段内置日志库的兜底分支，已按上架规范删除。
+from astrbot.api import logger
 
 # ------------------------------------------------------------------
 # 属性键（顺序固定，用于展示）
