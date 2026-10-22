@@ -16,6 +16,7 @@ export const IPC = {
   startupSound: "app:startupSound",
   appIcon: "app:appIcon",
   appCheckUpdates: "app:checkUpdates",
+  appInstallUpdate: "app:installUpdate",
   downloadsList: "downloads:list",
   downloadsResume: "downloads:resume",
   downloadsCancel: "downloads:cancel",
@@ -160,6 +161,8 @@ export interface NaiwaApi {
     appIcon(): Promise<{ url: string | null; path: string | null }>;
     /** 检查软件更新（GitHub 仓库最新版本）。 */
     checkUpdates(): Promise<UpdateCheckResult>;
+    /** 下载最新免安装版并替换当前程序，成功后自动重启（仅免安装版可用）。 */
+    installUpdate(url: string): Promise<void>;
     /** 打开指定实例的模组目录（自动按版本隔离模式定位）。 */
     openInstanceMods(instanceId: string): Promise<void>;
     openExternal(url: string): Promise<void>;

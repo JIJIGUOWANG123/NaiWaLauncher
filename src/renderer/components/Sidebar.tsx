@@ -78,7 +78,14 @@ export function Sidebar() {
         <span className="version-line">
           {info ? `v${info.version}` : "v0.1.2"}
           {update?.hasUpdate ? (
-            <span className="version-dot" data-version-dot title={`有新版本 v${update.latest}`} aria-label={`有新版本 v${update.latest}`} />
+            <button
+              type="button"
+              className="version-dot"
+              data-version-dot
+              title={`有新版本 v${update.latest}，点此查看`}
+              aria-label={`有新版本 v${update.latest}，点此查看`}
+              onClick={() => navigate("about")}
+            />
           ) : null}
         </span>
       </div>

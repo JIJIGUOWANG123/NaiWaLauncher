@@ -9,6 +9,7 @@ import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSource
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { checkAppUpdates } from "../core/updates";
+import { installUpdate } from "../core/updater";
 import { isPortListening, listLanAddresses, probeTcp } from "../net/index";
 import { natfrpCreate, natfrpNodes, natfrpStart, natfrpStatus, natfrpStop, natfrpTunnels, natfrpUser } from "../net/natfrp";
 import { createOffline, listAccounts, removeAccount, setActiveAccount } from "../auth/accounts";
@@ -107,6 +108,7 @@ export function registerIpc(): void {
 
   // 自定义界面图标：选中的图标存在就返回 file:// 直链，否则 null
   handle<UpdateCheckResult>(IPC.appCheckUpdates, () => checkAppUpdates());
+  handle<void>(IPC.appInstallUpdate, (url: string) => installUpdate(url));
 
   handle<{ url: string | null; path: string | null }>(IPC.appIcon, async () => {
     const name = getSettings().appIcon;

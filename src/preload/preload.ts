@@ -15,6 +15,7 @@ const api: NaiwaApi = {
     startupSound: () => invoke(IPC.startupSound),
     appIcon: () => invoke(IPC.appIcon),
     checkUpdates: () => invoke(IPC.appCheckUpdates),
+    installUpdate: (url) => invoke(IPC.appInstallUpdate, url),
     openInstanceMods: (instanceId) => invoke(IPC.openInstanceMods, instanceId),
     openExternal: (url) => invoke(IPC.openExternal, url),
   },

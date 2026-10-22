@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
+import { ConfirmDialog } from "../components/Modal";
 import {
   IconBook,
   IconChevronRight,
@@ -16,19 +17,22 @@ import {
   IconMods,
   IconPackage,
   IconRefresh,
+  IconRocket,
   IconSearch,
   IconUser,
   IconZap,
 } from "../components/icons";
 
 /** 占位地址：仓库地址定下来后只改这三行。 */
-const PROJECT_URL = "https://github.com/wanglaoji123/NaiWaLauncher";
-const FEEDBACK_URL = "https://github.com/wanglaoji123/NaiWaLauncher/issues";
-const CHANGELOG_URL = "https://github.com/wanglaoji123/NaiWaLauncher/blob/main/CHANGELOG.md";
-const RELEASES_URL = "https://github.com/wanglaoji123/NaiWaLauncher/releases";
+const PROJECT_URL = "https://github.com/JIJIGUOWANG123/NaiWaLauncher";
+const FEEDBACK_URL = "https://github.com/JIJIGUOWANG123/NaiWaLauncher/issues";
+const CHANGELOG_URL = "https://github.com/JIJIGUOWANG123/NaiWaLauncher/blob/main/CHANGELOG.md";
+const RELEASES_URL = "https://github.com/JIJIGUOWANG123/NaiWaLauncher/releases";
 /** 官方 QQ 群（群号 619915692）。 */
-const QQ_GROUP_URL = "https://qm.qq.com/q/42ksfWCEw0";
 const QQ_GROUP_NO = "619915692";
+const QQ_GROUP_URL = "https://qm.qq.com/q/42ksfWCEw0";
+/** 推荐软件：羽翼城的 Steamcommunity 302（改善 Steam 社区 / GitHub 访问）。 */
+const RECOMMEND_URL = "https://www.dogfight360.com/blog/18682/";
 
 const CAPABILITIES = [
   { Icon: IconPackage, title: "支持 Fabric / Forge / NeoForge", desc: "三种主流加载器一键安装，自动补齐对应版本的依赖库。" },
@@ -40,12 +44,13 @@ const CAPABILITIES = [
 ];
 
 const LINKS = [
-  { Icon: IconLink, label: "项目主页", hint: "github.com/wanglaoji123/NaiWaLauncher", url: PROJECT_URL },
+  { Icon: IconLink, label: "项目主页", hint: "github.com/JIJIGUOWANG123/NaiWaLauncher", url: PROJECT_URL },
   { Icon: IconMessage, label: "问题反馈", hint: "提交 Issue 或建议（/issues）", url: FEEDBACK_URL },
   { Icon: IconUser, label: "加入 QQ 群", hint: `群号 ${QQ_GROUP_NO}`, url: QQ_GROUP_URL },
   { Icon: IconPackage, label: "Modrinth 官网", hint: "modrinth.com", url: "https://modrinth.com/" },
   { Icon: IconMods, label: "CurseForge 官网", hint: "curseforge.com", url: "https://www.curseforge.com/minecraft" },
   { Icon: IconZap, label: "MCIM / BMCLAPI 致谢", hint: "镜像与版本元数据来源", url: "https://bmclapi2.bangbang93.com/" },
+  { Icon: IconRocket, label: "推荐：Steamcommunity 302", hint: "羽翼城出品 · 改善 Steam 社区 / GitHub 访问", url: RECOMMEND_URL },
 ];
 
 /** 近期主要条目；卡片只展示最近 3 条，更多见项目 CHANGELOG.md。 */
@@ -86,6 +91,9 @@ export function AboutPage() {
   const { push } = useToast();
   const heroImage = useAppBackground();
   const [checking, setChecking] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [downloadHighlight, setDownloadHighlight] = useState(false);
   const version = info?.version ?? "0.1.2";
   // 发布说明只展示前 3 行，避免长文档把首屏顶开。
   const updateNotes = (update?.notes ?? "")
@@ -127,6 +135,24 @@ export function AboutPage() {
       push(`检查更新失败：${message}`, "error");
     } finally {
       setChecking(false);
+    }
+  };
+
+  // 一键更新：确认后下载免安装版包、替换自身并重启（真机由主进程完成，界面只轮询状态）。
+  const install = async () => {
+    const assetUrl = update?.assetUrl;
+    if (!assetUrl) return;
+    setConfirming(false);
+    setInstalling(true);
+    setDownloadHighlight(false);
+    try {
+      await api.app.installUpdate(assetUrl);
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+      // 自动替换失败时把「前往下载」高亮，引导手动下载。
+      setDownloadHighlight(true);
+    } finally {
+      setInstalling(false);
     }
   };
 
@@ -198,6 +224,17 @@ export function AboutPage() {
             <button
               type="button"
               className="btn btn-primary btn-sm"
+              data-about-install
+              disabled={installing || !update.assetUrl}
+              title={update.assetUrl ? "下载新版本并替换当前程序，完成后自动重启" : "该版本未提供免安装版更新包"}
+              onClick={() => setConfirming(true)}
+            >
+              <IconRefresh size={14} />
+              {installing ? "正在更新…" : "立即更新"}
+            </button>
+            <button
+              type="button"
+              className={`btn btn-ghost btn-sm${downloadHighlight ? " is-attention" : ""}`}
               data-about-download
               onClick={() => void open(update.url || RELEASES_URL, "下载页")}
             >
@@ -210,6 +247,16 @@ export function AboutPage() {
               <li key={line}>{line}</li>
             ))}
           </ul>
+          {!update.assetUrl ? (
+            <p className="about-update-hint" data-about-no-asset>
+              该版本未提供免安装版更新包，请用「前往下载」手动安装。
+            </p>
+          ) : null}
+          {installing ? (
+            <p className="about-update-hint" data-about-installing>
+              下载完成后启动器会自动重启
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -324,6 +371,16 @@ export function AboutPage() {
       <p className="about-foot" data-about-foot>
         Designed with <span className="about-heart" aria-hidden="true">♥</span> by 奶龙 · NaiWa Launcher v{version}
       </p>
+
+      <ConfirmDialog
+        open={confirming}
+        title="立即更新"
+        message="将下载新版本并替换当前程序，完成后自动重启。确定现在更新吗？"
+        confirmText="立即更新"
+        busy={installing}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => void install()}
+      />
     </section>
   );
 }

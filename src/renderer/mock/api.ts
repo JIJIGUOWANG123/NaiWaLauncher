@@ -378,15 +378,30 @@ export function createMockApi(): NaiwaApi {
         if (error) return { current, latest: null, hasUpdate: false, channel: "none" as const, error };
         const hasUpdate = (globalThis as { __naiwaMockHasUpdate?: boolean }).__naiwaMockHasUpdate === true;
         if (!hasUpdate) return { current, latest: "0.1.2", hasUpdate: false, channel: "github-api" as const };
+        // 自检钩子：__naiwaMockUpdateNoAsset = true 模拟「Release 里没有免安装版包」。
+        const noAsset = (globalThis as { __naiwaMockUpdateNoAsset?: boolean }).__naiwaMockUpdateNoAsset === true;
         return {
           current,
           latest: "0.1.3",
           hasUpdate: true,
-          url: "https://github.com/wanglaoji123/NaiWaLauncher/releases/tag/v0.1.3",
+          url: "https://github.com/JIJIGUOWANG123/NaiWaLauncher/releases/tag/v0.1.3",
+          assetUrl: noAsset
+            ? undefined
+            : "https://github.com/JIJIGUOWANG123/NaiWaLauncher/releases/download/v0.1.3/NaiWaLauncher.exe",
           notes: "• 下载器重做断点续传，切镜像不再丢进度\n• 存档直进支持新建世界后自动进入\n• 中文翻译增加本地缓存，命中率更高",
           publishedAt: "2026-05-18T08:00:00.000Z",
           channel: "github-api" as const,
         };
+      },
+      installUpdate: async (url: string) => {
+        trace("app.installUpdate", { url });
+        await sleep(700);
+        // 自检钩子：__naiwaMockUpdateFail = true 模拟安装版（不能自替换）。
+        if ((globalThis as { __naiwaMockUpdateFail?: boolean }).__naiwaMockUpdateFail === true) {
+          throw new Error("当前为安装版，无法自动替换程序");
+        }
+        // 真机由主进程下载并替换 exe 后重启；预览下只记 trace，界面断言「正在更新…」与提示行。
+        console.info("[mock] 更新包已下载", url);
       },
     },
 

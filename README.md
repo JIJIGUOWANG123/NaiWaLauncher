@@ -4,7 +4,7 @@
 
 现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，设置内显示「奶娃启动器 / NaiWa Launcher」，开发者 **奶龙**。
 
-> 源码仓库：https://github.com/wanglaoji123/NaiWaLauncher　|　问题反馈：[Issues](https://github.com/wanglaoji123/NaiWaLauncher/issues)
+> 源码仓库：https://github.com/JIJIGUOWANG123/NaiWaLauncher　|　问题反馈：[Issues](https://github.com/JIJIGUOWANG123/NaiWaLauncher/issues)
 
 - 多版本 / 多实例管理，按实例隔离模组与存档
 - Fabric / Forge / NeoForge 安装与**一键切换**
@@ -114,3 +114,20 @@ pnpm dist             # 打包：electron-builder --dir + 自研 NSIS 安装包
 ## 许可
 
 MIT，见 [LICENSE](LICENSE)。开发者：**奶龙**。
+
+## 产物
+
+| 文件 | 说明 |
+|---|---|
+| `NaiWaLauncher-Setup-<版本>.exe` | 安装包（默认装到 `C:\Program Files\naiwa`） |
+| `NaiWaLauncher-<版本>-portable-x64.zip` | 免安装压缩包（解压即用） |
+| `NaiWaLauncher.exe`（免安装版） | 单文件免安装版，**自更新用的就是这个**，Release 里请保持此文件名（不带版本号） |
+
+## 产物
+
+| 文件 | 说明 |
+|---|---|
+| `NaiWaLauncher-Setup-<版本>.exe` | 安装包（默认装到 `C:\Program Files\naiwa`） |
+| `NaiWaLauncher-<版本>-portable-x64.zip` | 免安装压缩包（解压即用） |
+| `NaiWaLauncher.exe` | 单文件免安装版，**自更新用的就是这个**；Release 里请保持此文件名（不带版本号） |
+

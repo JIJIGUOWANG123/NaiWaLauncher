@@ -8,7 +8,7 @@ import { logger } from "./logger";
 import type { UpdateCheckResult } from "../../shared/types";
 
 const log = logger("updates");
-const REPO = "wanglaoji123/NaiWaLauncher";
+const REPO = "JIJIGUOWANG123/NaiWaLauncher";
 
 /** 三个通道依次尝试：官方 API → gh-proxy 镜像 → jsDelivr（读仓库 package.json 的 version）。 */
 const CHANNELS: { id: UpdateCheckResult["channel"]; url: string }[] = [
@@ -85,8 +85,12 @@ export async function checkAppUpdates(): Promise<UpdateCheckResult> {
     const notes = typeof payload.body === "string" ? payload.body.slice(0, 800) : undefined;
     const publishedAt = typeof payload.published_at === "string" ? payload.published_at : undefined;
     const url = typeof payload.html_url === "string" ? payload.html_url : `https://github.com/${REPO}/releases`;
+    // Release 里找免安装版资源（NaiWaLauncher.exe，不带版本号）
+    const assets = Array.isArray(payload.assets) ? (payload.assets as Record<string, unknown>[]) : [];
+    const exeAsset = assets.find((a) => String(a.name || "").toLowerCase() === "naiwalauncher.exe");
+    const assetUrl = exeAsset && typeof exeAsset.browser_download_url === "string" ? exeAsset.browser_download_url : undefined;
     log.info(`[updates] ${channel.id} → 当前 ${current}，仓库 ${latest}（${hasUpdate ? "有更新" : "已是最新"}）`);
-    return { current, latest, hasUpdate, url, notes, publishedAt, channel: channel.id };
+    return { current, latest, hasUpdate, url, notes, publishedAt, channel: channel.id, assetUrl };
   }
   log.warn(`[updates] 检查更新失败：${lastError || "所有通道不可用"}`);
   return { current, latest: null, hasUpdate: false, channel: "none", error: lastError || "无法连接 GitHub（网络受限）" };

@@ -299,6 +299,8 @@ export interface UpdateCheckResult {
   /** 发布说明（截断）。 */
   notes?: string;
   publishedAt?: string;
+  /** 免安装版更新包的直链（Release 里的 NaiWaLauncher.exe）。 */
+  assetUrl?: string;
   /** 实际取数的通道（便于排查）。 */
   channel: "github-api" | "gh-proxy" | "jsdelivr" | "none";
   /** 检查失败时的原因。 */
