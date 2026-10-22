@@ -231,6 +231,9 @@
 
 .toast {
   pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 9px 16px;
   border-radius: 999px;
   border: 1px solid var(--line-strong);
@@ -241,6 +244,21 @@
   cursor: pointer;
   animation: toast-in 0.2s ease;
 }
+
+/* 提示条上的动作按钮（如「打开所在文件夹」） */
+.toast-action {
+  flex: none;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.toast-action:hover { opacity: 1; }
 
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(-8px); }

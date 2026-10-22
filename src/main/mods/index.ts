@@ -24,6 +24,7 @@ import {
   bestFile, loaderAppliesTo, matchTier, mapLimit, messageOf, rankFiles,
   type ModBacklook, type ModProvider, type ResolvedFile,
 } from "./provider";
+import { installModpackFrom, type ModpackInstallResult } from "./modpack";
 import { containsCjk, translateBatch, translateText } from "./translate";
 
 const log = logger("mods");
@@ -456,6 +457,20 @@ export async function installMod(req: ModInstallRequest, signal?: AbortSignal): 
     kind,
   });
   return { ...result, installedDependencies };
+}
+
+/**
+ * 一键安装整合包：挑 .mrpack → 下到 NaiWa/downloads → 新建实例（版本与加载器取自索引）→ 装文件与 overrides。
+ * 麦块社区的整合包条目同样是 Modrinth 项目，一律走 modrinth 的 .mrpack 流程。
+ */
+export async function installModpack(
+  provider: ModProviderId,
+  projectId: string,
+  fileId?: string,
+  instanceName?: string,
+  signal?: AbortSignal,
+): Promise<ModpackInstallResult> {
+  return installModpackFrom(resolveProvider(nativeProviderOf(provider)), { projectId, fileId, instanceName }, signal);
 }
 
 // ---------- 实例级模组管理 ----------

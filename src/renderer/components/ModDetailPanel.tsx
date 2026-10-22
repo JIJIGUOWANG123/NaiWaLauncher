@@ -18,7 +18,7 @@ const VERSION_LIMIT = 10;
 
 export function ModDetailPanel({
   open, provider, projectId, fallbackTitle, titleZh, summaryZh, onClose, filesSlot, installLabel,
-  onInstall, installing, instanceName, noInstance,
+  onInstall, installing, installingLabel, instanceName, installHint, noInstance,
 }: {
   open: boolean;
   provider: ModProviderId;
@@ -36,7 +36,11 @@ export function ModDetailPanel({
   installLabel?: string;
   onInstall: () => void;
   installing: boolean;
+  /** 进行中的按钮文案（整合包是「正在创建实例…」）。 */
+  installingLabel?: string;
   instanceName?: string;
+  /** 覆盖「将安装到 X」这行说明（整合包是「将新建实例 X」）。 */
+  installHint?: string;
   noInstance: boolean;
 }) {
   const { push } = useToast();
@@ -69,9 +73,10 @@ export function ModDetailPanel({
   const footer = data ? (
     <>
       <p className="mod-detail-foot-hint" data-install-hint>
-        {noInstance
-          ? "未选择实例：安装按钮不可用，请先在左侧「当前实例」里选一个。"
-          : `将安装到「${instanceName ?? ""}」`}
+        {installHint
+          ?? (noInstance
+            ? "未选择实例：点「安装」会先让你在卡片上选目标实例。"
+            : `将安装到「${instanceName ?? ""}」`)}
       </p>
       <div className="mod-detail-foot-actions">
         <button type="button" className="btn btn-ghost" onClick={() => void openHome()} disabled={!sourceUrl} data-action="open-home">
@@ -84,10 +89,10 @@ export function ModDetailPanel({
           type="button"
           className="btn btn-primary"
           onClick={onInstall}
-          disabled={noInstance || installing || !data}
+          disabled={installing || !data}
           data-action="install"
         >
-          {installing ? "安装中…" : (installLabel ?? "安装到当前实例")}
+          {installing ? (installingLabel ?? "安装中…") : (installLabel ?? "安装到当前实例")}
         </button>
       </div>
     </>

@@ -5,7 +5,7 @@ import { IPC } from "../../shared/ipc";
 import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest,
 } from "../../shared/ipc";
-import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledModInfo, LanAddress, LoaderKind, MapEntry, ModCategory, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
+import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledModInfo, LanAddress, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { checkAppUpdates } from "../core/updates";
@@ -14,14 +14,16 @@ import { isPortListening, listLanAddresses, probeTcp } from "../net/index";
 import { natfrpCreate, natfrpNodes, natfrpStart, natfrpStatus, natfrpStop, natfrpTunnels, natfrpUser } from "../net/natfrp";
 import { createOffline, listAccounts, removeAccount, setActiveAccount } from "../auth/accounts";
 import { beginDeviceCode, pollDeviceCode } from "../auth/microsoft";
+import { loginYggdrasil, validateYggdrasilAccount } from "../auth/yggdrasil";
 import { SOURCES, probeSources, setActiveSource } from "../core/sources";
 import { listVersions } from "../minecraft/manifest";
 import { createInstance, deleteInstance, listInstances, listSaves, setLoader, updateInstance } from "../minecraft/instances";
+import { exportInstance, importInstance } from "../minecraft/share";
 import { launchInstance } from "../minecraft/launch";
 import { installLoader, listLoaderVersions } from "../loaders/index";
 import { installJava, listInstalledJava, listJavaReleases } from "../java/index";
 import { listMapEntries } from "../mods/minekuai";
-import { checkUpdates, getModDependencies, getModDetail, installMod, installed, listInstalledMods, listCategories, listFilterOptions, listModFiles, remove as removeMod, searchMods, update as updateMod } from "../mods/index";
+import { checkUpdates, getModDependencies, getModDetail, installMod, installed, listInstalledMods, installModpack, listCategories, listFilterOptions, listModFiles, remove as removeMod, searchMods, update as updateMod } from "../mods/index";
 import {
   cancel as cancelDownloadJob, clearFinished as clearFinishedDownloads, hintNextJob, list as listDownloadJobs,
   remove as removeDownloadJob, resume as resumeDownloadJob, runCancellable,
@@ -109,6 +111,11 @@ export function registerIpc(): void {
   // 自定义界面图标：选中的图标存在就返回 file:// 直链，否则 null
   handle<UpdateCheckResult>(IPC.appCheckUpdates, () => checkAppUpdates());
   handle<void>(IPC.appInstallUpdate, (url: string) => installUpdate(url));
+  // 导出到系统目录后的「打开所在文件夹」：shell.showItemInFolder 不受启动器根目录守卫限制
+  handle<void>(IPC.appReveal, (target: string) => {
+    if (!target) throw new Error("路径为空");
+    shell.showItemInFolder(resolve(target));
+  });
 
   handle<{ url: string | null; path: string | null }>(IPC.appIcon, async () => {
     const name = getSettings().appIcon;
@@ -166,6 +173,9 @@ export function registerIpc(): void {
   handle<Account[]>(IPC.accountsList, () => listAccounts());
   handle<Account>(IPC.accountsCreateOffline, (name: string) => createOffline(name));
   handle<void>(IPC.accountsRemove, (id: string) => removeAccount(id));
+  handle<Account>(IPC.accountsLoginYggdrasil, (apiUrl: string, username: string, password: string) => loginYggdrasil(apiUrl, username, password));
+  handle<{ ok: boolean; name?: string; uuid?: string; error?: string }>(IPC.accountsValidateYggdrasil, (id: string) => validateYggdrasilAccount(id));
+
   handle<void>(IPC.accountsSetActive, (id: string) => setActiveAccount(id));
   handle<DeviceCodeChallenge>(IPC.accountsBeginMicrosoft, () => beginDeviceCode());
   handle<MicrosoftLoginState>(IPC.accountsPollMicrosoft, (deviceCode: string) => pollDeviceCode(deviceCode));
@@ -186,6 +196,8 @@ export function registerIpc(): void {
   });
   handle<InstanceMeta>(IPC.instancesUpdate, (id: string, patch: Partial<InstanceMeta>) => updateInstance(id, patch));
   handle<void>(IPC.instancesDelete, (id: string) => deleteInstance(id));
+  handle<InstanceExportResult>(IPC.instancesExport, (id: string) => exportInstance(id));
+  handle<InstanceImportResult>(IPC.instancesImport, () => importInstance());
   handle<SaveInfo[]>(IPC.instancesSaves, (id: string) => listSaves(id));
   handle<void>(IPC.instancesLaunch, async (id: string, quickPlayLevel?: string) => {
     await launchInstance(id, quickPlayLevel);
@@ -212,6 +224,9 @@ export function registerIpc(): void {
   });
 
   handle(IPC.modsSearch, (req: ModSearchRequest) => searchMods(req));
+  handle<{ instanceId: string; name: string }>(IPC.modsInstallModpack, (provider: ModProviderId, projectId: string, fileId?: string, instanceName?: string) =>
+    runCancellable((signal) => installModpack(provider, projectId, fileId, instanceName, signal)),
+  );
   handle<ModCategory[]>(IPC.modsCategories, (kind: ModContentKind, source: ModSourceFilter) => listCategories(kind, source));
   handle<ModFilterOptions>(IPC.modsFilterOptions, (kind: ModContentKind) => listFilterOptions(kind));
   handle<MapEntry[]>(IPC.modsMaps, (query: string, page: number, instanceId?: string) => listMapEntries(query, page, instanceId));

@@ -57,7 +57,7 @@ export const KIND_INSTALL_LABEL: Record<ModContentKind, string> = {
   mod: "安装到实例",
   shader: "安装到 shaderpacks",
   resourcepack: "安装到 resourcepacks",
-  modpack: "下载整合包",
+  modpack: "安装并创建实例",
   map: "下载",
 };
 
@@ -66,7 +66,7 @@ export const KIND_FILE_ACTION: Record<ModContentKind, string> = {
   mod: "安装",
   shader: "安装",
   resourcepack: "安装",
-  modpack: "下载",
+  modpack: "安装并创建实例",
   map: "下载",
 };
 

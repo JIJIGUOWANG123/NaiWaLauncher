@@ -8,21 +8,34 @@ import { ConfirmDialog } from "../components/Modal";
 import { Field, Select, TextInput } from "../components/Form";
 import { EmptyState, ErrorState, SkeletonCards } from "../components/State";
 import { useToast } from "../components/Toast";
-import { IconPlus, IconRefresh, IconTrash } from "../components/icons";
+import { IconLink, IconPlus, IconRefresh, IconTrash } from "../components/icons";
 import { MicrosoftAccountCard } from "./MicrosoftAccountCard";
+import { YggdrasilLoginDialog } from "./YggdrasilLoginDialog";
 
 const NAME_RULE = /^[A-Za-z0-9_]{3,16}$/;
 const NAME_HINT = "昵称只能包含字母、数字和下划线，长度 3–16 位";
 const EMPTY_TITLE = "还没有添加账号。";
 const EMPTY_HINT = "离线账号可直接开始游戏；微软账号需要先在下方填写 client id。";
 const AVATAR_COLORS = ["#e0a93b", "#6b9ce0", "#9bc53d", "#c07be0", "#e07b5b", "#4fbfa8"];
-const TYPE_LABEL: Record<Account["type"], string> = { offline: "离线", microsoft: "微软正版" };
+const TYPE_LABEL: Record<Account["type"], string> = { offline: "离线", microsoft: "微软正版", yggdrasil: "第三方" };
 
 /** 首字母头像是占位图：同一个名字始终落到同一个颜色。 */
 function avatarColor(name: string): string {
   let seed = 0;
   for (const char of name) seed = (seed + char.charCodeAt(0)) % 997;
   return AVATAR_COLORS[seed % AVATAR_COLORS.length];
+}
+
+/** 第三方账号的站点标识：后端给了 siteName 就用它，否则退回 API 域名。 */
+function siteOf(account: Account): string {
+  const named = account.yggdrasil?.siteName?.trim();
+  if (named) return named;
+  const apiUrl = account.yggdrasil?.apiUrl ?? "";
+  try {
+    return new URL(apiUrl).host;
+  } catch {
+    return apiUrl || "未知站点";
+  }
 }
 
 function AccountAvatar({ account }: { account: Account }) {
@@ -51,6 +64,7 @@ function CurrentAccountCard({
           <h2 className="account-name">{account.name}</h2>
           <div className="account-tags">
             <span className={`badge account-badge account-${account.type}`}>{TYPE_LABEL[account.type]}</span>
+            {account.type === "yggdrasil" ? <span className="account-site">{siteOf(account)}</span> : null}
             <span className="account-since">创建于 {new Date(account.createdAt).toLocaleDateString("zh-CN")}</span>
           </div>
         </div>
@@ -97,6 +111,11 @@ export function AccountsPage() {
   const [switching, setSwitching] = useState(false);
   const [deleting, setDeleting] = useState<Account | null>(null);
   const [busyDelete, setBusyDelete] = useState(false);
+  const [yggOpen, setYggOpen] = useState(false);
+  /** 登录时没勾「在此设备上保存」的账号：只在本会话内打「临时」标记。 */
+  const [tempIds, setTempIds] = useState<string[]>([]);
+  const [checking, setChecking] = useState<Record<string, boolean>>({});
+  const [checkErrors, setCheckErrors] = useState<Record<string, string>>({});
 
   const active = useMemo(() => {
     const activeId = settings?.activeAccountId ?? "";
@@ -171,6 +190,42 @@ export function AccountsPage() {
     }
   };
 
+  const handleYggdrasilLoggedIn = async (account: Account, temporary: boolean) => {
+    setYggOpen(false);
+    if (temporary) setTempIds((prev) => (prev.includes(account.id) ? prev : [...prev, account.id]));
+    push(`已登录第三方账号 ${account.name}`, "success");
+    await reloadAll();
+  };
+
+  const validateAccount = async (account: Account) => {
+    setChecking((prev) => ({ ...prev, [account.id]: true }));
+    setCheckErrors((prev) => {
+      const next = { ...prev };
+      delete next[account.id];
+      return next;
+    });
+    try {
+      const result = await api.accounts.validateYggdrasil(account.id);
+      if (result.ok) {
+        push(`「${account.name}」登录状态有效`, "success");
+        return;
+      }
+      const message = (result.error ?? "").trim() || "登录状态已失效";
+      setCheckErrors((prev) => ({ ...prev, [account.id]: message }));
+      push(message, "error");
+    } catch (error: unknown) {
+      const message = errorMessage(error);
+      setCheckErrors((prev) => ({ ...prev, [account.id]: message }));
+      push(message, "error");
+    } finally {
+      setChecking((prev) => {
+        const next = { ...prev };
+        delete next[account.id];
+        return next;
+      });
+    }
+  };
+
   const loading = state.loading && state.data === null;
   const nameInvalid = nickname.trim().length > 0 && !NAME_RULE.test(nickname.trim());
 
@@ -179,12 +234,16 @@ export function AccountsPage() {
       <header className="page-head">
         <div>
           <h1 className="page-title">账号</h1>
-          <p className="page-sub">离线账号输入昵称即可开始游戏；微软正版账号走设备码登录，可进入正版服务器。</p>
+          <p className="page-sub">离线账号输入昵称即可开始游戏；微软正版账号走设备码登录；第三方账号用 Yggdrasil 外置登录（LittleSkin 等）。</p>
         </div>
         <div className="page-actions">
           <button type="button" className="btn btn-ghost" onClick={() => state.reload()} disabled={state.loading}>
             <IconRefresh size={16} />
             刷新
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => setYggOpen(true)} data-open-yggdrasil>
+            <IconLink size={16} />
+            第三方登录
           </button>
         </div>
       </header>
@@ -204,6 +263,67 @@ export function AccountsPage() {
           onDelete={() => setDeleting(active)}
           onCopy={() => void copyUuid(active.uuid)}
         />
+      ) : null}
+
+      {!loading && !state.error && accounts.length > 0 ? (
+        <section className="panel account-list" aria-label="账号列表">
+          <div className="panel-head">
+            <h2 className="panel-title">账号列表</h2>
+            <span className="panel-count">{accounts.length} 个</span>
+          </div>
+          <ul className="account-items">
+            {accounts.map((item) => {
+              const failed = checkErrors[item.id];
+              const ygg = item.type === "yggdrasil";
+              return (
+                <li
+                  key={item.id}
+                  className={`account-item ${item.id === active?.id ? "account-item-active" : ""} ${failed ? "account-item-fail" : ""}`.trim()}
+                  data-account-item={item.type}
+                  data-account-id={item.id}
+                >
+                  <AccountAvatar account={item} />
+                  <div className="account-item-main">
+                    <div className="account-tags">
+                      <span className="account-item-name">{item.name}</span>
+                      <span className={`badge account-badge account-${item.type}`}>{TYPE_LABEL[item.type]}</span>
+                      {ygg ? (
+                        <span className="account-site" data-account-site>
+                          {siteOf(item)}
+                        </span>
+                      ) : null}
+                      {tempIds.includes(item.id) ? <span className="badge account-temp">临时</span> : null}
+                      {item.id === active?.id ? <span className="account-current-tag">当前</span> : null}
+                    </div>
+                    {failed ? (
+                      <p className="account-item-error" role="alert" data-account-check-error>
+                        校验失败：{failed}，可点「第三方登录」重新登录。
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="account-row">
+                    {ygg ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => void validateAccount(item)}
+                        disabled={Boolean(checking[item.id])}
+                        data-validate-yggdrasil={item.id}
+                      >
+                        {checking[item.id] ? "校验中…" : "校验"}
+                      </button>
+                    ) : null}
+                    {item.id === active?.id ? null : (
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => void switchTo(item.id)}>
+                        切换
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       ) : null}
 
       <div className="account-grid">
@@ -244,6 +364,12 @@ export function AccountsPage() {
         busy={busyDelete}
         onCancel={() => setDeleting(null)}
         onConfirm={() => void confirmDelete()}
+      />
+
+      <YggdrasilLoginDialog
+        open={yggOpen}
+        onClose={() => setYggOpen(false)}
+        onLoggedIn={(account, temporary) => void handleYggdrasilLoggedIn(account, temporary)}
       />
     </section>
   );

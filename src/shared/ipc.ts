@@ -1,7 +1,7 @@
 import type {
   Account, AppInfo, DeviceCodeChallenge, DownloadSourceId, DownloadSourceInfo, InstanceMeta, InstalledJava,
   DownloadJob, InstalledModInfo, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
-  PortProbeResult, SaveInfo, UpdateCheckResult,
+  PortProbeResult, SaveInfo, UpdateCheckResult, InstanceExportResult, InstanceImportResult,
   LoaderKind, LoaderVersionInfo, LogLine, ModCategory, ModFileInfo, ModFilterOptions, ModProviderId,
   ModSearchResult, ModSourceFilter, Settings, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
 } from "./types";
@@ -17,6 +17,7 @@ export const IPC = {
   appIcon: "app:appIcon",
   appCheckUpdates: "app:checkUpdates",
   appInstallUpdate: "app:installUpdate",
+  appReveal: "app:reveal",
   downloadsList: "downloads:list",
   downloadsResume: "downloads:resume",
   downloadsCancel: "downloads:cancel",
@@ -55,6 +56,8 @@ export const IPC = {
   accountsCreateOffline: "accounts:createOffline",
   accountsRemove: "accounts:remove",
   accountsSetActive: "accounts:setActive",
+  accountsLoginYggdrasil: "accounts:loginYggdrasil",
+  accountsValidateYggdrasil: "accounts:validateYggdrasil",
   accountsBeginMicrosoft: "accounts:beginMicrosoft",
   accountsPollMicrosoft: "accounts:pollMicrosoft",
 
@@ -69,6 +72,8 @@ export const IPC = {
   instancesDelete: "instances:delete",
   instancesLaunch: "instances:launch",
   instancesSaves: "instances:saves",
+  instancesExport: "instances:export",
+  instancesImport: "instances:import",
 
   javaReleases: "java:releases",
   javaInstalled: "java:installed",
@@ -84,6 +89,7 @@ export const IPC = {
   modsDetail: "mods:detail",
   modsDependencies: "mods:dependencies",
   modsMaps: "mods:maps",
+  modsInstallModpack: "mods:installModpack",
   modsCategories: "mods:categories",
   modsFilterOptions: "mods:filterOptions",
   instancesSetLoader: "instances:setLoader",
@@ -163,6 +169,8 @@ export interface NaiwaApi {
     checkUpdates(): Promise<UpdateCheckResult>;
     /** 下载最新免安装版并替换当前程序，成功后自动重启（仅免安装版可用）。 */
     installUpdate(url: string): Promise<void>;
+    /** 在资源管理器里定位文件/文件夹（不受启动器根目录限制，用于导出结果）。 */
+    revealInFolder(path: string): Promise<void>;
     /** 打开指定实例的模组目录（自动按版本隔离模式定位）。 */
     openInstanceMods(instanceId: string): Promise<void>;
     openExternal(url: string): Promise<void>;
@@ -229,6 +237,10 @@ export interface NaiwaApi {
     createOffline(name: string): Promise<Account>;
     remove(id: string): Promise<void>;
     setActive(id: string): Promise<void>;
+    /** 第三方（Yggdrasil）账号登录：校验地址后换取令牌并保存账号。 */
+    loginYggdrasil(apiUrl: string, username: string, password: string): Promise<Account>;
+    /** 用已保存的令牌校验/刷新第三方账号（返回是否仍有效）。 */
+    validateYggdrasil(id: string): Promise<{ ok: boolean; name?: string; uuid?: string; error?: string }>;
     /** 启动微软设备码登录，返回要展示给用户的 code 与链接。 */
     beginMicrosoft(): Promise<DeviceCodeChallenge>;
     /** 轮询登录结果：pending 表示用户还没授权。 */
@@ -247,6 +259,10 @@ export interface NaiwaApi {
     launch(id: string, quickPlayLevel?: string): Promise<void>;
     /** 列出该实例的单人存档（读 saves/ 目录）。 */
     saves(id: string): Promise<SaveInfo[]>;
+    /** 把实例打包成 .zip（含清单），供分享给别人导入。 */
+    exportArchive(id: string): Promise<InstanceExportResult>;
+    /** 选择并导入别人分享的实例压缩包。 */
+    importArchive(): Promise<InstanceImportResult>;
     /** 切换加载器：安装新加载器版本并清理旧版本目录，模组目录保持不变。 */
     setLoader(id: string, loader: LoaderKind, loaderVersion?: string): Promise<InstanceMeta>;
   };
@@ -269,6 +285,8 @@ export interface NaiwaApi {
     categories(kind: ModContentKind, source: ModSourceFilter): Promise<ModCategory[]>;
     /** 某内容类型可用的筛选项（版本/加载器/分辨率）。 */
     filterOptions(kind: ModContentKind): Promise<ModFilterOptions>;
+    /** 一键安装整合包：下载 .mrpack → 新建实例（名字默认取整合包名）→ 装加载器/模组。 */
+    installModpack(provider: ModProviderId, projectId: string, fileId?: string, instanceName?: string): Promise<{ instanceId: string; name: string }>;
     installed(instanceId: string): Promise<InstalledModInfo[]>;
     /** 逐个文件反查远端，填充 update 字段。 */
     checkUpdates(instanceId: string): Promise<InstalledModInfo[]>;

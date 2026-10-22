@@ -57,7 +57,7 @@ function normalizeAccount(raw: unknown): Account | null {
 
   const account: Account = {
     id,
-    type: src.type === "microsoft" ? "microsoft" : "offline",
+    type: src.type === "microsoft" ? "microsoft" : src.type === "yggdrasil" ? "yggdrasil" : "offline",
     name,
     uuid,
     createdAt: typeof src.createdAt === "number" ? src.createdAt : Date.now(),
@@ -75,6 +75,21 @@ function normalizeAccount(raw: unknown): Account | null {
       expiresAt: typeof ms.expiresAt === "number" ? ms.expiresAt : 0,
     };
     if (typeof ms.xuid === "string") account.microsoft.xuid = ms.xuid;
+  }
+
+  if (account.type === "yggdrasil") {
+    const ygg = src.yggdrasil && typeof src.yggdrasil === "object" ? (src.yggdrasil as Record<string, unknown>) : {};
+    const apiUrl = typeof ygg.apiUrl === "string" ? ygg.apiUrl.trim() : "";
+    const accessToken = typeof ygg.accessToken === "string" ? ygg.accessToken : "";
+    // 没有 API 地址或令牌的第三方账号既登不进也启动不了，直接丢弃，避免界面出现点不动的账号
+    if (!apiUrl || !accessToken) return null;
+    account.yggdrasil = {
+      apiUrl,
+      accessToken,
+      clientToken: typeof ygg.clientToken === "string" ? ygg.clientToken : "",
+      expiresAt: typeof ygg.expiresAt === "number" ? ygg.expiresAt : 0,
+    };
+    if (typeof ygg.siteName === "string" && ygg.siteName.length > 0) account.yggdrasil.siteName = ygg.siteName;
   }
   return account;
 }
@@ -95,6 +110,7 @@ function normalizeStore(raw: unknown): AccountStore {
 function clone(account: Account): Account {
   const copy: Account = { ...account };
   if (account.microsoft) copy.microsoft = { ...account.microsoft };
+  if (account.yggdrasil) copy.yggdrasil = { ...account.yggdrasil };
   return copy;
 }
 
@@ -272,6 +288,81 @@ export async function updateMicrosoftTokens(
   const xuid = tokens.xuid ?? existing.microsoft?.xuid;
   if (xuid) microsoft.xuid = xuid;
   const account: Account = { ...existing, microsoft };
+  const accounts = store.accounts.map((a) => (a.id === id ? account : a));
+  await persist({ accounts, activeId: store.activeId });
+  return clone(account);
+}
+
+export interface YggdrasilAccountInput {
+  /** 规范化后的 API 根地址（含 /api/yggdrasil）。 */
+  apiUrl: string;
+  /** 角色名（selectedProfile.name）。 */
+  name: string;
+  /** 无横线 32 位角色 UUID。 */
+  uuid: string;
+  accessToken: string;
+  clientToken: string;
+  expiresAt: number;
+  siteName?: string;
+}
+
+/** 同一站点、同一角色重复登录时更新既有账号，只有新角色才追加，并自动设为当前账号。 */
+export async function upsertYggdrasilAccount(input: YggdrasilAccountInput): Promise<Account> {
+  const store = await load();
+  const apiUrl = input.apiUrl.trim();
+  if (!apiUrl) throw new Error("第三方账号缺少 API 地址");
+  const uuid = input.uuid.toLowerCase();
+  const existing = store.accounts.find(
+    (a) => a.type === "yggdrasil" && a.yggdrasil?.apiUrl === apiUrl && a.uuid === uuid,
+  );
+
+  const yggdrasil: NonNullable<Account["yggdrasil"]> = {
+    apiUrl,
+    accessToken: input.accessToken,
+    clientToken: input.clientToken,
+    expiresAt: input.expiresAt,
+  };
+  if (input.siteName) yggdrasil.siteName = input.siteName;
+
+  let account: Account;
+  let accounts: Account[];
+  if (existing) {
+    account = { ...existing, name: input.name, uuid, yggdrasil, lastUsedAt: Date.now() };
+    accounts = store.accounts.map((a) => (a.id === existing.id ? account : a));
+  } else {
+    account = {
+      id: randomUUID(),
+      type: "yggdrasil",
+      name: input.name,
+      uuid,
+      createdAt: Date.now(),
+      yggdrasil,
+    };
+    accounts = [...store.accounts, account];
+  }
+
+  await persist({ accounts, activeId: account.id });
+  await syncActiveSetting(account.id);
+  return clone(account);
+}
+
+/** 续期后覆盖令牌：refresh 可能轮换 clientToken，必须立刻落盘。 */
+export async function updateYggdrasilTokens(
+  id: string,
+  tokens: { accessToken: string; clientToken: string; expiresAt: number; siteName?: string },
+): Promise<Account> {
+  const store = await load();
+  const existing = store.accounts.find((a) => a.id === id);
+  if (!existing || existing.type !== "yggdrasil" || !existing.yggdrasil) throw new Error("第三方账号不存在：" + id);
+  const yggdrasil: NonNullable<Account["yggdrasil"]> = {
+    ...existing.yggdrasil,
+    accessToken: tokens.accessToken,
+    clientToken: tokens.clientToken,
+    expiresAt: tokens.expiresAt,
+  };
+  const siteName = tokens.siteName ?? existing.yggdrasil.siteName;
+  if (siteName) yggdrasil.siteName = siteName;
+  const account: Account = { ...existing, yggdrasil };
   const accounts = store.accounts.map((a) => (a.id === id ? account : a));
   await persist({ accounts, activeId: store.activeId });
   return clone(account);

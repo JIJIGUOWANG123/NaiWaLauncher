@@ -23,7 +23,8 @@ export interface AppContextValue {
   versionsError: string | null;
   reloadVersions(force?: boolean): Promise<void>;
   currentInstanceId: string | null;
-  setCurrentInstanceId(id: string): void;
+  /** 传 null（或空串）表示「不选择实例」，可以只浏览不装东西。 */
+  setCurrentInstanceId(id: string | null): void;
   currentInstance: InstanceMeta | null;
   /** 自定义界面图标 URL（null 表示用内置 logo），标题栏/侧边栏/启动屏共用。 */
   iconUrl: string | null;
@@ -100,10 +101,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setIcon(await fetchAppIcon());
   }, []);
 
-  const setCurrentInstanceId = useCallback((id: string) => {
-    setCurrentId(id);
+  const setCurrentInstanceId = useCallback((id: string | null) => {
+    const next = id ? id : null;
+    setCurrentId(next);
     try {
-      localStorage.setItem(INSTANCE_KEY, id);
+      if (next) localStorage.setItem(INSTANCE_KEY, next);
+      else localStorage.removeItem(INSTANCE_KEY);
     } catch {
       // 隐私模式下 localStorage 可能不可写，忽略即可。
     }
@@ -153,10 +156,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [booted]);
 
-  const currentInstance = useMemo(() => {
-    if (instances.length === 0) return null;
-    return instances.find((item) => item.id === currentInstanceId) ?? instances[0];
-  }, [instances, currentInstanceId]);
+  /** 记住的实例已经不在了（删掉/换目录）：清空本地记忆，回到「不选择实例」。 */
+  useEffect(() => {
+    if (instancesLoading || currentInstanceId === null) return;
+    if (instances.some((item) => item.id === currentInstanceId)) return;
+    setCurrentId(null);
+    try {
+      localStorage.removeItem(INSTANCE_KEY);
+    } catch {
+      // 同上：清不掉也不影响本次会话。
+    }
+  }, [instancesLoading, currentInstanceId, instances]);
+
+  // 不做「回退到第一个实例」：允许为空，未选择时各页面自己提示去选。
+  const currentInstance = useMemo(
+    () => instances.find((item) => item.id === currentInstanceId) ?? null,
+    [instances, currentInstanceId],
+  );
 
   const value = useMemo<AppContextValue>(() => ({
     page,
@@ -174,7 +190,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     versions,
     versionsError,
     reloadVersions,
-    currentInstanceId: currentInstance?.id ?? currentInstanceId,
+    currentInstanceId,
     setCurrentInstanceId,
     currentInstance,
     iconUrl: icon.url,

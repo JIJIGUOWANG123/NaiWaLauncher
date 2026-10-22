@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   InstanceMeta, LoaderKind, MapEntry, ModCategory, ModContentKind, ModDependency, ModFileInfo, ModFilterOptions,
   ModSearchResult,
@@ -15,9 +15,11 @@ import {
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
+import { AnchoredMenu } from "../components/AnchoredMenu";
 import { ModDetailPanel } from "../components/ModDetailPanel";
 import { ModDepsDialog, type DepsChoice } from "../components/ModDepsDialog";
 import { MapCards } from "../components/MapCards";
+import { ConfirmDialog } from "../components/Modal";
 import { MatchTag, ReleaseTypeTag } from "../components/Badges";
 import { Select } from "../components/Form";
 import { EmptyState, ErrorState, SkeletonRows } from "../components/State";
@@ -119,7 +121,7 @@ function IconStar({ filled, size = 16 }: { filled: boolean; size?: number }) {
 }
 
 export function ModsPage() {
-  const { instances, currentInstance, setCurrentInstanceId, settings, navigate } = useApp();
+  const { instances, currentInstance, setCurrentInstanceId, reloadInstances, settings, navigate } = useApp();
   const { push } = useToast();
   /** 一级标签：默认模组；数据包因后端缺口禁用。 */
   const [kind, setKind] = useState<UiContentKind>("mod");
@@ -131,8 +133,13 @@ export function ModsPage() {
   const [tick, setTick] = useState(0);
   const [selected, setSelected] = useState<ModSearchResult | null>(null);
   const [installing, setInstalling] = useState<{ projectId: string; fileId: string | null } | null>(null);
-  /** 当前展开「选择实例」下拉的卡片（provider:projectId）。 */
-  const [pickerFor, setPickerFor] = useState<string | null>(null);
+  /** 展开中的实例浮层：记下是哪张卡片 + 锚点按钮，浮层自己在 body 上定位。 */
+  const [picker, setPicker] = useState<{ mod: ModSearchResult; anchor: HTMLElement } | null>(null);
+  /** 卡片上的实例按钮，详情面板里点安装时按 key 取回锚点，把浮层开在对应卡片上。 */
+  const pickerAnchors = useRef(new Map<string, HTMLButtonElement>());
+  /** 整合包「安装并创建实例」：确认弹窗 + 进行中的卡片。 */
+  const [packConfirm, setPackConfirm] = useState<ModSearchResult | null>(null);
+  const [packBusy, setPackBusy] = useState<{ key: string; fileId: string | null } | null>(null);
   const [favorites, setFavorites] = useState<string[]>(() => readFavorites());
   const [depsPrompt, setDepsPrompt] = useState<{ deps: ModDependency[]; title: string } | null>(null);
   const depsResolver = useRef<((choice: DepsChoice) => void) | null>(null);
@@ -142,17 +149,23 @@ export function ModsPage() {
 
   const isMap = kind === "map";
   const isDatapack = kind === "datapack";
+  /** 整合包装法是「新建实例」，卡片上没有实例下拉。 */
+  const isModpack = kind === "modpack";
   /** 面板与文件列表只有后端支持的类型才会打开。 */
   const detailKind: ModContentKind = isBackendKind(kind) ? kind : "mod";
   const noInstance = instances.length === 0;
   const source = filters.source;
   const noKey = source === "curseforge" && !(settings?.curseforgeApiKey ?? "").trim();
 
+  /** 左侧「当前实例」：第一项是空选择，允许不选实例只浏览。 */
   const instanceOptions = useMemo(
-    () => instances.map((item) => ({
-      value: item.id,
-      label: `${item.name} · ${item.mcVersion} ${loaderLabel(item.loader)}`,
-    })),
+    () => [
+      { value: "", label: "不选择实例（仅浏览）" },
+      ...instances.map((item) => ({
+        value: item.id,
+        label: `${item.name} · ${item.mcVersion} ${loaderLabel(item.loader)}`,
+      })),
+    ],
     [instances],
   );
 
@@ -169,7 +182,7 @@ export function ModsPage() {
     setKind(next);
     setFilters(readFilters(next));
     setSelected(null);
-    setPickerFor(null);
+    setPicker(null);
   };
 
   const toggleCategory = (id: string) => {
@@ -346,18 +359,63 @@ export function ModsPage() {
 
   const panelInstalling = installing !== null && installing.projectId === (selected?.projectId ?? "");
 
+  /** 卡片/浮层共用的 key，与 data-res-card 一致。 */
+  const keyOf = (mod: ModSearchResult) => `${mod.provider}:${mod.projectId}`;
+  /** 列表上显示的标题：开着实时翻译时用译名，整合包新建实例也用它当名字。 */
+  const titleOf = (mod: ModSearchResult) => (translateMods ? mod.titleZh : undefined) ?? mod.title;
+
+  const closePicker = useCallback(() => setPicker(null), []);
+
+  /** 打开某张卡片的实例浮层（锚点是卡片自己的按钮）。 */
+  const openPicker = (mod: ModSearchResult, anchor: HTMLElement) => setPicker({ mod, anchor });
+
   /** 卡片下拉选实例：切到该实例并直接装最佳版本。 */
   const installInto = async (mod: ModSearchResult, instance: InstanceMeta) => {
-    setPickerFor(null);
+    setPicker(null);
     setCurrentInstanceId(instance.id);
     await installContent(mod, instance, null);
   };
 
   /** 没有实例也能浏览：下拉里的「不安装，仅浏览」只打开详情看内容。 */
   const browseOnly = (mod: ModSearchResult) => {
-    setPickerFor(null);
+    setPicker(null);
     setSelected(mod);
   };
+
+  /**
+   * 安装入口发现「没选实例」：提示一句并把这套装到哪里的选择权交回卡片。
+   * 关闭详情面板 + 滚到该卡片 + 展开它的实例浮层。
+   */
+  const nudgeToPickInstance = (mod: ModSearchResult) => {
+    push("请先选择要安装到的实例", "info");
+    setSelected(null);
+    const anchor = pickerAnchors.current.get(keyOf(mod));
+    if (!anchor) return;
+    anchor.scrollIntoView({ block: "center", behavior: "instant" });
+    setPicker({ mod, anchor });
+  };
+
+  /** 整合包：不需要选实例，直接新建一个（名字取整合包名）再安装。 */
+  const installModpackAndCreate = async (mod: ModSearchResult, fileId?: string) => {
+    setPackConfirm(null);
+    setPicker(null);
+    setPackBusy({ key: keyOf(mod), fileId: fileId ?? null });
+    try {
+      const result = await api.mods.installModpack(mod.provider, mod.projectId, fileId);
+      push(`已创建实例「${result.name}」并开始安装`, "success");
+      await reloadInstances();
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      setPackBusy(null);
+    }
+  };
+
+  /** 列表换了一批（搜索 / 刷新）时卡片会被重建，锚点可能已经不在，浮层跟着收起。 */
+  useEffect(() => {
+    if (!search.loading) return;
+    setPicker(null);
+  }, [search.loading]);
 
   /** 地图直链交给系统浏览器（启动器暂不接管存档下载）。 */
   const downloadMap = async (entry: MapEntry) => {
@@ -378,14 +436,6 @@ export function ModsPage() {
       push(errorMessage(error), "error");
     }
   };
-
-  /** 下拉打开时点空白处关闭；按钮与菜单自己 stopPropagation，免得刚开就被关。 */
-  useEffect(() => {
-    if (pickerFor === null) return undefined;
-    const close = () => setPickerFor(null);
-    window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
-  }, [pickerFor]);
 
   const versionOptions = useMemo(
     () => [{ value: "", label: "全部版本" }, ...(filterOptions.data?.versions ?? []).map((value) => ({ value, label: value }))],
@@ -408,7 +458,7 @@ export function ModsPage() {
       : "地图不依赖实例，直接浏览；下载需登录麦块社区")
     : (currentInstance
       ? `${kindLabel(kind)}可安装到「${currentInstance.name}」· Minecraft ${currentInstance.mcVersion} · ${loaderLabel(currentInstance.loader)}`
-      : "没有实例也能浏览；安装时在卡片上选目标实例，或先去创建一个实例");
+      : "未选择实例：可以照常浏览；安装时在卡片上选目标实例，整合包则直接新建实例");
 
   const resultCount = isMap ? (maps.data ?? []).length : results.length;
 
@@ -542,9 +592,8 @@ export function ModsPage() {
             <Select
               value={currentInstance?.id ?? ""}
               options={instanceOptions}
-              onChange={setCurrentInstanceId}
-              placeholder={noInstance ? "暂无实例" : "选择实例"}
-              disabled={noInstance}
+              onChange={(value) => setCurrentInstanceId(value === "" ? null : value)}
+              keepEmpty
               ariaLabel="当前实例"
             />
             {currentInstance ? (
@@ -552,10 +601,15 @@ export function ModsPage() {
                 {isMap ? "地图按这个实例的版本标注适配性" : `${kindLabel(kind)}默认装进这个实例`}
               </p>
             ) : (
+              <p className="aside-hint" data-instance-empty-hint>
+                {noInstance ? "还没有实例：可以照常浏览，安装时先在卡片上建一个" : "未选择实例：可以照常浏览，安装时在卡片上选目标实例"}
+              </p>
+            )}
+            {noInstance ? (
               <button type="button" className="link-btn" onClick={() => navigate("instances")}>
                 去创建实例
               </button>
-            )}
+            ) : null}
           </div>
         </aside>
 
@@ -678,7 +732,8 @@ export function ModsPage() {
                 const titleZh = translateMods ? mod.titleZh : undefined;
                 const summaryZh = translateMods ? mod.summaryZh : undefined;
                 const favorite = favorites.includes(key);
-                const open = pickerFor === key;
+                const open = picker !== null && keyOf(picker.mod) === key;
+                const creating = packBusy?.key === key;
                 const updatedAt = updatedAtOf(mod);
                 const badge = isBackendKind(kind) ? KIND_BADGE[kind] : null;
                 return (
@@ -732,62 +787,39 @@ export function ModsPage() {
                         <IconStar filled={favorite} />
                       </button>
 
-                      <div className="res-picker" onClick={(event) => event.stopPropagation()}>
+                      {/* 整合包不需要选实例：直接新建一个并安装，名字取整合包名。 */}
+                      {isModpack ? (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-primary"
+                          data-modpack-install={key}
+                          disabled={packBusy !== null}
+                          onClick={() => setPackConfirm(mod)}
+                        >
+                          {creating ? "正在创建实例…" : "安装并创建实例"}
+                        </button>
+                      ) : (
                         <button
                           type="button"
                           className={`btn btn-sm ${noInstance ? "btn-ghost" : "btn-primary"}`.trim()}
                           data-instance-picker={key}
-                          onClick={() => setPickerFor(open ? null : key)}
+                          aria-haspopup="menu"
+                          aria-expanded={open}
+                          ref={(element) => {
+                            if (element) pickerAnchors.current.set(key, element);
+                            else pickerAnchors.current.delete(key);
+                          }}
+                          onClick={(event) => {
+                            if (open) closePicker();
+                            else openPicker(mod, event.currentTarget);
+                          }}
                         >
                           {noInstance ? "无实例" : "选择实例"}
                           <IconChevronDown size={14} />
                         </button>
-                        {open ? (
-                          <div className="res-menu" role="menu" data-instance-menu={key}>
-                            <span className="res-menu-title">{noInstance ? "还没有可用实例" : "安装到哪个实例"}</span>
-                            {instances.map((instance) => (
-                              <button
-                                key={instance.id}
-                                type="button"
-                                role="menuitem"
-                                className="res-menu-item"
-                                data-menu-instance={instance.id}
-                                disabled={installing !== null}
-                                onClick={() => void installInto(mod, instance)}
-                              >
-                                <span className="res-menu-name">{instance.name}</span>
-                                <span className="res-menu-meta">{instance.mcVersion} · {loaderLabel(instance.loader)}</span>
-                              </button>
-                            ))}
-                            <button
-                              type="button"
-                              role="menuitem"
-                              className="res-menu-item"
-                              data-menu-browse
-                              onClick={() => browseOnly(mod)}
-                            >
-                              <span className="res-menu-name">不安装，仅浏览</span>
-                              <span className="res-menu-meta">打开详情看介绍</span>
-                            </button>
-                            {noInstance ? (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="res-menu-item is-link"
-                                data-menu-create
-                                onClick={() => {
-                                  setPickerFor(null);
-                                  navigate("instances");
-                                }}
-                              >
-                                <span className="res-menu-name">去创建实例</span>
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
+                      )}
 
-                      {noInstance ? (
+                      {noInstance && !isModpack ? (
                         <button type="button" className="link-btn res-create" data-res-create onClick={() => navigate("instances")}>
                           去创建实例
                         </button>
@@ -801,6 +833,56 @@ export function ModsPage() {
         </div>
       </div>
 
+      {/* 实例浮层 Portal 到 body、fixed 定位：任何卡片上的下拉都压在最上层，不被后面的卡片裁切。 */}
+      {picker ? (
+        <AnchoredMenu
+          anchor={picker.anchor}
+          onClose={closePicker}
+          ariaLabel="安装到哪个实例"
+          menuKey={keyOf(picker.mod)}
+        >
+          <span className="res-menu-title">{noInstance ? "还没有可用实例" : "安装到哪个实例"}</span>
+          {instances.map((instance) => (
+            <button
+              key={instance.id}
+              type="button"
+              role="menuitem"
+              className="res-menu-item"
+              data-menu-instance={instance.id}
+              disabled={installing !== null}
+              onClick={() => void installInto(picker.mod, instance)}
+            >
+              <span className="res-menu-name">{instance.name}</span>
+              <span className="res-menu-meta">{instance.mcVersion} · {loaderLabel(instance.loader)}</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            role="menuitem"
+            className="res-menu-item"
+            data-menu-browse
+            onClick={() => browseOnly(picker.mod)}
+          >
+            <span className="res-menu-name">不安装，仅浏览</span>
+            <span className="res-menu-meta">打开详情看介绍</span>
+          </button>
+          {noInstance ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="res-menu-item is-link"
+              data-menu-create
+              onClick={() => {
+                closePicker();
+                navigate("instances");
+              }}
+            >
+              <span className="res-menu-name">去创建实例</span>
+            </button>
+          ) : null}
+        </AnchoredMenu>
+      ) : null}
+
       {selected ? (
         <ModDetailPanel
           open
@@ -812,11 +894,25 @@ export function ModsPage() {
           installLabel={KIND_INSTALL_LABEL[detailKind]}
           onClose={() => setSelected(null)}
           onInstall={() => {
-            if (currentInstance) void installContent(selected, currentInstance, sortedFiles[0] ?? null);
+            // 整合包：新建实例，不需要选实例。
+            if (detailKind === "modpack") {
+              setPackConfirm(selected);
+              return;
+            }
+            // 没选实例：提示一句并把实例选择交回卡片浮层。
+            if (!currentInstance) {
+              nudgeToPickInstance(selected);
+              return;
+            }
+            void installContent(selected, currentInstance, sortedFiles[0] ?? null);
           }}
-          installing={panelInstalling}
+          installing={panelInstalling || (detailKind === "modpack" && packBusy?.key === keyOf(selected) && packBusy.fileId === null)}
+          installingLabel={detailKind === "modpack" ? "正在创建实例…" : undefined}
           instanceName={currentInstance?.name}
-          noInstance={!currentInstance}
+          installHint={detailKind === "modpack"
+            ? `将新建实例「${titleOf(selected)}」并安装，可能需要几分钟`
+            : undefined}
+          noInstance={detailKind !== "modpack" && !currentInstance}
           filesSlot={
             <>
               {detailKind === "mod" && currentInstance?.loader === "vanilla" ? (
@@ -836,9 +932,9 @@ export function ModsPage() {
               {!files.loading && !files.error ? (
                 <ul className="file-list">
                   {sortedFiles.map((file) => {
-                    const busy = installing !== null
-                      && installing.projectId === selected.projectId
-                      && installing.fileId === file.fileId;
+                    const busy = detailKind === "modpack"
+                      ? packBusy !== null && packBusy.key === keyOf(selected) && packBusy.fileId === file.fileId
+                      : installing !== null && installing.projectId === selected.projectId && installing.fileId === file.fileId;
                     return (
                       <li key={file.fileId} className={`file-row ${file.exactMatch ? "is-match" : ""}`.trim()}>
                         <div className="file-main">
@@ -857,10 +953,19 @@ export function ModsPage() {
                         <button
                           type="button"
                           className={`btn btn-sm ${file.exactMatch ? "btn-primary" : "btn-ghost"}`.trim()}
+                          data-file-install={file.fileId}
                           onClick={() => {
-                            if (currentInstance) void installContent(selected, currentInstance, file);
+                            if (detailKind === "modpack") {
+                              void installModpackAndCreate(selected, file.fileId);
+                              return;
+                            }
+                            if (!currentInstance) {
+                              nudgeToPickInstance(selected);
+                              return;
+                            }
+                            void installContent(selected, currentInstance, file);
                           }}
-                          disabled={installing !== null || !currentInstance}
+                          disabled={installing !== null || packBusy !== null}
                         >
                           <IconDownload size={15} />
                           {busy ? "安装中…" : KIND_FILE_ACTION[detailKind]}
@@ -879,6 +984,18 @@ export function ModsPage() {
       {depsPrompt ? (
         <ModDepsDialog open deps={depsPrompt.deps} projectTitle={depsPrompt.title} onChoose={resolveDeps} />
       ) : null}
+
+      <ConfirmDialog
+        open={packConfirm !== null}
+        title="安装整合包"
+        confirmText="安装并创建实例"
+        busy={packBusy !== null}
+        message={packConfirm ? `将新建实例「${titleOf(packConfirm)}」并安装，可能需要几分钟` : ""}
+        onCancel={() => setPackConfirm(null)}
+        onConfirm={() => {
+          if (packConfirm) void installModpackAndCreate(packConfirm);
+        }}
+      />
     </section>
   );
 }

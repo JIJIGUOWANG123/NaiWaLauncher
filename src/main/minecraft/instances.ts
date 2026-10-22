@@ -96,6 +96,46 @@ export async function getInstance(id: string): Promise<InstanceMeta | undefined>
   return meta ?? undefined;
 }
 
+/** 只写元数据的入参：调用方已自行完成原版与加载器安装（整合包安装就是这样）。 */
+export interface InstanceRecordRequest {
+  name: string;
+  mcVersion: string;
+  loader: LoaderKind;
+  loaderVersion?: string;
+  /** versions/<versionId> 里真正要启动的版本（加载器安装器生成的那个）。 */
+  versionId: string;
+  memoryMb?: number;
+}
+
+/** 校验 + 生成 id + 写元数据，不碰网络与安装器。 */
+export async function createInstanceRecord(req: InstanceRecordRequest): Promise<InstanceMeta> {
+  const name = String(req.name ?? "").trim();
+  if (name.length === 0) throw new Error("实例名称不能为空");
+  const mcVersion = String(req.mcVersion ?? "").trim();
+  if (mcVersion.length === 0) throw new Error("请选择 Minecraft 版本");
+  const versionId = String(req.versionId ?? "").trim();
+  if (versionId.length === 0) throw new Error("实例缺少要启动的版本 id");
+  const loader: LoaderKind = req.loader ?? "vanilla";
+  const loaderVersion = String(req.loaderVersion ?? "").trim() || undefined;
+
+  const id = await uniqueInstanceId(name);
+  await fs.mkdir(instanceModsDir(id), { recursive: true });
+  const meta: InstanceMeta = {
+    id,
+    name,
+    mcVersion,
+    loader,
+    ...(loaderVersion ? { loaderVersion } : {}),
+    versionId,
+    memoryMb: req.memoryMb && req.memoryMb > 0 ? Math.round(req.memoryMb) : DEFAULT_MEMORY_MB,
+    extraJvmArgs: "",
+    createdAt: Date.now(),
+  };
+  await writeMeta(meta);
+  log.info(`实例「${name}」创建完成（${id}），版本 ${versionId}`);
+  return meta;
+}
+
 export async function createInstance(req: CreateInstanceRequest, signal?: AbortSignal): Promise<InstanceMeta> {
   const name = String(req.name ?? "").trim();
   if (name.length === 0) throw new Error("实例名称不能为空");
@@ -114,23 +154,14 @@ export async function createInstance(req: CreateInstanceRequest, signal?: AbortS
     loaderVersion = installed.loaderVersion;
   }
 
-  const id = await uniqueInstanceId(name);
-  await fs.mkdir(instanceModsDir(id), { recursive: true });
-  const memoryMb = req.memoryMb && req.memoryMb > 0 ? Math.round(req.memoryMb) : DEFAULT_MEMORY_MB;
-  const meta: InstanceMeta = {
-    id,
+  return createInstanceRecord({
     name,
     mcVersion,
     loader,
     ...(loaderVersion ? { loaderVersion } : {}),
     versionId,
-    memoryMb,
-    extraJvmArgs: "",
-    createdAt: Date.now(),
-  };
-  await writeMeta(meta);
-  log.info(`实例「${name}」创建完成（${id}），版本 ${versionId}`);
-  return meta;
+    memoryMb: req.memoryMb,
+  });
 }
 
 export async function updateInstance(id: string, patch: Partial<InstanceMeta>): Promise<InstanceMeta> {
@@ -144,7 +175,7 @@ export async function updateInstance(id: string, patch: Partial<InstanceMeta>): 
 
 const LOADER_KINDS: readonly LoaderKind[] = ["vanilla", "fabric", "forge", "neoforge", "quilt", "liteloader"];
 
-function assertLoaderKind(loader: unknown): LoaderKind {
+export function assertLoaderKind(loader: unknown): LoaderKind {
   if (typeof loader !== "string" || !LOADER_KINDS.includes(loader as LoaderKind)) {
     throw new Error(`未知的加载器类型：${String(loader)}`);
   }
@@ -250,7 +281,7 @@ const SAVE_STAT_FILE_LIMIT = 5000;
  * 实例的游戏目录，必须与 launch.ts 的 --gameDir 保持一致：
  * 版本隔离 none 时所有实例共用 <gameRoot>，saves 也就落在那边。
  */
-function gameDirOf(instance: InstanceMeta): string {
+export function gameDirOf(instance: InstanceMeta): string {
   return getSettings().versionIsolation === "none" ? getPaths().gameRoot : instanceDir(instance.id);
 }
 

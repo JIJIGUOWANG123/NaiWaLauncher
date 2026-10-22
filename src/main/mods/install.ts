@@ -288,8 +288,8 @@ export async function downloadModFile(
 
     task.done({ fileName, path: dest });
     log.info(`已安装${noun} ${fileName} → ${dest}`);
-    // 整合包只下不拆：解包/建实例属于另一套流程，先让用户拿到 .mrpack
-    if (kind === "modpack") log.warn(`整合包 ${fileName} 已下载到 ${dir}，启动器暂不自动解包，请用导入功能或第三方工具处理`);
+    // 这条路径只落盘 .mrpack：解析索引与建实例在 modpack.ts 的一键安装里
+    if (kind === "modpack") log.info(`整合包 ${fileName} 已下载到 ${dir}；一键安装会解析它并新建实例`);
     return { fileName, path: dest };
   } catch (err) {
     task.fail(err);

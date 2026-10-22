@@ -43,6 +43,55 @@ function mockSavesFailing(): boolean {
   return Boolean((globalThis as { __naiwaMockFailSaves?: boolean }).__naiwaMockFailSaves);
 }
 
+/** 自检钩子：`__naiwaMockExportCancel = true` 时导出返回 path=null（模拟用户取消保存框）。 */
+function mockExportCancelled(): boolean {
+  return (globalThis as { __naiwaMockExportCancel?: boolean }).__naiwaMockExportCancel === true;
+}
+
+/** 自检钩子：`__naiwaMockExportFail` 是字符串时导出抛该错误原文。 */
+function mockExportFailure(): string | null {
+  const message = (globalThis as { __naiwaMockExportFail?: string }).__naiwaMockExportFail;
+  return typeof message === "string" && message ? message : null;
+}
+
+/** 自检钩子：`__naiwaMockYggError` 为真时 accounts.loginYggdrasil 按「账号或密码错误」失败。 */
+function mockYggLoginError(): string | null {
+  const forced = (globalThis as { __naiwaMockYggError?: string | boolean }).__naiwaMockYggError;
+  if (!forced) return null;
+  return typeof forced === "string" && forced ? forced : "账号或密码错误";
+}
+
+/** 自检钩子：`__naiwaMockYggInvalid` 是字符串时 accounts.validateYggdrasil 返回该失败文案。 */
+function mockYggInvalidReason(): string | null {
+  const reason = (globalThis as { __naiwaMockYggInvalid?: string }).__naiwaMockYggInvalid;
+  return typeof reason === "string" && reason ? reason : null;
+}
+
+/**
+ * 第三方站点名：主进程会从 Yggdrasil 元数据里取站点名并写进 siteName，
+ * mock 没有网络，只能按域名近似（LittleSkin 直接给品牌名，其余退回域名）。
+ */
+function mockYggSiteName(apiUrl: string): string {
+  let host = "";
+  try {
+    host = new URL(apiUrl).hostname.toLowerCase();
+  } catch {
+    return apiUrl;
+  }
+  if (host.endsWith("littleskin.cn")) return "LittleSkin";
+  return host;
+}
+/** 自检钩子：`__naiwaMockImportCancel = true` 时导入返回 instanceId=null（模拟用户取消文件框）。 */
+function mockImportCancelled(): boolean {
+  return (globalThis as { __naiwaMockImportCancel?: boolean }).__naiwaMockImportCancel === true;
+}
+
+/** 自检钩子：`__naiwaMockImportFail` 是字符串时导入抛该错误原文。 */
+function mockImportFailure(): string | null {
+  const message = (globalThis as { __naiwaMockImportFail?: string }).__naiwaMockImportFail;
+  return typeof message === "string" && message ? message : null;
+}
+
 /**
  * 内容类型：主进程正在实现 kind 参数，但 shared/ipc.ts 的请求类型还没带上它，
  * 这里按可选字段读，缺省当作模组（老调用方行为不变）。
@@ -329,6 +378,12 @@ export function createMockApi(): NaiwaApi {
           throw new Error(`路径不在启动器根目录内，已拒绝：${target}`);
         }
       },
+      revealInFolder: async (target: string) => {
+        // 与主进程一致：showItemInFolder 不受根目录守卫限制，导出到「下载」目录也能定位。
+        trace("app.revealInFolder", { path: target });
+        console.info("[mock] 在文件管理器中定位", target);
+        await sleep(80);
+      },
       openExternal: async (url: string) => {
         trace("app.openExternal", { url });
         await sleep(80);
@@ -596,6 +651,46 @@ export function createMockApi(): NaiwaApi {
         accounts = accounts.map((item) => (item.id === id ? { ...item, lastUsedAt: Date.now() } : item));
         settings = { ...settings, activeAccountId: id };
       },
+      loginYggdrasil: async (apiUrl: string, username: string, password: string) => {
+        const trimmedUrl = apiUrl.trim();
+        const trimmedUser = username.trim();
+        trace("accounts.loginYggdrasil", { apiUrl: trimmedUrl, username: trimmedUser });
+        await sleep(320);
+        const forced = mockYggLoginError();
+        if (forced) throw new Error(forced);
+        if (!/^https?:\/\//i.test(trimmedUrl)) {
+          throw new Error("Yggdrasil API 地址无效：需要以 http:// 或 https:// 开头。");
+        }
+        if (!trimmedUser || !password) throw new Error("账号或密码错误");
+        const siteName = mockYggSiteName(trimmedUrl);
+        const created: Account = {
+          id: `acc-ygg-${Date.now().toString(36)}`,
+          type: "yggdrasil",
+          name: trimmedUser,
+          uuid: mockUuid(`ygg-${siteName}-${trimmedUser}`),
+          createdAt: Date.now(),
+          lastUsedAt: Date.now(),
+          yggdrasil: {
+            apiUrl: trimmedUrl,
+            accessToken: "mock-yggdrasil-access-token",
+            clientToken: "mock-yggdrasil-client-token",
+            expiresAt: 0,
+            siteName,
+          },
+        };
+        accounts = [...accounts, created];
+        settings = { ...settings, activeAccountId: created.id };
+        return { ...created };
+      },
+      validateYggdrasil: async (id: string) => {
+        trace("accounts.validateYggdrasil", { id });
+        await sleep(260);
+        const account = findAccount(id);
+        if (account.type !== "yggdrasil") throw new Error("只有第三方账号可以校验登录状态。");
+        const reason = mockYggInvalidReason();
+        if (reason) return { ok: false, error: reason };
+        return { ok: true, name: account.name, uuid: account.uuid };
+      },
       beginMicrosoft: async () => {
         trace("accounts.beginMicrosoft");
         await sleep(320);
@@ -729,6 +824,39 @@ export function createMockApi(): NaiwaApi {
         await sleep(320);
         if (mockSavesFailing()) throw new Error("读取存档目录失败：模拟权限错误");
         return (MOCK_SAVES[id] ?? []).map((item) => ({ ...item }));
+      },
+      exportArchive: async (id) => {
+        trace("instances.exportArchive", { id });
+        const target = findInstance(id);
+        await sleep(360);
+        const failure = mockExportFailure();
+        if (failure) throw new Error(failure);
+        // 取消保存框：主进程返回 path=null，渲染层据此不出任何提示。
+        if (mockExportCancelled()) return { path: null, name: target.name, sizeBytes: 0 };
+        return { path: "D:\\备份\\示例实例-1.21.4.zip", name: target.name, sizeBytes: 12_345_678 };
+      },
+      importArchive: async () => {
+        trace("instances.importArchive");
+        await sleep(420);
+        const failure = mockImportFailure();
+        if (failure) throw new Error(failure);
+        if (mockImportCancelled()) return { instanceId: null, name: "" };
+        // 与主进程一致：导入后列表里真的多一条，刷新实例页就能看到这张新卡片。
+        const imported: InstanceMeta = {
+          id: "imported-1",
+          name: "朋友的实例",
+          mcVersion: "1.21.4",
+          loader: "fabric",
+          loaderVersion: "0.16.9",
+          versionId: "1.21.4-fabric",
+          memoryMb: 4096,
+          extraJvmArgs: "",
+          createdAt: Date.now(),
+        };
+        if (!instances.some((item) => item.id === imported.id)) {
+          instances = [imported, ...instances];
+        }
+        return { instanceId: imported.id, name: imported.name, installedMissing: true };
       },
       setLoader: async (id: string, loader: LoaderKind, loaderVersion?: string) => {
         const target = findInstance(id);
@@ -904,6 +1032,35 @@ export function createMockApi(): NaiwaApi {
             ? entry.versions.some((version) => version.replace(/^v/i, "") === mcVersion)
             : undefined,
         }));
+      },
+      installModpack: async (provider: ModProviderId, projectId: string, fileId?: string, instanceName?: string) => {
+        // 自检按这条 trace 断言渲染层传对了 provider/projectId/fileId。
+        trace("mods.installModpack", {
+          provider, projectId, fileId: fileId ?? null, instanceName: instanceName ?? null,
+        });
+        if ((globalThis as { __naiwaMockFailModpack?: boolean }).__naiwaMockFailModpack) {
+          await sleep(260);
+          throw new Error("模拟创建实例失败：磁盘空间不足");
+        }
+        const project = mockFindProject(projectId);
+        if (!project) throw new Error(`未找到项目：${projectId}`);
+        const meta = MOCK_CONTENT_META[projectId] ?? {};
+        await simulateTask("game", `安装整合包 ${project.title}`, "下载整合包", 96_000_000, 2600, 24);
+        // 与主进程一致：实例名默认取整合包名（有中文名时用中文名）。
+        const name = (instanceName ?? "").trim() || project.titleZh || project.title;
+        const created: InstanceMeta = {
+          id: `mock-pack-${Date.now().toString(36)}`,
+          name,
+          mcVersion: meta.versions?.[0] ?? "1.20.1",
+          loader: (meta.loaders?.[0] as LoaderKind | undefined) ?? "fabric",
+          versionId: `${meta.versions?.[0] ?? "1.20.1"}-${meta.loaders?.[0] ?? "fabric"}`,
+          memoryMb: 4096,
+          extraJvmArgs: "",
+          createdAt: Date.now(),
+        };
+        instances = [created, ...instances];
+        await sleep(200);
+        return { instanceId: created.id, name: created.name };
       },
       install: async (req: ModInstallRequest) => {
         const project = mockFindProject(req.projectId);

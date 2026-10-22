@@ -76,7 +76,7 @@ export function Sidebar() {
       <div className="sidebar-foot">
         {isMockApi ? <span className="mock-badge">浏览器预览 · 假数据</span> : <span className="mock-badge live">已连接主进程</span>}
         <span className="version-line">
-          {info ? `v${info.version}` : "v0.1.2"}
+          {info ? `v${info.version}` : "v0.1.3"}
           {update?.hasUpdate ? (
             <button
               type="button"

@@ -49,12 +49,13 @@ export function Modal({
 }
 
 export function ConfirmDialog({
-  open, title, message, confirmText = "确认", danger = false, busy = false, onCancel, onConfirm,
+  open, title, message, confirmText = "确认", busyText = "处理中…", danger = false, busy = false, onCancel, onConfirm,
 }: {
   open: boolean;
   title: string;
   message: string;
   confirmText?: string;
+  busyText?: string;
   danger?: boolean;
   busy?: boolean;
   onCancel: () => void;
@@ -72,7 +73,7 @@ export function ConfirmDialog({
             取消
           </button>
           <button type="button" className={`btn ${danger ? "btn-danger" : "btn-primary"}`} onClick={onConfirm} disabled={busy}>
-            {busy ? "处理中…" : confirmText}
+            {busy ? busyText : confirmText}
           </button>
         </>
       }

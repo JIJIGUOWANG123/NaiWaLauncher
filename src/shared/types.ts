@@ -212,6 +212,24 @@ export interface NatfrpStatus {
   frpcReady: boolean;
 }
 
+/** 实例导出/导入结果。 */
+export interface InstanceExportResult {
+  /** 用户取消时为 null。 */
+  path: string | null;
+  /** 打包进压缩包的实例名。 */
+  name: string;
+  /** 体积（字节）。 */
+  sizeBytes: number;
+}
+
+export interface InstanceImportResult {
+  /** 用户取消时为 null。 */
+  instanceId: string | null;
+  name: string;
+  /** 导入时是否需要补装原版/加载器。 */
+  installedMissing?: boolean;
+}
+
 /** 本机可用于联机的局域网地址。 */
 export interface LanAddress {
   name: string;
@@ -427,7 +445,7 @@ export interface ModFileInfo {
   publishedAt: string;
 }
 
-export type AccountType = "offline" | "microsoft";
+export type AccountType = "offline" | "microsoft" | "yggdrasil";
 
 export interface Account {
   id: string;
@@ -438,6 +456,17 @@ export interface Account {
   uuid: string;
   createdAt: number;
   lastUsedAt?: number;
+  /** 第三方（Yggdrasil / authlib-injector）账号信息。 */
+  yggdrasil?: {
+    /** API 根地址，例如 https://littleskin.cn/api/yggdrasil */
+    apiUrl: string;
+    accessToken: string;
+    clientToken: string;
+    /** 令牌到期时间戳（毫秒），0 表示不失效。 */
+    expiresAt: number;
+    /** 该服务商的皮肤站主页（未知时不填）。 */
+    siteName?: string;
+  };
   /** 微软账号令牌（离线账号没有）。 */
   microsoft?: {
     refreshToken: string;

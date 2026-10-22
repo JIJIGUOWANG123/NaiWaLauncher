@@ -616,21 +616,18 @@
   background: var(--accent-soft);
 }
 
-/* 卡片上的【选择实例】下拉：绝对定位在按钮下方，点空白处关闭（逻辑在页面里）。 */
-.res-picker {
-  position: relative;
-}
-
+/*
+ * 卡片上的【选择实例】浮层：Portal 到 document.body、position: fixed（位置由 AnchoredMenu 按
+ * 按钮 rect 算出，下方空间不够时向上展开）。层级压过所有卡片，也不再受卡片容器裁切。
+ */
 .res-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 40;
+  position: fixed;
+  z-index: 2000;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  width: 236px;
   padding: 6px;
+  overflow-y: auto;
   border-radius: var(--radius);
   border: 1px solid var(--line);
   background-color: rgb(var(--surface-rgb) / 0.98);
@@ -679,6 +676,13 @@
 
 .res-create {
   font-size: 11.5px;
+}
+
+/* 整合包的「安装并创建实例」比「选择实例」长，卡片窄时允许折成两行。 */
+.res-card-side .btn {
+  white-space: normal;
+  text-align: center;
+  max-width: 132px;
 }
 
 .drawer-desc {

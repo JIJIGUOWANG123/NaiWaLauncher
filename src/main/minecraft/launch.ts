@@ -6,6 +6,12 @@ import { join } from "node:path";
 import type { Account, InstanceMeta, ProcessPriority, WindowMode } from "../../shared/types";
 import { getActiveAccount } from "../auth/accounts";
 import { ensureFreshToken, resolveMinecraftSession } from "../auth/microsoft";
+import {
+  authlibInjectorArg,
+  authlibInjectorSupported,
+  ensureAuthlibInjector,
+  resolveYggdrasilSession,
+} from "../auth/yggdrasil";
 import { logger } from "../core/logger";
 import { getPaths, instanceDir, versionDir } from "../core/paths";
 import { getSettings } from "../core/settings";
@@ -16,7 +22,7 @@ import { getVersionJson, resolveBaseVersionId } from "./manifest";
 
 const log = logger("launch");
 
-const LAUNCHER_VERSION = "0.1.2";
+const LAUNCHER_VERSION = "0.1.3";
 // 离线模式：服务端只校验令牌前缀，给个占位值即可
 const OFFLINE_TOKEN = "0";
 const USER_TYPE = "legacy";
@@ -61,11 +67,13 @@ interface LaunchIdentity {
   name: string;
   uuid: string;
   accessToken: string;
-  userType: "legacy" | "msa";
+  userType: "legacy" | "msa" | "mojang";
   xuid: string;
   /** 账号名（进 ${profile_name}）；兜底时用实例名。 */
   profileName: string;
   source: "account" | "name-fallback";
+  /** 第三方账号的 API 根地址；有值时必须注入 authlib-injector。 */
+  yggdrasilApiUrl?: string;
 }
 
 /**
@@ -107,6 +115,23 @@ async function resolveIdentity(instance: InstanceMeta): Promise<LaunchIdentity> 
       xuid: fresh.microsoft?.xuid ?? "",
       profileName: session.name || fresh.name,
       source: "account",
+    };
+  }
+
+  if (account.type === "yggdrasil" && account.yggdrasil) {
+    // 第三方账号：令牌失效会先续期一次；续不上也继续启动（离线服仍可进），由 resolveYggdrasilSession 打 warn
+    const session = await resolveYggdrasilSession(account);
+    // userType 用 mojang：这条路直接用现成 accessToken 交给 authlib-injector 校验/进服，
+    // 而 legacy 会让客户端拿令牌当密码重新 authenticate，第三方服务端不接受
+    return {
+      name: session.name || account.name,
+      uuid: formatUuid(session.uuid || account.uuid) || offlineUuid(account.name),
+      accessToken: session.accessToken,
+      userType: "mojang",
+      xuid: "",
+      profileName: session.name || account.name,
+      source: "account",
+      yggdrasilApiUrl: account.yggdrasil.apiUrl,
     };
   }
 
@@ -345,6 +370,31 @@ export async function buildLaunchArgs(instance: InstanceMeta): Promise<{ exe: st
     }
   }
 
+  // 第三方账号：必须通过 -javaagent 注入 authlib-injector，否则客户端不会走该 API 校验/进服
+  const injectorArgs: string[] = [];
+  if (identity.yggdrasilApiUrl) {
+    const supported = authlibInjectorSupported(instance.mcVersion);
+    if (supported === false) {
+      // 不注入也不报错中断：注入一个跑不起来的 javaagent 会直接让 JVM 崩在 premain，
+      // 而按原版启动至少还能进离线服，所以这里只 warn 并跳过（版本判断见 authlibInjectorSupported）
+      log.warn(
+        "该版本（" + instance.mcVersion + "）低于 1.7.10，authlib-injector 无法注入，已跳过：第三方账号只能进离线服；" +
+          "需要联机请改用 1.7.10 及以上版本",
+      );
+    } else {
+      if (supported === null) log.warn("无法判断版本 " + instance.mcVersion + " 是否支持 authlib-injector，按支持处理");
+      let jar: string;
+      try {
+        jar = (await ensureAuthlibInjector()).path;
+      } catch (err) {
+        // 静默降级会让玩家以为自己在用第三方账号，实际进服必失败，所以这里直接中断
+        throw new Error("下载 authlib-injector 失败，第三方账号无法登录：" + (err instanceof Error ? err.message : String(err)));
+      }
+      injectorArgs.push(authlibInjectorArg(jar, identity.yggdrasilApiUrl));
+      log.info("已注入 authlib-injector：" + jar + " → API " + identity.yggdrasilApiUrl);
+    }
+  }
+
   const extraJvmArgs = splitArgs(instance.extraJvmArgs ?? "");
   // 原版 JVM 模板本身就带 -Dminecraft.launcher.brand/version（值来自 launcher_name/launcher_version），
   // 只有模板缺这两个属性时才补，避免重复 -D；玩家自定义 JVM 参数放在后面，仍可覆盖
@@ -352,7 +402,14 @@ export async function buildLaunchArgs(instance: InstanceMeta): Promise<{ exe: st
     ...(jvmArgs.some((arg) => arg.startsWith("-Dminecraft.launcher.brand=")) ? [] : ["-Dminecraft.launcher.brand=" + brand]),
     ...(jvmArgs.some((arg) => arg.startsWith("-Dminecraft.launcher.version=")) ? [] : ["-Dminecraft.launcher.version=" + LAUNCHER_VERSION]),
   ];
-  const jvm = [...jvmTuningArgs(instance.memoryMb ?? 2048), ...identityArgs, ...extraJvmArgs, ...jvmArgs];
+  // -javaagent 放在最前面：必须在主类之前进入 JVM，也不必和内存参数抢位置
+  const jvm = [
+    ...injectorArgs,
+    ...jvmTuningArgs(instance.memoryMb ?? 2048),
+    ...identityArgs,
+    ...extraJvmArgs,
+    ...jvmArgs,
+  ];
 
   const gameArgs = gameTemplates.map((template) => substitute(template, vars));
   // 老版本 JSON 没有 --clientId/--xuid 占位符，微软账号需要补上（xuid 有值才补）

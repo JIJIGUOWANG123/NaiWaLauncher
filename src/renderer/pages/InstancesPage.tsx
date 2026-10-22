@@ -13,7 +13,7 @@ import { InstanceDetailDrawer } from "../components/InstanceDetailDrawer";
 import { SaveDrawer } from "../components/SaveDrawer";
 import { EmptyState, ErrorState, SkeletonCards } from "../components/State";
 import {
-  IconBook, IconFolder, IconMods, IconPlay, IconPlus, IconRefresh, IconSettings, IconTrash,
+  IconBook, IconDownload, IconFolder, IconMods, IconPackage, IconPlay, IconPlus, IconRefresh, IconSettings, IconTrash,
 } from "../components/icons";
 
 export function InstancesPage() {
@@ -24,6 +24,10 @@ export function InstancesPage() {
   const [deleting, setDeleting] = useState<InstanceMeta | null>(null);
   const [busyDelete, setBusyDelete] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
+  // 导出先过确认弹窗：exporting 存待导出实例，busyExport 控制「导出中…」。
+  const [exporting, setExporting] = useState<InstanceMeta | null>(null);
+  const [busyExport, setBusyExport] = useState(false);
+  const [importing, setImporting] = useState(false);
   // 只存 id：reloadInstances 之后抽屉拿到的永远是最新实例对象（加载器徽标随之更新）。
   const [managingId, setManagingId] = useState<string | null>(null);
   // 同理只存 id：存档抽屉要拿最新的实例对象。
@@ -73,6 +77,54 @@ export function InstancesPage() {
     }
   };
 
+  // 导出的 zip 常在启动器根目录之外（默认落在系统下载目录），openPath 的根目录守卫会拒绝，
+  // 所以这里走 revealInFolder：直接把文件交给系统资源管理器定位，传完整文件路径。
+  const revealExport = async (filePath: string) => {
+    try {
+      await api.app.revealInFolder(filePath);
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    }
+  };
+
+  const confirmExport = async () => {
+    if (!exporting) return;
+    setBusyExport(true);
+    try {
+      const result = await api.instances.exportArchive(exporting.id);
+      const filePath = result.path;
+      // 用户取消保存对话框时 path 为 null：按约定不打扰。
+      if (!filePath) return;
+      push(`已导出到 ${filePath}`, "success", {
+        label: "打开所在文件夹",
+        onClick: () => void revealExport(filePath),
+      });
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      setBusyExport(false);
+      // 成功、取消、失败都把确认弹窗关掉：失败信息交给 toast，避免弹窗挡住后续操作。
+      setExporting(null);
+    }
+  };
+
+  // 文件选择框由主进程弹，渲染层只负责收结果与刷新列表。
+  const importArchive = async () => {
+    setImporting(true);
+    try {
+      const result = await api.instances.importArchive();
+      // 用户取消（instanceId 为 null）同样不提示。
+      if (!result.instanceId) return;
+      push(`已导入实例「${result.name}」`, "success");
+      if (result.installedMissing) push("已自动补装原版/加载器", "info");
+      await reloadInstances();
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleting) return;
     setBusyDelete(true);
@@ -99,6 +151,10 @@ export function InstancesPage() {
           <button type="button" className="btn btn-ghost" onClick={() => void reloadInstances()} disabled={instancesLoading}>
             <IconRefresh size={16} />
             刷新
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={() => void importArchive()} disabled={importing}>
+            <IconDownload size={16} />
+            {importing ? "导入中…" : "导入实例"}
           </button>
           <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
             <IconPlus size={16} />
@@ -188,6 +244,10 @@ export function InstancesPage() {
                   <IconBook size={16} />
                   <span>存档</span>
                 </button>
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setExporting(instance)} title="打包成 zip 分享给他人导入">
+                  <IconPackage size={16} />
+                  <span>导出</span>
+                </button>
                 <button type="button" className="btn btn-ghost btn-icon btn-danger-ghost" onClick={() => setDeleting(instance)} title="删除实例">
                   <IconTrash size={16} />
                   <span>删除</span>
@@ -220,6 +280,16 @@ export function InstancesPage() {
         open={savesId !== null}
         onClose={() => setSavesId(null)}
         onLaunched={() => void reloadInstances()}
+      />
+      <ConfirmDialog
+        open={exporting !== null}
+        title="导出实例"
+        message="将把该实例的模组、配置与存档打包为 zip，可分享给他人导入。日志与截图不会包含。"
+        confirmText="导出"
+        busyText="导出中…"
+        busy={busyExport}
+        onCancel={() => setExporting(null)}
+        onConfirm={() => void confirmExport()}
       />
       <ConfirmDialog
         open={deleting !== null}
