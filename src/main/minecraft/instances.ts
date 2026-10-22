@@ -17,6 +17,22 @@ const log = logger("instances");
 const DEFAULT_MEMORY_MB = 2048;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
+/**
+ * 实例占用统计的两道闸：最多看这么多目录项、单次最多跑这么久。
+ * 超限就返回已统计的值：一个展示用的数字不值得把界面卡住。
+ */
+const DISK_USAGE_ENTRY_LIMIT = 20_000;
+const DISK_USAGE_TIME_LIMIT_MS = 3_000;
+/** 占用缓存有效期：5 分钟。期间除非显式失效/强制刷新，不重复遍历磁盘。 */
+const DISK_USAGE_TTL_MS = 5 * 60_000;
+
+const diskUsageCache = new Map<string, { bytes: number; at: number }>();
+
+/** 实例内容变了就丢掉它的占用缓存（创建/更新/删除/安装完成时调用）。 */
+export function invalidateInstanceDiskUsage(id: string): void {
+  diskUsageCache.delete(id);
+}
+
 function instanceFile(id: string): string {
   return join(getPaths().instances, `${id}.json`);
 }
@@ -59,9 +75,11 @@ async function readMeta(id: string): Promise<InstanceMeta | null> {
 async function writeMeta(meta: InstanceMeta): Promise<void> {
   await fs.mkdir(getPaths().instances, { recursive: true });
   const file = instanceFile(meta.id);
+  // diskUsageBytes 是缓存出来的展示值，不写进实例文件：否则会变成一份迟早过期的落盘数据
+  const { diskUsageBytes: _cachedUsage, ...stored } = meta;
   // 先写临时文件再改名，避免界面读到半个 JSON
   const tmp = `${file}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(meta, null, 2), "utf8");
+  await fs.writeFile(tmp, JSON.stringify(stored, null, 2), "utf8");
   await fs.rename(tmp, file);
 }
 
@@ -73,6 +91,98 @@ function sortInstances(list: InstanceMeta[]): InstanceMeta[] {
   });
 }
 
+function cachedDiskUsage(id: string): number | undefined {
+  const hit = diskUsageCache.get(id);
+  if (!hit) return undefined;
+  if (Date.now() - hit.at >= DISK_USAGE_TTL_MS) {
+    diskUsageCache.delete(id);
+    return undefined;
+  }
+  return hit.bytes;
+}
+
+/**
+ * 实例目录（instanceDir(id)）下所有文件的字节数。
+ * - 目录项超过 DISK_USAGE_ENTRY_LIMIT 或耗时超过 DISK_USAGE_TIME_LIMIT_MS 就停，
+ *   返回已统计值并 warn：调用方拿到的是「至少这么多」，不是精确值；
+ * - 符号链接一律跳过：既避免目录环，也不把链接指向的外部内容算进实例；
+ * - 5 分钟内复用缓存，force=true 时重算并覆盖缓存。
+ */
+export async function instanceDiskUsage(id: string, force = false): Promise<{ bytes: number }> {
+  if (!isSafeId(id)) throw new Error(`非法实例 id：${id}`);
+  if (!force) {
+    const cached = cachedDiskUsage(id);
+    if (cached !== undefined) return { bytes: cached };
+  }
+
+  const started = Date.now();
+  let bytes = 0;
+  let seen = 0;
+  let stopped: "entries" | "time" | undefined;
+  const stack: string[] = [instanceDir(id)];
+
+  scan: while (stack.length > 0) {
+    if (Date.now() - started > DISK_USAGE_TIME_LIMIT_MS) {
+      stopped = "time";
+      break;
+    }
+    const current = stack.pop() as string;
+    let entries: Dirent[];
+    try {
+      entries = await fs.readdir(current, { withFileTypes: true });
+    } catch {
+      // 目录在扫描途中被删/无权限：跳过，不影响其余分支
+      continue;
+    }
+    for (const entry of entries) {
+      if (seen >= DISK_USAGE_ENTRY_LIMIT) {
+        stopped = "entries";
+        break scan;
+      }
+      // 时间闸必须落在条目循环里：单个目录也可能有两万个文件，
+      // 只在目录之间检查的话这种「又宽又慢」的目录会一路跑到条目上限
+      if (Date.now() - started > DISK_USAGE_TIME_LIMIT_MS) {
+        stopped = "time";
+        break scan;
+      }
+      seen += 1;
+      const full = join(current, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      try {
+        const stat = await fs.lstat(full);
+        // dirent 之外的二次确认：Windows 的目录联接/junction 也算链接
+        if (stat.isSymbolicLink()) continue;
+        if (stat.isFile()) bytes += stat.size;
+      } catch {
+        // 统计途中被删：跳过
+      }
+    }
+  }
+
+  const elapsedMs = Date.now() - started;
+  if (stopped) {
+    const reason =
+      stopped === "time"
+        ? `超过 ${DISK_USAGE_TIME_LIMIT_MS}ms 上限`
+        : `超过 ${DISK_USAGE_ENTRY_LIMIT} 个条目上限`;
+    log.warn(`实例 ${id} 占用统计未走完（${reason}），返回已统计的 ${bytes} 字节（耗时 ${elapsedMs}ms）`);
+  }
+
+  diskUsageCache.set(id, { bytes, at: Date.now() });
+  return { bytes };
+}
+
+/**
+ * 列表里的占用：有缓存直接用；没有就并行统计。
+ * 取舍：不做「先返回 0 再后台异步补」——那需要额外的推送通道与竞态处理；
+ * 这里每个实例自带 20k 条目 / 3s 上限，并行跑完才返回，最坏也就一次 3s，
+ * 之后 5 分钟内全部命中缓存，界面照常秒开。
+ */
 export async function listInstances(): Promise<InstanceMeta[]> {
   const dir = getPaths().instances;
   let entries: string[];
@@ -88,6 +198,11 @@ export async function listInstances(): Promise<InstanceMeta[]> {
     if (meta) metas.push(meta);
     else log.warn(`实例文件损坏，已跳过：${entry}`);
   }
+  await Promise.all(
+    metas.map(async (meta) => {
+      meta.diskUsageBytes = (await instanceDiskUsage(meta.id)).bytes;
+    }),
+  );
   return sortInstances(metas);
 }
 
@@ -132,6 +247,7 @@ export async function createInstanceRecord(req: InstanceRecordRequest): Promise<
     createdAt: Date.now(),
   };
   await writeMeta(meta);
+  invalidateInstanceDiskUsage(id);
   log.info(`实例「${name}」创建完成（${id}），版本 ${versionId}`);
   return meta;
 }
@@ -170,6 +286,7 @@ export async function updateInstance(id: string, patch: Partial<InstanceMeta>): 
   const next: InstanceMeta = { ...current, ...patch, id: current.id, createdAt: current.createdAt };
   if (typeof next.name !== "string" || next.name.trim().length === 0) next.name = current.name;
   await writeMeta(next);
+  invalidateInstanceDiskUsage(current.id);
   return next;
 }
 
@@ -257,6 +374,7 @@ export async function setLoader(
     throw new Error(`切换加载器失败：实例元数据写入失败（${reason}）；实例仍是 ${current.loader}（${current.versionId}）`);
   }
 
+  invalidateInstanceDiskUsage(current.id);
   // 元数据落盘后才清理旧目录：先删再写会让写盘失败时无版本可用
   if (current.versionId && current.versionId !== nextVersionId) {
     await dropUnusedVersionDir(current.versionId, current.mcVersion);
@@ -271,6 +389,7 @@ export async function deleteInstance(id: string): Promise<void> {
   const current = await readMeta(id);
   await fs.rm(instanceFile(id), { force: true });
   await fs.rm(instanceDir(id), { recursive: true, force: true });
+  invalidateInstanceDiskUsage(id);
   log.info(`实例已删除：${current?.name ?? id}`);
 }
 

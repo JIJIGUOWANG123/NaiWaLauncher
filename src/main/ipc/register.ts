@@ -5,7 +5,7 @@ import { IPC } from "../../shared/ipc";
 import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest,
 } from "../../shared/ipc";
-import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledModInfo, LanAddress, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinInfo, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
+import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledModInfo, LanAddress, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { checkAppUpdates } from "../core/updates";
@@ -15,10 +15,10 @@ import { natfrpCreate, natfrpNodes, natfrpStart, natfrpStatus, natfrpStop, natfr
 import { createOffline, listAccounts, removeAccount, setActiveAccount } from "../auth/accounts";
 import { beginDeviceCode, pollDeviceCode } from "../auth/microsoft";
 import { loginYggdrasil, validateYggdrasilAccount } from "../auth/yggdrasil";
-import { getSkin, pickSkinFile, resetSkin, uploadSkin } from "../auth/skin";
+import { addToWardrobe, getSkin, listSkinProfiles, listWardrobe, pickSkinFile, removeFromWardrobe, resetSkin, selectProfile, uploadSkin } from "../auth/skin";
 import { SOURCES, probeSources, setActiveSource } from "../core/sources";
 import { listVersions } from "../minecraft/manifest";
-import { createInstance, deleteInstance, listInstances, listSaves, setLoader, updateInstance } from "../minecraft/instances";
+import { createInstance, deleteInstance, instanceDiskUsage, listInstances, listSaves, setLoader, updateInstance } from "../minecraft/instances";
 import { exportInstance, importInstance } from "../minecraft/share";
 import { launchInstance } from "../minecraft/launch";
 import { installLoader, listLoaderVersions } from "../loaders/index";
@@ -181,6 +181,11 @@ export function registerIpc(): void {
   handle<string | null>(IPC.skinsPickFile, () => pickSkinFile());
   handle<void>(IPC.skinsUpload, (id: string, filePath: string, model: "classic" | "slim") => uploadSkin(id, filePath, model));
   handle<void>(IPC.skinsReset, (id: string) => resetSkin(id));
+  handle<WardrobeSkin[]>(IPC.skinsWardrobe, () => listWardrobe());
+  handle<string>(IPC.skinsAddToWardrobe, (filePath: string) => addToWardrobe(filePath));
+  handle<void>(IPC.skinsRemoveFromWardrobe, (name: string) => removeFromWardrobe(name));
+  handle<SkinProfile[]>(IPC.skinsProfiles, (id: string) => listSkinProfiles(id));
+  handle<void>(IPC.skinsSelectProfile, (id: string, profileId: string) => selectProfile(id, profileId));
 
   handle<void>(IPC.accountsSetActive, (id: string) => setActiveAccount(id));
   handle<DeviceCodeChallenge>(IPC.accountsBeginMicrosoft, () => beginDeviceCode());
@@ -202,6 +207,7 @@ export function registerIpc(): void {
   });
   handle<InstanceMeta>(IPC.instancesUpdate, (id: string, patch: Partial<InstanceMeta>) => updateInstance(id, patch));
   handle<void>(IPC.instancesDelete, (id: string) => deleteInstance(id));
+  handle<{ bytes: number }>(IPC.instancesUsage, (id: string, force?: boolean) => instanceDiskUsage(id, force === true));
   handle<InstanceExportResult>(IPC.instancesExport, (id: string) => exportInstance(id));
   handle<InstanceImportResult>(IPC.instancesImport, () => importInstance());
   handle<SaveInfo[]>(IPC.instancesSaves, (id: string) => listSaves(id));

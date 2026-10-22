@@ -36,6 +36,19 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 本地占用一行：值 + 重新统计按钮（按钮等主进程接口就绪后再显示）。 */
+.detail-disk {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 .detail-section {
   display: flex;
   flex-direction: column;

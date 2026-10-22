@@ -27,7 +27,7 @@ export function defaults(): Settings {
   return {
     downloadSource: "auto",
     connectionsPerFile: 4,
-    concurrentDownloads: 8,
+    concurrentDownloads: 12,
     // 内置默认 Key，可在设置中替换
     curseforgeApiKey: "",
     modProvider: "modrinth",
@@ -134,7 +134,8 @@ function normalize(raw: unknown, base: Settings): Settings {
     // fastmcmirror 已移除（镜像站长期不可达），旧配置自动回落为 auto
     downloadSource: pickEnum(src.downloadSource === "fastmcmirror" ? "auto" : src.downloadSource, SOURCE_IDS, base.downloadSource),
     connectionsPerFile: clampInt(src.connectionsPerFile, 1, 16, base.connectionsPerFile),
-    concurrentDownloads: clampInt(src.concurrentDownloads, 1, 16, base.concurrentDownloads),
+    // 多线程下载指「多个文件同时下载」：上限 32 给足并行度，默认 12 兼顾带宽与 CDN 限流
+    concurrentDownloads: clampInt(src.concurrentDownloads, 1, 32, base.concurrentDownloads),
     curseforgeApiKey: pickApiKey(src.curseforgeApiKey, base.curseforgeApiKey),
     modProvider: pickEnum(src.modProvider, PROVIDER_IDS, base.modProvider),
     autoSwitchThresholdMs: clampInt(src.autoSwitchThresholdMs, 100, 60_000, base.autoSwitchThresholdMs),

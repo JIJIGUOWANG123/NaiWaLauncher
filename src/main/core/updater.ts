@@ -12,12 +12,25 @@ const log = logger("updater");
 /** 免安装版文件名（仓库 Release 里就叫这个，不带版本号）。 */
 export const SINGLE_EXE_NAME = "NaiWaLauncher.exe";
 
-/** 判断当前运行的是否为免安装单文件版（安装版在 Program Files，需要管理员权限，不做自替换）。 */
+/**
+ * 真正需要被替换的 exe：
+ * portable 版是自解压 stub，运行时进程的 exe 在 %TEMP% 里，替换它等于没更新；
+ * electron-builder 会把原始 exe 路径放在 PORTABLE_EXECUTABLE_FILE 环境变量里，优先用它。
+ */
+export function updateTarget(): string {
+  const portable = process.env.PORTABLE_EXECUTABLE_FILE;
+  if (portable && portable.toLowerCase().endsWith(".exe")) return portable;
+  return app.getPath("exe");
+}
+
+/** 判断当前运行的是否为免安装版（安装版在 Program Files，需要管理员权限，不做自替换）。 */
 export function canSelfUpdate(): boolean {
-  if (process.env.PORTABLE_EXECUTABLE_FILE) return true;
-  const exe = app.getPath("exe");
-  const lowered = exe.toLowerCase();
+  const target = updateTarget();
+  const lowered = target.toLowerCase();
   if (lowered.includes("program files") || lowered.includes("appdata\\local\\programs")) return false;
+  // 运行目录在 %TEMP% 且没有 PORTABLE_EXECUTABLE_FILE，说明是解压后的副本，替换它没有意义
+  const temp = tmpdir().toLowerCase();
+  if (lowered.startsWith(temp) && !process.env.PORTABLE_EXECUTABLE_FILE) return false;
   return true;
 }
 
@@ -77,8 +90,8 @@ export async function installUpdate(url: string): Promise<void> {
   if (!canSelfUpdate()) {
     throw new Error("当前为安装版，无法自动替换程序；请下载免安装版或重新运行安装包更新");
   }
-  const target = app.getPath("exe");
-  log.info(`[updater] 开始更新：${target}`);
+  const target = updateTarget();
+  log.info(`[updater] 开始更新：目标 ${target}（运行中：${app.getPath("exe")}）`);
   let staged = "";
   try {
     staged = await downloadToStaging(url);

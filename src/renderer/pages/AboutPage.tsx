@@ -1,5 +1,8 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import logo from "../assets/logo.png";
+import avatarNailong from "../assets/team/nailong.png";
+import avatarXiaoqi from "../assets/team/xiaoqi.png";
+import avatarDeepseek from "../assets/team/deepseek.png";
 import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { errorMessage } from "../lib/useAsync";
@@ -64,8 +67,9 @@ const CHANGELOG = [
 
 /** 团队头像一律用首字色块占位，不放真人照片。 */
 const TEAM = [
-  { name: "奶龙", role: "开发者", initial: "奶" },
-  { name: "NaiWa Launcher 社区", role: "测试与反馈", initial: "社" },
+  { name: "奶龙", role: "主开发者", initial: "奶", avatar: avatarNailong },
+  { name: "小七", role: "协助开发者", initial: "七", avatar: avatarXiaoqi },
+  { name: "DeepSeek", role: "工具提供", initial: "D", avatar: avatarDeepseek },
 ];
 
 /** 把外壳 .app-bg 上当前铺着的背景图镜像到 Hero：轮播换图时跟着更新。 */
@@ -94,7 +98,7 @@ export function AboutPage() {
   const [confirming, setConfirming] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [downloadHighlight, setDownloadHighlight] = useState(false);
-  const version = info?.version ?? "0.1.4";
+  const version = info?.version ?? "0.1.5";
   // 发布说明只展示前 3 行，避免长文档把首屏顶开。
   const updateNotes = (update?.notes ?? "")
     .split("\n")
@@ -357,7 +361,9 @@ export function AboutPage() {
           <ul className="about-team">
             {TEAM.map((member) => (
               <li className="about-member" data-about-member key={member.name}>
-                <span className="about-avatar" aria-hidden="true">{member.initial}</span>
+                <span className="about-avatar" aria-hidden="true">
+                  {member.avatar ? <img src={member.avatar} alt="" loading="lazy" /> : member.initial}
+                </span>
                 <span className="about-member-text">
                   <strong>{member.name}</strong>
                   <small>{member.role}</small>

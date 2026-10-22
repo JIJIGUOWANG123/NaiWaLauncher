@@ -4,7 +4,8 @@ import type {
 import type {
   Account, DownloadJob, InstalledModInfo, InstanceMeta, InstalledJava, LanAddress, LoaderKind, MapEntry,
   MicrosoftLoginState, ModCategory, ModContentKind, ModFilterOptions, ModProviderId, ModSearchResult,
-  NatfrpStatus, NatfrpTunnel, NatfrpUser, PortProbeResult, SkinInfo, TaskKind,
+  NatfrpStatus, NatfrpTunnel, NatfrpUser, PortProbeResult, SkinInfo, SkinProfile, TaskKind,
+  WardrobeSkin,
 } from "../../shared/types";
 import { loaderLabel } from "../lib/format";
 import {
@@ -41,6 +42,20 @@ function mockDepsFailing(): boolean {
 /** 自检钩子：设置 `globalThis.__naiwaMockFailSaves = true` 时 instances.saves 一律抛错，用来验证存档抽屉的错误态与重试。 */
 function mockSavesFailing(): boolean {
   return Boolean((globalThis as { __naiwaMockFailSaves?: boolean }).__naiwaMockFailSaves);
+}
+
+/**
+ * 自检钩子：`globalThis.__naiwaMockDiskUsage = { [instanceId]: number | null }` 覆盖实例的
+ * diskUsageBytes（null = 回到「尚未统计」缺省态），用来验证 有值 / 0 B / 计算中 三态文案。
+ */
+function withMockDiskUsage(item: InstanceMeta): InstanceMeta {
+  const overrides = (globalThis as { __naiwaMockDiskUsage?: Record<string, number | null> }).__naiwaMockDiskUsage;
+  if (!overrides || !(item.id in overrides)) return item;
+  const value = overrides[item.id];
+  const next = { ...item };
+  if (value === null) delete next.diskUsageBytes;
+  else next.diskUsageBytes = value;
+  return next;
 }
 
 /** 自检钩子：`__naiwaMockExportCancel = true` 时导出返回 path=null（模拟用户取消保存框）。 */
@@ -82,6 +97,50 @@ function mockSkinNoUpload(): boolean {
 /** 自检钩子：`__naiwaMockSkinUploadFail` 是字符串时上传抛该错误原文。 */
 function mockSkinUploadFailure(): string | null {
   const message = (globalThis as { __naiwaMockSkinUploadFail?: string }).__naiwaMockSkinUploadFail;
+  return typeof message === "string" && message ? message : null;
+}
+
+/** mock 的衣柜目录：对应主进程的 NaiWa/skins，用来把衣柜文件名还原成绝对路径。 */
+const MOCK_SKINS_DIR = `${MOCK_DATA_ROOT}\\skins`;
+
+/** 衣柜种子：3 张 64×64 缩略图（data: URL，浏览器预览下不必真读磁盘）。 */
+const MOCK_WARDROBE: { name: string; url: string; sizeBytes: number }[] = [
+  {
+    name: "ward-quad.png",
+    sizeBytes: 4820,
+    url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAfElEQVR42u3QIQHAIBAAQAKipxYEPT1JiKVBfgZasBgv/sQVuBbjOpn2elI1AQIECBAgQIAAAQIECBAgQIAAAQIECBAgQIAAAQIECBAgoEDAPeNk6t+bSoAAAQIECBAgQIAAAQIECBAgQIAAAQIECBAgQIAAAQIECCgQ8AO1PXqVIU+cdQAAAABJRU5ErkJggg==",
+  },
+  {
+    name: "ward-checker.png",
+    sizeBytes: 5160,
+    url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAgklEQVR42u3YsRUAEBBEwatLEWpSqAIEeqADYm4C4QUm+m9jjr5Or9R2fK/fBwAAAAAAAJAY4PcP3u4BAAAAAACAzABKEAAAAAAAALAHKEEAAAAAAADAHqAEAQAAAAAAAHuAEgQAAAAAAADsAUoQAAAAAAAAsAcoQQAAAAAAAOA7gA2MT7KkMrHb1gAAAABJRU5ErkJggg==",
+  },
+  {
+    name: "ward-badge.png",
+    sizeBytes: 6820,
+    url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAA9klEQVR42u3buxHCQAxF0VeaqyCmDCqlAKoggwoYRr/1Sr7Bxsw9dsJa0nHcP1c+AgCA+h95Px/u0xYgEr0SQ7tHV2OoY3wmgjqGZ0Koe3wUQd3DoxCaFO9B0LR4K4ImxlsQtCr+dbOfFQjlAJ7wTIgwwJnhWRBugJ3iqxBSASrDoxBmgJ3jMxHUNT4LAYAowJnxHoS/AN3iowgAeAF2irci/ATo+vQjb4GmPH3vWwAAAAAAAAAAAAAAAAAAAMC/wcvfB3AjBAC3wnwXAIBvg3wdZj6ACRFmhJgSY06QSVFmhZkWZ1+AjRF2htgaY2+QzVF2h2efL8pTcS/O/1mkAAAAAElFTkSuQmCC",
+  },
+];
+
+/** 自检钩子：`__naiwaMockWardrobeEmpty = true` 时衣柜返回空列表（验证空态文案）。 */
+function mockWardrobeEmpty(): boolean {
+  return (globalThis as { __naiwaMockWardrobeEmpty?: boolean }).__naiwaMockWardrobeEmpty === true;
+}
+
+/** 自检钩子：`__naiwaMockWardrobeAddFail` 是字符串时添加衣柜抛该错误原文。 */
+function mockWardrobeAddFailure(): string | null {
+  const message = (globalThis as { __naiwaMockWardrobeAddFail?: string }).__naiwaMockWardrobeAddFail;
+  return typeof message === "string" && message ? message : null;
+}
+
+/** 自检钩子：`__naiwaMockSingleProfile = true` 时账号只有一个角色（验证单角色一行文字）。 */
+function mockSingleProfile(): boolean {
+  return (globalThis as { __naiwaMockSingleProfile?: boolean }).__naiwaMockSingleProfile === true;
+}
+
+/** 自检钩子：`__naiwaMockProfileFail` 是字符串时切换角色抛该错误原文。 */
+function mockProfileFailure(): string | null {
+  const message = (globalThis as { __naiwaMockProfileFail?: string }).__naiwaMockProfileFail;
   return typeof message === "string" && message ? message : null;
 }
 
@@ -229,6 +288,13 @@ export function createMockApi(): NaiwaApi {
   const devicePolls = new Map<string, number>();
   /** 账号 id → 已应用的皮肤（上传成功后写入，恢复默认时删掉）。 */
   const appliedSkins = new Map<string, { skinUrl: string; model: "classic" | "slim" }>();
+  /** 本地衣柜内存态：添加/删除后即时反映到下一次 wardrobe()。 */
+  let wardrobe: WardrobeSkin[] = MOCK_WARDROBE.map((item, index) => ({
+    ...item,
+    updatedAt: Date.UTC(2024, 10, 1 + index, 9, 12),
+  }));
+  /** 账号 id → 角色列表（第一次读取时按账号播种，切换后改 active）。 */
+  const profileState = new Map<string, SkinProfile[]>();
   let instances: InstanceMeta[] = MOCK_INSTANCES.map((item) => ({ ...item }));
   const installedJava: InstalledJava[] = MOCK_INSTALLED_JAVA.map((item) => ({ ...item }));
   // 实例 mods 目录的内存态：首次访问时用种子数据填充。
@@ -368,6 +434,25 @@ export function createMockApi(): NaiwaApi {
     return out;
   }
 
+  /**
+   * 衣柜项 → 绝对路径：renderer 给的是绝对路径就直接用；只给文件名（mock 的 data: 缩略图没有
+   * 本地路径，renderer 只能退回文件名）时按衣柜目录还原。
+   */
+  function wardrobeFilePath(target: string): string {
+    const absolute = /^[A-Za-z]:[\\/]/.test(target) || target.startsWith("\\\\");
+    return absolute ? target : MOCK_SKINS_DIR + "\\" + target.replace(/^[\\/]+/, "");
+  }
+
+  /** 角色种子：第三方账号默认两个（第二个使用中）；自检钩子可收成只剩使用中的那一个。 */
+  function profilesOf(account: Account): SkinProfile[] {
+    const seeded = profileState.get(account.id) ?? [
+      { id: mockUuid("profile-main-" + account.uuid), name: account.name, active: false },
+      { id: mockUuid("profile-alt-" + account.uuid), name: account.name + "Alt", active: true },
+    ];
+    profileState.set(account.id, seeded);
+    if (!mockSingleProfile()) return seeded;
+    return [seeded.find((item) => item.active) ?? seeded[0]];
+  }
   /** 自检钩子：globalThis.__mockFail.accounts = true 时账号列表读取失败。 */
   function mockFail(scope: string): boolean {
     const flags = (globalThis as { __mockFail?: Record<string, boolean> }).__mockFail;
@@ -741,7 +826,8 @@ export function createMockApi(): NaiwaApi {
         return cancelled ? null : picked;
       },
       uploadSkin: async (id: string, filePath: string, model: "classic" | "slim") => {
-        trace("accounts.uploadSkin", { id, filePath, model });
+        // 记录的是真正会被上传的绝对路径：衣柜项在 mock 里只有文件名，这里按衣柜目录还原。
+        trace("accounts.uploadSkin", { id, filePath: wardrobeFilePath(filePath), model });
         const account = findAccount(id);
         if (account.type === "offline") throw new Error("离线账号不支持上传皮肤。");
         if (mockSkinNoUpload()) throw new Error(SKIN_NO_UPLOAD_ERROR);
@@ -760,6 +846,54 @@ export function createMockApi(): NaiwaApi {
         await sleep(520);
         if (mockSkinNoUpload()) throw new Error(SKIN_NO_UPLOAD_ERROR);
         appliedSkins.delete(id);
+      },
+      wardrobe: async (): Promise<WardrobeSkin[]> => {
+        trace("accounts.wardrobe");
+        await sleep(260);
+        if (mockWardrobeEmpty()) return [];
+        return wardrobe.map((item) => ({ ...item }));
+      },
+      addToWardrobe: async (filePath: string) => {
+        trace("accounts.addToWardrobe", { filePath });
+        await sleep(320);
+        const failure = mockWardrobeAddFailure();
+        if (failure) throw new Error(failure);
+        if (!/\.png$/i.test(filePath)) throw new Error("只能添加 PNG 图片：请选择 64×64 的 PNG 皮肤文件。");
+        const base = filePath.split(/[\\/]/).pop() || "skin.png";
+        let name = base;
+        let round = 2;
+        while (wardrobe.some((item) => item.name === name)) {
+          name = base.replace(/(\.[^.]+)$/, "-" + round + "$1");
+          round += 1;
+        }
+        // mock 不落盘：新条目沿用种子缩略图，尺寸按 64×64 RGBA 记一个可信的值。
+        const thumb = MOCK_WARDROBE[wardrobe.length % MOCK_WARDROBE.length];
+        wardrobe = [...wardrobe, { name, url: thumb.url, sizeBytes: 64 * 64 * 4, updatedAt: Date.now() }];
+        return name;
+      },
+      removeFromWardrobe: async (name: string) => {
+        trace("accounts.removeFromWardrobe", { name });
+        await sleep(240);
+        if (!wardrobe.some((item) => item.name === name)) throw new Error("衣柜里没有这个文件：" + name);
+        wardrobe = wardrobe.filter((item) => item.name !== name);
+      },
+      skinProfiles: async (id: string): Promise<SkinProfile[]> => {
+        trace("accounts.skinProfiles", { id });
+        await sleep(280);
+        const account = findAccount(id);
+        if (account.type !== "yggdrasil") return [];
+        return profilesOf(account).map((item) => ({ ...item }));
+      },
+      selectProfile: async (id: string, profileId: string) => {
+        trace("accounts.selectProfile", { id, profileId });
+        await sleep(420);
+        const failure = mockProfileFailure();
+        if (failure) throw new Error(failure);
+        const account = findAccount(id);
+        if (account.type !== "yggdrasil") throw new Error("只有第三方账号可以切换角色。");
+        const list = profilesOf(account);
+        if (!list.some((item) => item.id === profileId)) throw new Error("角色不存在：请刷新角色列表后重试。");
+        profileState.set(id, list.map((item) => ({ ...item, active: item.id === profileId })));
       },
       beginMicrosoft: async () => {
         trace("accounts.beginMicrosoft");
@@ -842,7 +976,18 @@ export function createMockApi(): NaiwaApi {
     instances: {
       list: async () => {
         await sleep(220);
-        return instances.map((item) => ({ ...item }));
+        return instances.map((item) => withMockDiskUsage({ ...item }));
+      },
+      usage: async (id, force) => {
+        trace("instances.usage", { id, force });
+        await sleep(420);
+        const target = findInstance(id);
+        // 自检钩子：__naiwaMockUsageBytes 指定返回值，用来验证「重新统计」后的显示更新。
+        const forced = (globalThis as { __naiwaMockUsageBytes?: number }).__naiwaMockUsageBytes;
+        const bytes = typeof forced === "number" ? forced : (target.diskUsageBytes ?? 1024 ** 3);
+        // 与主进程一致：统计结果写回实例，下一次 list 就能读到新值。
+        target.diskUsageBytes = bytes;
+        return { bytes };
       },
       create: async (req: CreateInstanceRequest) => {
         await simulateTask("game", `安装 Minecraft ${req.mcVersion}`, "下载游戏本体", 168_000_000, 2200, 46);

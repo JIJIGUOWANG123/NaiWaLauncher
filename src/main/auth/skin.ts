@@ -1,10 +1,13 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { basename, extname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { dialog } from "electron";
 
-import type { Account, SkinInfo } from "../../shared/types";
-import { logger } from "../core/logger";
-import { getAccount } from "./accounts";
+import type { Account, SkinInfo, SkinProfile, WardrobeSkin } from "../../shared/types";
+import { logger, registerSecret } from "../core/logger";
+import { getPaths } from "../core/paths";
+import { getAccount, updateYggdrasilProfile } from "./accounts";
 import { resolveMinecraftSession } from "./microsoft";
 
 const log = logger("skin");
@@ -23,6 +26,7 @@ const APP_UNAUTHORIZED = "该微软应用尚未获得 Minecraft 服务授权，�
 const BAD_IMAGE = "皮肤图片必须是 64×64（或 64×32）的 PNG";
 const NO_TEXTURE_API = "该皮肤站没有提供材质上传接口（authlib-injector 材质上传），请到皮肤站网页上传";
 const NO_RESET_API = "该皮肤站没有提供材质上传接口（authlib-injector 材质上传），请到皮肤站网页恢复默认皮肤";
+const NO_SWITCHABLE_PROFILE = "该账号没有可切换的角色";
 
 export type SkinModel = "classic" | "slim";
 
@@ -365,4 +369,173 @@ export async function pickSkinFile(): Promise<string | null> {
   });
   if (picked.canceled || picked.filePaths.length === 0) return null;
   return picked.filePaths[0];
+}
+
+// ---------------------------------------------------------------- 衣柜（本地皮肤库）
+
+/** 衣柜目录：<NaiWa>/skins。站点级衣柜接口不可达，所以衣柜完全落在本地。 */
+function skinsDir(): string {
+  return join(getPaths().dataRoot, "skins");
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** IPC skins:wardrobe：列出衣柜里的 .png，按修改时间倒序（新的在前）。 */
+export async function listWardrobe(): Promise<WardrobeSkin[]> {
+  const dir = skinsDir();
+  await mkdir(dir, { recursive: true });
+  const names = await readdir(dir).catch(() => [] as string[]);
+  const items: WardrobeSkin[] = [];
+  for (const name of names) {
+    if (!name.toLowerCase().endsWith(".png")) continue;
+    const info = await stat(join(dir, name)).catch(() => null);
+    // 目录/软链接都不算衣柜皮肤
+    if (!info || !info.isFile()) continue;
+    items.push({
+      name,
+      url: pathToFileURL(join(dir, name)).toString(),
+      sizeBytes: info.size,
+      updatedAt: info.mtimeMs,
+    });
+  }
+  items.sort((a, b) => b.updatedAt - a.updatedAt);
+  return items;
+}
+
+/** 文件名里不能出现的字符（Windows 保留字符 + 控制字符）统一换成下划线。 */
+const WARDROBE_NAME_BAD = /[\\/:*?"<>|\u0000-\u001f]/g;
+
+function wardrobeStem(filePath: string): string {
+  const raw = basename(filePath, extname(filePath)).trim();
+  const cleaned = raw.replace(WARDROBE_NAME_BAD, "_").replace(/^\.+/, "").slice(0, 60);
+  return cleaned.length > 0 ? cleaned : "skin";
+}
+
+/** IPC skins:addToWardrobe：校验后复制成 <原名>-<时间戳>.png，重名再加序号，绝不覆盖。 */
+export async function addToWardrobe(filePath: string): Promise<string> {
+  // 复用现有校验：必须是 64×64 或 64×32 的 PNG
+  const bytes = await readSkinPng(filePath);
+  const dir = skinsDir();
+  await mkdir(dir, { recursive: true });
+  const stem = wardrobeStem(filePath) + "-" + Date.now();
+  let target = join(dir, stem + ".png");
+  for (let index = 2; index <= 99 && (await fileExists(target)); index += 1) {
+    target = join(dir, stem + "-" + index + ".png");
+  }
+  await writeFile(target, bytes);
+  const name = basename(target);
+  log.info("已加入衣柜：" + name + " · " + bytes.length + " 字节");
+  return name;
+}
+
+/** 衣柜内的绝对路径；任何路径分隔符 / ".." 都当成穿越攻击直接拒绝。 */
+function wardrobePath(name: string): string {
+  const raw = (name ?? "").trim();
+  if (raw.length === 0) throw new Error("请指定要删除的衣柜文件");
+  if (raw.includes("..") || raw.includes("/") || raw.includes("\\") || raw !== basename(raw)) {
+    throw new Error("不能删除衣柜以外的文件：" + raw);
+  }
+  if (!raw.toLowerCase().endsWith(".png")) throw new Error("衣柜里只有 PNG 皮肤：" + raw);
+  const dir = skinsDir();
+  const target = join(dir, raw);
+  // 双保险：解析后的父目录必须就是衣柜目录
+  if (resolve(target, "..") !== resolve(dir)) throw new Error("不能删除衣柜以外的文件：" + raw);
+  return target;
+}
+
+/** IPC skins:removeFromWardrobe：只删衣柜内的 .png；文件已不在时静默返回。 */
+export async function removeFromWardrobe(name: string): Promise<void> {
+  const target = wardrobePath(name);
+  try {
+    await unlink(target);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return;
+    throw new Error("删除衣柜文件失败：" + basename(target) + " · " + describe(err));
+  }
+  log.info("已从衣柜删除：" + basename(target));
+}
+
+// ---------------------------------------------------------------- 角色切换
+
+/** UUID 比较：大小写、横线都不该影响判断。 */
+function uuidKey(raw: unknown): string {
+  return str(raw).replace(/[^0-9a-fA-F]/g, "").toLowerCase();
+}
+
+/** IPC skins:profiles：第三方账号回存下的角色列表，微软只有当前档案，离线没有。 */
+export async function listSkinProfiles(accountId: string): Promise<SkinProfile[]> {
+  const account = await getAccount(accountId);
+  if (!account) throw new Error("账号不存在：" + accountId);
+  if (account.type === "offline") return [];
+  if (account.type === "microsoft") return [{ id: account.uuid, name: account.name, active: true }];
+  const current = uuidKey(account.uuid);
+  return (account.yggdrasil?.profiles ?? []).map((item) => ({
+    id: item.id,
+    name: item.name,
+    active: uuidKey(item.id) === current,
+  }));
+}
+
+/** refresh 的失败文案：不带前缀，由调用方统一拼「切换角色失败：」。 */
+function refreshFailure(reply: Reply): string {
+  const body = reply.json ?? {};
+  const message = str(body.errorMessage) || str(body.message) || str(body.error) || reply.text.slice(0, 200).trim();
+  return "HTTP " + reply.status + (message ? " · " + message : "");
+}
+
+/**
+ * IPC skins:selectProfile：第三方账号用 authserver/refresh 把令牌换成目标角色，
+ * 再回写账号的 uuid/name。微软与离线账号没有多角色，直接拒绝。
+ */
+export async function selectProfile(accountId: string, profileId: string): Promise<void> {
+  const account = await getAccount(accountId);
+  if (!account) throw new Error("账号不存在：" + accountId);
+  const ygg = account.yggdrasil;
+  if (account.type !== "yggdrasil" || !ygg?.apiUrl) throw new Error(NO_SWITCHABLE_PROFILE);
+
+  const wanted = uuidKey(profileId);
+  const profiles = ygg.profiles ?? [];
+  const target = profiles.find((item) => uuidKey(item.id) === wanted);
+  if (!target) throw new Error("切换角色失败：该账号下没有角色 " + (profileId ?? ""));
+
+  try {
+    const reply = await request(ygg.apiUrl.replace(/\/+$/, "") + "/authserver/refresh", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        accessToken: ygg.accessToken,
+        clientToken: ygg.clientToken,
+        selectedProfile: { id: target.id, name: target.name },
+        requestUser: true,
+      }),
+    });
+    if (reply.status !== 200) throw new Error(refreshFailure(reply));
+
+    const body: Json = reply.json ?? {};
+    const accessToken = str(body.accessToken);
+    // 不换令牌的话注入后仍是旧角色，等同没切
+    if (accessToken.length === 0) throw new Error("续期响应缺少 accessToken");
+    registerSecret(accessToken);
+    const fresh: Json = body.selectedProfile && typeof body.selectedProfile === "object" ? (body.selectedProfile as Json) : {};
+    const name = str(fresh.name) || target.name;
+
+    await updateYggdrasilProfile(account.id, {
+      uuid: target.id,
+      name,
+      accessToken,
+      clientToken: str(body.clientToken) || ygg.clientToken,
+      profiles: profiles.map((item) => ({ id: item.id, name: item.name })),
+    });
+    log.info("已切换角色：" + name + " · " + ygg.apiUrl);
+  } catch (err) {
+    throw new Error("切换角色失败：" + describe(err));
+  }
 }

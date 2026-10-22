@@ -546,3 +546,227 @@
   padding-top: 10px;
   border-top: 1px dashed var(--line);
 }
+
+/* 皮肤选择器：角色（第三方多角色）与衣柜两块 */
+.skin-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--shadow-color) 12%, transparent);
+}
+
+.skin-block-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.skin-block-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.skin-block-hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.skin-block-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.skin-profiles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skin-profile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.skin-profile:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.skin-profile.active {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
+  cursor: default;
+}
+
+.skin-profile:disabled {
+  opacity: 0.85;
+}
+
+/* 头像色块：色相由角色 UUID 决定 */
+.skin-avatar {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--shadow-color) 45%, transparent);
+}
+
+.skin-profile-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skin-profile-badge {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.skin-profile-busy {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.skin-single-profile {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+/* 衣柜网格：64×64 缩略图，hover 出文件名与大小，右上角小叉删除 */
+.skin-ward-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 64px);
+  gap: 10px;
+}
+
+.skin-ward {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+
+.skin-ward-pick {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background-color: var(--surface-2);
+  background-image:
+    linear-gradient(45deg, var(--surface-recess-strong) 25%, transparent 25%, transparent 75%, var(--surface-recess-strong) 75%),
+    linear-gradient(45deg, var(--surface-recess-strong) 25%, transparent 25%, transparent 75%, var(--surface-recess-strong) 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 6px 6px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.skin-ward-pick:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.skin-ward.selected .skin-ward-pick {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.skin-ward-img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+/* hover（选中时常显）的名字与大小浮层 */
+.skin-ward-info {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 5px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: color-mix(in srgb, var(--shadow-color) 78%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.skin-ward:hover .skin-ward-info,
+.skin-ward.selected .skin-ward-info {
+  opacity: 1;
+}
+
+.skin-ward-name {
+  font-size: 9.5px;
+  line-height: 1.2;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skin-ward-size {
+  font-size: 9px;
+  line-height: 1.2;
+  color: var(--text-faint);
+}
+
+.skin-ward-del {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-1);
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.skin-ward:hover .skin-ward-del,
+.skin-ward-del:focus-visible {
+  opacity: 1;
+}
+
+.skin-ward-del:hover {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 55%, transparent);
+}
+
+.skin-ward-empty {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-faint);
+}

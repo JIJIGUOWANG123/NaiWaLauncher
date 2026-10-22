@@ -22,7 +22,7 @@ import { getVersionJson, resolveBaseVersionId } from "./manifest";
 
 const log = logger("launch");
 
-const LAUNCHER_VERSION = "0.1.4";
+const LAUNCHER_VERSION = "0.1.5";
 // 离线模式：服务端只校验令牌前缀，给个占位值即可
 const OFFLINE_TOKEN = "0";
 const USER_TYPE = "legacy";

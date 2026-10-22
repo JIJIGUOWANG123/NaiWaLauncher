@@ -230,6 +230,24 @@ function normalizeProfileUuid(raw: string): string {
 }
 
 /**
+ * authenticate 返回的角色列表：有 availableProfiles 就全存（用于角色切换），
+ * 服务端只给 selectedProfile 时也存一条，保证列表至少含当前角色。
+ */
+function collectProfiles(body: Json, selected: { id: string; name: string }): { id: string; name: string }[] {
+  const raw = Array.isArray(body.availableProfiles) ? (body.availableProfiles as Json[]) : [];
+  const picked: { id: string; name: string }[] = [{ id: selected.id, name: selected.name }];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const hex = str(item.id).replace(/[^0-9a-fA-F]/g, "").toLowerCase();
+    const name = str(item.name);
+    if (hex.length !== 32 || !name) continue;
+    if (picked.some((p) => p.id === hex)) continue;
+    picked.push({ id: hex, name });
+  }
+  return picked;
+}
+
+/**
  * 第三方（Yggdrasil / authlib-injector）登录：authenticate → 落盘账号。
  * 成功后再读一次站点根拿 serverName 作为 siteName（失败忽略，不影响登录结果）。
  */
@@ -259,11 +277,13 @@ export async function loginYggdrasil(apiUrl: string, username: string, password:
   }
   registerSecret(accessToken);
 
+  const selectedId = normalizeProfileUuid(str(profile.id));
   const meta = endpoint.meta ?? (await readMeta(endpoint.apiUrl).catch(() => null));
   const account = await upsertYggdrasilAccount({
     apiUrl: endpoint.apiUrl,
     name: profileName,
-    uuid: normalizeProfileUuid(str(profile.id)),
+    uuid: selectedId,
+    profiles: collectProfiles(body, { id: selectedId, name: profileName }),
     accessToken,
     clientToken: str(body.clientToken) || clientToken,
     // Yggdrasil 的令牌不返回过期时间，有效性只能靠 /authserver/validate 判断 → 0 表示「未知/不失效」

@@ -223,9 +223,28 @@
 .instance-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-width: 0;
   font-size: 12px;
   color: var(--text-faint);
+}
+
+/* 窄卡片放不下「运存 / 占用」时，整段换行而不是把卡片撑破。 */
+.instance-meta-item {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 分隔点跟着后一段走：换行时不会在行尾留下孤零零的「·」。 */
+.instance-meta-item + .instance-meta-item::before {
+  content: "·";
+  margin-right: 6px;
+  opacity: 0.5;
+}
+
+.instance-disk {
+  font-variant-numeric: tabular-nums;
 }
 
 .dot {

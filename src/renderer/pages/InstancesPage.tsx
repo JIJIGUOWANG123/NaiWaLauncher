@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import logo from "../assets/logo.png";
 import type { InstanceMeta } from "../../shared/types";
 import { api } from "../lib/api";
-import { formatRelative, instanceMemory, loaderLabel } from "../lib/format";
+import { formatRelative, instanceDiskUsage, instanceMemory, loaderLabel } from "../lib/format";
 import { useApp } from "../lib/store";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
@@ -188,10 +188,21 @@ export function InstancesPage() {
                 <img className="instance-avatar" src={logo} alt="" width={44} height={44} />
                 <div className="instance-titles">
                   <h2 className="instance-name" title={instance.name}>{instance.name}</h2>
-                  <p className="instance-meta">
-                    <span>Minecraft {instance.mcVersion}</span>
-                    <span className="dot" aria-hidden="true">·</span>
-                    <span>{instanceMemory(instance)}</span>
+                  {/* 运存 / 本地占用分两段：窄卡片放不下时整段换行，不挤压标题。 */}
+                  <p className="instance-meta" data-instance-meta>
+                    <span className="instance-meta-item">Minecraft {instance.mcVersion}</span>
+                    <span className="instance-meta-item">运存：{instanceMemory(instance)}</span>
+                    <span
+                      className="instance-meta-item instance-disk"
+                      data-disk-state={
+                        instance.diskUsageBytes === undefined || instance.diskUsageBytes === null
+                          ? "pending"
+                          : instance.diskUsageBytes === 0 ? "zero" : "known"
+                      }
+                      title="实例目录占用的本地空间"
+                    >
+                      占用：{instanceDiskUsage(instance)}
+                    </span>
                   </p>
                 </div>
                 <LoaderBadge loader={instance.loader} />

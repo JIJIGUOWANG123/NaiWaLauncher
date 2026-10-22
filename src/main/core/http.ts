@@ -38,7 +38,9 @@ const DEFAULT_RETRIES = 3;
 // 冷连接（cdn.modrinth.com 的 TLS 握手）实测可达 7.6s，6s 会误判超时
 const HEADER_TIMEOUT_MS = 15_000;
 /** 单个分片两次收到数据之间的最大容忍时间。 */
-const STALL_TIMEOUT_MS = 60_000;
+// 60s 太长：一条卡死的连接会占住一个 worker 槽位整整一分钟（分片还会再重试一次），
+// 并行下载时这条代价被放大；30s 足够覆盖正常的慢响应，又能把槽位尽快还给池子。
+const STALL_TIMEOUT_MS = 30_000;
 const CHUNK_ATTEMPTS = 2;
 const STREAM_ATTEMPTS = 2;
 const RETRY_BACKOFF_MS = 250;
@@ -894,12 +896,10 @@ export async function downloadMany(
   const signal = opts.signal;
   throwIfCancelled(signal);
   const settings = getSettings();
-  const concurrent = clampInt(opts.concurrent ?? settings.concurrentDownloads, 1, 16, settings.concurrentDownloads);
+  const concurrent = clampInt(opts.concurrent ?? settings.concurrentDownloads, 1, 32, settings.concurrentDownloads);
   const connections = clampInt(opts.connections ?? settings.connectionsPerFile, 1, 16, settings.connectionsPerFile);
   const task = opts.task;
-  const failed: { url: string; dest: string; error: string }[] = [];
-
-  let cursor = 0;
+  const totalFiles = items.length;
   const knownTotal = items.every((item) => typeof item.size === "number" && (item.size ?? 0) > 0);
   const totalBytes = items.reduce((sum, item) => sum + (item.size ?? 0), 0);
   const active = new Map<number, number>();
@@ -907,6 +907,8 @@ export async function downloadMany(
   let completedBytes = 0;
   let filesDone = 0;
   let lastReport = 0;
+  /** 槽位编号：两轮池子共用同一份 active 计数，用全局编号避免与上一轮的键撞车。 */
+  let slotId = 0;
 
   const report = (force = false): void => {
     if (!task) return;
@@ -928,55 +930,107 @@ export async function downloadMany(
     });
   };
 
-  const worker = async (): Promise<void> => {
-    if (items.length === 0) return;
-    for (;;) {
-      // 取消后不再领新文件：已领到的会各自中断，队列里的不再下载
-      if (signal?.aborted) return;
-      const index = cursor;
-      cursor += 1;
-      if (index >= items.length) return;
-      const item = items[index];
-      // 代理句柄只把字节汇总到父任务，不单独推送事件
-      const proxy: TaskHandle = {
-        id: `${task?.id ?? "batch"}-${index}`,
-        kind: task?.kind ?? "generic",
-        label: item.dest,
-        update: (p) => {
-          if (typeof p.downloadedBytes === "number") {
-            active.set(index, Math.max(active.get(index) ?? 0, p.downloadedBytes));
-          }
-          report();
-        },
-        done: () => undefined,
-        fail: () => undefined,
-      };
-      try {
-        const result = await downloadFile(item.url, item.dest, {
-          expectedSha1: item.sha1,
-          connections,
-          task: proxy,
-          signal,
-        });
-        active.delete(index);
-        completedBytes += result.bytes;
-      } catch (err) {
-        active.delete(index);
-        // 取消不是文件失败：不往 failed 里记，交给下面统一抛
-        if (signal?.aborted || isCancelledError(err)) return;
-        const message = err instanceof Error ? err.message : String(err);
-        failed.push({ url: item.url, dest: item.dest, error: message });
-        log.warn(`文件下载失败：${item.dest} · ${message}`);
+  // 一个 worker 独占一个文件直到下完：走 Small file 单连接路径的文件也各自占一个 worker 槽位，
+  // 与走多分片的文件并行推进，不会因为只开一条连接就被串行化。
+  // 抽成函数是为了让"失败补下一轮"复用同一个池子，而不是把并发逻辑再写一遍。
+  const runBatch = async (
+    batch: { url: string; dest: string; sha1?: string; size?: number }[],
+    batchConnections: number,
+  ): Promise<{ url: string; dest: string; error: string }[]> => {
+    const failures: { url: string; dest: string; error: string }[] = [];
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        // 取消后不再领新文件：已领到的会各自中断，队列里的不再下载
+        if (signal?.aborted) return;
+        const position = cursor;
+        cursor += 1;
+        if (position >= batch.length) return;
+        const item = batch[position];
+        const slot = slotId;
+        slotId += 1;
+        // 代理句柄只把字节汇总到父任务，不单独推送事件
+        const proxy: TaskHandle = {
+          id: `${task?.id ?? "batch"}-${slot}`,
+          kind: task?.kind ?? "generic",
+          label: item.dest,
+          update: (p) => {
+            if (typeof p.downloadedBytes === "number") {
+              active.set(slot, Math.max(active.get(slot) ?? 0, p.downloadedBytes));
+            }
+            report();
+          },
+          done: () => undefined,
+          fail: () => undefined,
+        };
+        try {
+          const result = await downloadFile(item.url, item.dest, {
+            expectedSha1: item.sha1,
+            connections: batchConnections,
+            task: proxy,
+            signal,
+          });
+          active.delete(slot);
+          completedBytes += result.bytes;
+        } catch (err) {
+          active.delete(slot);
+          // 取消不是文件失败：不往失败清单里记，交给调用方统一抛
+          if (signal?.aborted || isCancelledError(err)) return;
+          const message = err instanceof Error ? err.message : String(err);
+          failures.push({ url: item.url, dest: item.dest, error: message });
+          log.warn(`文件下载失败：${item.dest} · ${message}`);
+        }
+        filesDone += 1;
+        report(true);
       }
-      filesDone += 1;
-      report(true);
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrent, batch.length) }, () => worker()));
+    return failures;
   };
 
+  // 首轮：并发 concurrent 个文件同时下载
   report(true);
-  const slots = Math.min(concurrent, items.length);
-  await Promise.all(Array.from({ length: slots }, () => worker()));
+  let failed = await runBatch(items, connections);
   report(true);
   throwIfCancelled(signal);
+
+  // 卡流、瞬时 5xx 在 CDN 上很常见：整批结束后用同一个池子把失败的那些补下一轮（只补一次）。
+  // 每文件连接数减半（最多 4）：首轮失败多半是某条分片连接卡死，再开 4 条只会更快撞上同一处限流。
+  // 取消时不补：用户已经要求停下，重试只会拖时间。
+  if (failed.length > 0 && !signal?.aborted) {
+    const retryConnections = Math.max(1, Math.min(4, Math.floor(connections / 2)));
+    const byDest = new Map(items.map((item) => [item.dest, item] as const));
+    const retryItems = failed.map((item) => {
+      const original = byDest.get(item.dest);
+      return {
+        url: item.url,
+        dest: item.dest,
+        ...(original?.sha1 ? { sha1: original.sha1 } : {}),
+        ...(typeof original?.size === "number" ? { size: original.size } : {}),
+      };
+    });
+    log.warn(
+      `首轮失败 ${failed.length} 个，正在重试（并发 ${Math.min(concurrent, retryItems.length)}，每文件连接 ${retryConnections}）`,
+    );
+    // 重试的文件退回"未完成"：进度不会越过总数
+    filesDone = Math.max(0, filesDone - failed.length);
+    report(true);
+    failed = await runBatch(retryItems, retryConnections);
+    if (failed.length > 0) {
+      log.warn(`重试后仍失败 ${failed.length} 个：${failed.map((item) => item.dest).join("、")}`);
+    } else {
+      log.info(`重试补齐 ${retryItems.length} 个文件`);
+    }
+    report(true);
+  }
+
+  throwIfCancelled(signal);
+  // 单文件失败不影响其它文件，但整批结束后必须留下可追溯的汇总，否则只在日志里散落几条 warn
+  if (failed.length > 0) {
+    const first = failed[0];
+    log.warn(
+      "批量下载完成：成功 " + (totalFiles - failed.length) + "/" + totalFiles + " 个，失败 " + failed.length + " 个（首个：" + first.dest + " · " + first.error + "）",
+    );
+  }
   return { failed };
 }

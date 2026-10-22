@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InstalledModInfo, InstanceMeta, LoaderKind, WindowMode } from "../../shared/types";
 import { api } from "../lib/api";
-import { LITELOADER_VERSION_HINT, formatBytes, loaderLabel, liteloaderUnsupported } from "../lib/format";
+import { LITELOADER_VERSION_HINT, formatBytes, instanceDiskUsage, loaderLabel, liteloaderUnsupported } from "../lib/format";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "./Toast";
@@ -79,6 +79,10 @@ export function InstanceDetailDrawer({
   const [javaExists, setJavaExists] = useState<boolean | null>(null);
   const [javaTick, setJavaTick] = useState(0);
 
+  // 本地占用：重新统计后先用返回值覆盖显示，实例列表刷新（onChanged）再回填卡片。
+  const [restatting, setRestatting] = useState(false);
+  const [diskOverride, setDiskOverride] = useState<number | null>(null);
+
   const [windowMode, setWindowMode] = useState<WindowMode>("inherit");
   const [windowSize, setWindowSize] = useState("inherit");
   const [sizeCustom, setSizeCustom] = useState(false);
@@ -105,6 +109,11 @@ export function InstanceDetailDrawer({
     setModsError(null);
     void loadMods();
   }, [open, instanceId, loadMods]);
+
+  // 换实例时丢掉上一次的统计结果，回到该实例自己的 diskUsageBytes。
+  useEffect(() => {
+    setDiskOverride(null);
+  }, [instanceId]);
 
   // 实例被刷新（例如切换加载器成功）后，草稿选择跟着回到当前状态。
   useEffect(() => {
@@ -240,6 +249,22 @@ export function InstanceDetailDrawer({
     }
   };
 
+  // 重新统计本地占用：force=true 跳过主进程缓存，结果写回实例并刷新列表。
+  const restatDiskUsage = async () => {
+    if (!instanceId) return;
+    setRestatting(true);
+    try {
+      const { bytes } = await api.instances.usage(instanceId, true);
+      setDiskOverride(bytes);
+      push(`已重新统计：${formatBytes(bytes)}`, "success");
+      onChanged();
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      setRestatting(false);
+    }
+  };
+
   const applyLoader = async () => {
     if (!instance) return;
     setConfirmSwitch(false);
@@ -333,6 +358,10 @@ export function InstanceDetailDrawer({
     });
   };
 
+  const diskText = instance
+    ? (diskOverride === null ? instanceDiskUsage(instance) : formatBytes(diskOverride))
+    : "计算中…";
+
   const switchTarget = targetLoader === "vanilla"
     ? "原版"
     : `${loaderLabel(targetLoader)} ${targetVersion || "（最新稳定版）"}`;
@@ -356,6 +385,19 @@ export function InstanceDetailDrawer({
             <div className="detail-hero-meta">
               <span className="field-label">Minecraft 版本</span>
               <span className="detail-mc">{instance.mcVersion}</span>
+              <span className="detail-disk" data-detail-disk>
+                <span data-detail-disk-value>本地占用：{diskText}</span>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  data-action="restat-disk"
+                  onClick={() => void restatDiskUsage()}
+                  disabled={restatting || switching}
+                >
+                  <IconRefresh size={15} />
+                  {restatting ? "统计中…" : "重新统计"}
+                </button>
+              </span>
             </div>
           </div>
         ) : null}

@@ -148,3 +148,10 @@ export function formatAgo(iso?: string): string {
 export function instanceMemory(instance: InstanceMeta): string {
   return instance.memoryMb >= 1024 ? `${instance.memoryMb / 1024} GB` : `${instance.memoryMb} MB`;
 }
+
+/** 实例目录占用量：尚未统计（缺省）时说「计算中…」，统计到 0 也照实显示 "0 B"。 */
+export function instanceDiskUsage(instance: InstanceMeta): string {
+  const bytes = instance.diskUsageBytes;
+  if (bytes === undefined || bytes === null || !Number.isFinite(bytes)) return "计算中…";
+  return formatBytes(bytes);
+}

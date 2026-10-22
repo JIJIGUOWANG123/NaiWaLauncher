@@ -55,7 +55,7 @@ export interface Settings {
   downloadSource: DownloadSourceId;
   /** Concurrent chunk connections per file. 1..16 */
   connectionsPerFile: number;
-  /** Concurrent file downloads. 1..16 */
+  /** Concurrent file downloads. 1..32 */
   concurrentDownloads: number;
   curseforgeApiKey: string;
   modProvider: ModProviderId;
@@ -166,6 +166,8 @@ export interface InstanceMeta {
   windowMode?: WindowMode;
   /** 窗口尺寸："inherit" 跟随全局、"default" 原版默认、或 "宽x高"（如 "1280x720"）；缺省等同 inherit。 */
   windowSize?: string;
+  /** 实例目录占用的本地空间（字节，懒计算并缓存；尚未统计时缺省）。 */
+  diskUsageBytes?: number;
 }
 
 /** 实例里的一个单人存档。 */
@@ -466,6 +468,8 @@ export interface Account {
     expiresAt: number;
     /** 该服务商的皮肤站主页（未知时不填）。 */
     siteName?: string;
+    /** 该账号在服务端的全部角色（登录时保存，用于角色切换）。 */
+    profiles?: { id: string; name: string }[];
   };
   /** 微软账号令牌（离线账号没有）。 */
   microsoft?: {
@@ -475,6 +479,24 @@ export interface Account {
     expiresAt: number;
     xuid?: string;
   };
+}
+
+/** 本地衣柜里的一张皮肤。 */
+export interface WardrobeSkin {
+  /** 文件名（NaiWa/skins 下）。 */
+  name: string;
+  /** file:// 直链，可直接给 <img>。 */
+  url: string;
+  sizeBytes: number;
+  updatedAt: number;
+}
+
+/** 第三方账号可用的角色。 */
+export interface SkinProfile {
+  id: string;
+  name: string;
+  /** 是否为当前使用中的角色。 */
+  active: boolean;
 }
 
 /** 账号皮肤信息。 */

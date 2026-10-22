@@ -2,9 +2,11 @@
 
 <img src="logo.png" width="120" align="right" alt="NaiWa Launcher" />
 
-现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，设置内显示「奶娃启动器 / NaiWa Launcher」，开发者 **奶龙**。
+现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，设置内显示「奶娃启动器 / NaiWa Launcher」。
 
-> 源码仓库：https://github.com/JIJIGUOWANG123/NaiWaLauncher　|　问题反馈：[Issues](https://github.com/JIJIGUOWANG123/NaiWaLauncher/issues)
+主开发者 **奶龙** ｜ 协助开发者 **小七** ｜ 工具提供 **DeepSeek**
+
+> 源码仓库：<https://github.com/JIJIGUOWANG123/NaiWaLauncher> | 问题反馈：[Issues](https://github.com/JIJIGUOWANG123/NaiWaLauncher/issues)
 
 - 多版本 / 多实例管理，按实例隔离模组与存档
 - Fabric / Forge / NeoForge 安装与**一键切换**

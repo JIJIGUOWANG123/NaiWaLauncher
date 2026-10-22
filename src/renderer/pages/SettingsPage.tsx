@@ -3,6 +3,7 @@ import type { DownloadSourceId, ModProviderId, Settings, SourceProbe } from "../
 import { api } from "../lib/api";
 import { formatLatency } from "../lib/format";
 import { usePersist } from "../lib/persist";
+import { useSliderDraft } from "../lib/useSliderDraft";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
@@ -28,6 +29,13 @@ export function SettingsPage() {
   const [savingKey, setSavingKey] = useState(false);
   const [thresholdDraft, setThresholdDraft] = useState("");
   const [savingThreshold, setSavingThreshold] = useState(false);
+
+  const [connectionsDraft, setConnectionsDraft] = useSliderDraft(settings?.connectionsPerFile ?? 4, (value) => {
+    void persist({ connectionsPerFile: value }, "单文件分片连接数");
+  });
+  const [fileConcurrencyDraft, setFileConcurrencyDraft] = useSliderDraft(settings?.concurrentDownloads ?? 12, (value) => {
+    void persist({ concurrentDownloads: value }, "多线程下载（文件并发数）");
+  });
 
   useEffect(() => {
     if (settings) setKeyDraft(settings.curseforgeApiKey);
@@ -154,24 +162,27 @@ export function SettingsPage() {
             <span className="panel-count">多线程 Range 下载</span>
           </div>
           <div className="form-grid">
-            <Field label="单文件线程数" hint="每个文件并行连接数，1–16；网络不稳定时调小">
+            <Field label="单文件分片连接数" hint="一个大文件用几条连接并行拉（1–16，默认 4）">
               <Slider
-                value={settings.connectionsPerFile}
+                value={connectionsDraft}
                 min={1}
                 max={16}
-                onChange={(value) => void saveSettings({ connectionsPerFile: value })}
-                format={(value) => `${value} 线程`}
+                onChange={setConnectionsDraft}
+                format={(value) => `${value} 条`}
               />
             </Field>
-            <Field label="并发下载数" hint="同时下载的文件数量，1–16">
+            <Field label="多线程下载（文件并发数）" hint="多个文件同时下载（1–32，默认 12），安装整合包/资源时提速明显">
               <Slider
-                value={settings.concurrentDownloads}
+                value={fileConcurrencyDraft}
                 min={1}
-                max={16}
-                onChange={(value) => void saveSettings({ concurrentDownloads: value })}
+                max={32}
+                onChange={setFileConcurrencyDraft}
                 format={(value) => `${value} 个`}
               />
             </Field>
+            <p className="field-hint dl-parallel-note" data-dl-parallel-note>
+              文件并发数 × 单文件分片数 = 理论最大连接数，过高可能被 CDN 限速
+            </p>
           </div>
         </div>
 

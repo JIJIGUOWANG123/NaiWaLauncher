@@ -8,8 +8,8 @@ export const MOCK_ROOT = "D:\\NaiWa Launcher";
 
 export const DEFAULT_SETTINGS: Settings = {
   downloadSource: "auto",
-  connectionsPerFile: 8,
-  concurrentDownloads: 6,
+  connectionsPerFile: 4,
+  concurrentDownloads: 12,
   curseforgeApiKey: "",
   modProvider: "modrinth",
   autoSwitchThresholdMs: 800,
@@ -70,7 +70,7 @@ export const MOCK_APP_INFO: AppInfo = {
   nameEn: "NaiWa Launcher",
   nameZh: "奶娃启动器",
   developer: "奶龙",
-  version: "0.1.4-mock",
+  version: "0.1.5-mock",
   rootDir: MOCK_ROOT,
   gameRoot: MOCK_GAME_ROOT,
 };
@@ -189,6 +189,8 @@ export const MOCK_INSTANCES: InstanceMeta[] = [
     // 指向启动器已安装的 Liberica 17，演示「手动指定且有效」。
     javaPath: `${MOCK_DATA_ROOT}\\java\\17-17.0.13\\bin\\javaw.exe`,
     memoryMb: 6144,
+    // 已统计：3.2 GB（卡片显示「占用：3.2 GB」）。
+    diskUsageBytes: Math.round(3.2 * 1024 ** 3),
     extraJvmArgs: "-XX:+UseG1GC",
     windowMode: "windowed",
     windowSize: "1600x900",
@@ -202,6 +204,8 @@ export const MOCK_INSTANCES: InstanceMeta[] = [
     loader: "vanilla",
     versionId: "1.21.4",
     memoryMb: 4096,
+    // 已统计且不足 1 GB：卡片显示「占用：780 MB」，验证 MB 档位。
+    diskUsageBytes: 780 * 1024 ** 2,
     extraJvmArgs: "",
     createdAt: Date.now() - 86400000 * 42,
     lastPlayedAt: Date.now() - 3600000 * 5,
@@ -216,6 +220,7 @@ export const MOCK_INSTANCES: InstanceMeta[] = [
     // 目录已被删除的 JDK，演示「已失效的路径」+ 一键清除。
     javaPath: `${MOCK_DATA_ROOT}\\java\\21-21.0.5\\bin\\javaw.exe`,
     memoryMb: 8192,
+    // 故意不给 diskUsageBytes：验证「占用：计算中…」的缺省态。
     extraJvmArgs: "",
     createdAt: Date.now() - 86400000 * 6,
   },

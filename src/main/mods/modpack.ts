@@ -4,7 +4,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import AdmZip from "adm-zip";
 import type { InstanceMeta, LoaderKind } from "../../shared/types";
 import { createTask, type TaskHandle } from "../core/events";
-import { downloadFile } from "../core/http";
+import { downloadFile, downloadMany } from "../core/http";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { getSettings } from "../core/settings";
@@ -207,37 +207,59 @@ function readIndex(mrpackPath: string): unknown {
   }
 }
 
-/** overrides/ 解到游戏目录，非法条目逐条拒绝并 warn（不落盘到根目录之外）。 */
+/**
+ * overrides/ 解到游戏目录，非法条目逐条拒绝并 warn（不落盘到根目录之外）。
+ * 用固定数量的 worker 并行解压落盘：几十个条目逐个 await 只是排队等 I/O，并行后按并发数缩短。
+ */
 async function extractOverrides(
   mrpackPath: string,
   root: string,
   task: TaskHandle,
+  concurrent: number,
 ): Promise<{ written: number; rejected: number }> {
   const zip = new AdmZip(mrpackPath);
-  const entries = zip.getEntries().filter((entry) => entry.entryName.startsWith(OVERRIDES_PREFIX));
+  // 目录自身（overrides/）没有内容可写，先剔掉再算总数，进度分母才是真实条目数
+  const entries = zip
+    .getEntries()
+    .filter((entry) => entry.entryName.startsWith(OVERRIDES_PREFIX))
+    .filter((entry) => entry.entryName.slice(OVERRIDES_PREFIX.length).replace(/[\\/]+$/, "").trim().length > 0);
+  const total = entries.length;
+  // 解压是全内存展开：并行度额外压到 8，避免大整合包一次性把条目全读进内存
+  const slots = Math.max(1, Math.min(concurrent, 8, total));
+  let cursor = 0;
+  let done = 0;
   let written = 0;
   let rejected = 0;
-  for (const [index, entry] of entries.entries()) {
-    const rest = entry.entryName.slice(OVERRIDES_PREFIX.length);
-    // 目录自身（overrides/）没有内容可写
-    if (!rest.replace(/[\\/]+$/, "").trim()) continue;
-    let dest: string;
-    try {
-      dest = resolveInside(root, safeModpackPath(rest));
-    } catch (err) {
-      rejected += 1;
-      log.warn(`overrides 条目被拒绝：${entry.entryName} · ${messageOf(err)}`);
-      continue;
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= total) return;
+      const entry = entries[index];
+      const rest = entry.entryName.slice(OVERRIDES_PREFIX.length);
+      let dest: string | null = null;
+      try {
+        dest = resolveInside(root, safeModpackPath(rest));
+      } catch (err) {
+        rejected += 1;
+        log.warn(`overrides 条目被拒绝：${entry.entryName} · ${messageOf(err)}`);
+      }
+      if (dest !== null) {
+        if (entry.isDirectory) {
+          await mkdir(dest, { recursive: true });
+        } else {
+          await mkdir(dirname(dest), { recursive: true });
+          await writeFile(dest, entry.getData());
+          written += 1;
+        }
+      }
+      done += 1;
+      task.update({ stage: `解压 overrides ${done}/${total}`, filesDone: done, filesTotal: total });
     }
-    task.update({ stage: `解压 overrides ${index + 1}/${entries.length}`, filesDone: index, filesTotal: entries.length });
-    if (entry.isDirectory) {
-      await mkdir(dest, { recursive: true });
-      continue;
-    }
-    await mkdir(dirname(dest), { recursive: true });
-    await writeFile(dest, entry.getData());
-    written += 1;
-  }
+  };
+
+  await Promise.all(Array.from({ length: slots }, () => worker()));
   return { written, rejected };
 }
 
@@ -266,37 +288,43 @@ export async function installModpackEntities(
     log.warn(`整合包条目被拒绝：${rejection.path} · ${rejection.reason}`);
   }
 
+  const settings = getSettings();
   const total = plan.jobs.length;
+  const pathByDest = new Map(plan.jobs.map((job) => [job.dest, job.path] as const));
   task.update({ stage: `下载整合包模组 0/${total}`, filesDone: 0, filesTotal: total, percent: null });
-  let downloaded = 0;
-  const failed: { path: string; reason: string }[] = [];
-  for (const [index0, job] of plan.jobs.entries()) {
-    if (signal?.aborted) throw new Error("整合包安装已取消");
-    task.update({
-      stage: `下载整合包模组 ${index0 + 1}/${total}`,
-      filesDone: index0,
-      filesTotal: total,
-    });
-    try {
-      await downloadFile(job.url, job.dest, {
-        task,
-        ...(job.sha1 ? { expectedSha1: job.sha1 } : {}),
-        connections: getSettings().connectionsPerFile,
-        label: job.path,
-        signal,
-      });
-      downloaded += 1;
-    } catch (err) {
-      if (signal?.aborted) throw err;
-      const reason = messageOf(err);
-      failed.push({ path: job.path, reason });
-      log.warn(`整合包文件下载失败：${job.path} · ${reason}`);
-    }
-    task.update({ filesDone: index0 + 1, filesTotal: total });
-  }
+
+  // 池子只报 filesDone/filesTotal，而任务面板显示的是 stage 文本：把「已完成/总数」写回 stage，
+  // 界面上的进度仍是「下载整合包模组 n/总数」，且不是每个文件一个任务。
+  const poolTask: TaskHandle = {
+    ...task,
+    update: (patch) => {
+      const totalFiles = patch.filesTotal ?? total;
+      const withStage =
+        typeof patch.filesDone === "number" && totalFiles > 0
+          ? { ...patch, stage: `下载整合包模组 ${patch.filesDone}/${totalFiles}` }
+          : patch;
+      task.update(withStage);
+    },
+  };
+
+  // 整包的几十个文件走 downloadMany 的并发池同时下载，并发读设置里的 concurrentDownloads。
+  const { failed: errors } = await downloadMany(
+    plan.jobs.map((job) => ({ url: job.url, dest: job.dest, ...(job.sha1 ? { sha1: job.sha1 } : {}) })),
+    {
+      task: poolTask,
+      label: "下载整合包模组",
+      concurrent: settings.concurrentDownloads,
+      connections: settings.connectionsPerFile,
+      ...(signal ? { signal } : {}),
+    },
+  );
+  // 单个文件失败只 warn 继续（一个坏链接不该让整包白装），失败清单原样交给调用方
+  const failed = errors.map((item) => ({ path: pathByDest.get(item.dest) ?? item.dest, reason: item.error }));
+  for (const item of failed) log.warn(`整合包文件下载失败：${item.path} · ${item.reason}`);
+  const downloaded = Math.max(0, total - failed.length);
 
   task.update({ stage: `解压 overrides（${downloaded}/${total} 个文件已下载）`, percent: null });
-  const overrides = await extractOverrides(mrpackPath, root, task);
+  const overrides = await extractOverrides(mrpackPath, root, task, settings.concurrentDownloads);
   return {
     downloaded,
     failed,

@@ -193,6 +193,12 @@
   margin-top: 14px;
 }
 
+.form-grid .dl-parallel-note {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-strong);
+}
+
 .checkline-stack .field-hint {
   padding-left: 22px;
   margin-bottom: 6px;

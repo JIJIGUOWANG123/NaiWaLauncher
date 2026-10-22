@@ -3,7 +3,8 @@ import type {
   DownloadJob, InstalledModInfo, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
   PortProbeResult, SaveInfo, UpdateCheckResult, InstanceExportResult, InstanceImportResult,
   LoaderKind, LoaderVersionInfo, LogLine, ModCategory, ModFileInfo, ModFilterOptions, ModProviderId,
-  ModSearchResult, ModSourceFilter, Settings, SkinInfo, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
+  ModSearchResult, ModSourceFilter, Settings, SkinInfo, SkinProfile, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
+  WardrobeSkin,
 } from "./types";
 
 export type { ModSourceFilter } from "./types";
@@ -62,6 +63,11 @@ export const IPC = {
   skinsUpload: "skins:upload",
   skinsReset: "skins:reset",
   skinsPickFile: "skins:pickFile",
+  skinsWardrobe: "skins:wardrobe",
+  skinsAddToWardrobe: "skins:addToWardrobe",
+  skinsRemoveFromWardrobe: "skins:removeFromWardrobe",
+  skinsProfiles: "skins:profiles",
+  skinsSelectProfile: "skins:selectProfile",
   accountsBeginMicrosoft: "accounts:beginMicrosoft",
   accountsPollMicrosoft: "accounts:pollMicrosoft",
 
@@ -78,6 +84,7 @@ export const IPC = {
   instancesSaves: "instances:saves",
   instancesExport: "instances:export",
   instancesImport: "instances:import",
+  instancesUsage: "instances:usage",
 
   javaReleases: "java:releases",
   javaInstalled: "java:installed",
@@ -253,6 +260,16 @@ export interface NaiwaApi {
     uploadSkin(id: string, filePath: string, model: "classic" | "slim"): Promise<void>;
     /** 恢复默认皮肤。 */
     resetSkin(id: string): Promise<void>;
+    /** 本地衣柜（NaiWa/skins 下的图片）。 */
+    wardrobe(): Promise<WardrobeSkin[]>;
+    /** 把本地图片复制进衣柜，返回文件名。 */
+    addToWardrobe(filePath: string): Promise<string>;
+    /** 从衣柜删除。 */
+    removeFromWardrobe(name: string): Promise<void>;
+    /** 该账号可用角色（第三方账号有多个）。 */
+    skinProfiles(id: string): Promise<SkinProfile[]>;
+    /** 切换当前使用角色。 */
+    selectProfile(id: string, profileId: string): Promise<void>;
     /** 启动微软设备码登录，返回要展示给用户的 code 与链接。 */
     beginMicrosoft(): Promise<DeviceCodeChallenge>;
     /** 轮询登录结果：pending 表示用户还没授权。 */
@@ -275,6 +292,8 @@ export interface NaiwaApi {
     exportArchive(id: string): Promise<InstanceExportResult>;
     /** 选择并导入别人分享的实例压缩包。 */
     importArchive(): Promise<InstanceImportResult>;
+    /** 统计实例占用的本地空间（force=true 跳过缓存重算）。 */
+    usage(id: string, force?: boolean): Promise<{ bytes: number }>;
     /** 切换加载器：安装新加载器版本并清理旧版本目录，模组目录保持不变。 */
     setLoader(id: string, loader: LoaderKind, loaderVersion?: string): Promise<InstanceMeta>;
   };

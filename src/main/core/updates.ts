@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** 兜底版本号（与 package.json 同步维护）。 */
-const APP_VERSION_FALLBACK = "0.1.4";
+const APP_VERSION_FALLBACK = "0.1.5";
 import { logger } from "./logger";
 import type { UpdateCheckResult } from "../../shared/types";
 

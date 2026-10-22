@@ -1,0 +1,294 @@
+{
+ "main": [
+  {
+   "path": "org/lwjgl/lwjgl-shaderc/3.4.3/lwjgl-shaderc-3.4.3-natives-macos.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-shaderc/3.4.3/lwjgl-shaderc-3.4.3-natives-macos.jar",
+   "size": 2547039,
+   "sha1": "c3c180935dbc3fd2301c4195c1d0eb265537c836"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-shaderc/3.4.3/lwjgl-shaderc-3.4.3-natives-windows.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-shaderc/3.4.3/lwjgl-shaderc-3.4.3-natives-windows.jar",
+   "size": 2541979,
+   "sha1": "44266572b8b8b5bbb05e71f13471337ac0d62aba"
+  },
+  {
+   "path": "com/google/guava/guava/21.0/guava-21.0.jar",
+   "url": "https://libraries.minecraft.net/com/google/guava/guava/21.0/guava-21.0.jar",
+   "size": 2521113,
+   "sha1": "3a3d111be1be1b745edfa7d91678a12d7ed38709"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-shaderc/3.4.1/lwjgl-shaderc-3.4.1-natives-macos.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-shaderc/3.4.1/lwjgl-shaderc-3.4.1-natives-macos.jar",
+   "size": 2456301,
+   "sha1": "1d7bbdba70cf29c42978f6c0c1bdef945b922072"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-shaderc/3.4.1/lwjgl-shaderc-3.4.1-natives-windows.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-shaderc/3.4.1/lwjgl-shaderc-3.4.1-natives-windows.jar",
+   "size": 2448578,
+   "sha1": "daacbaeb2c1dfd00db83f4b7cc2c76901eb297bd"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-shaderc/3.4.3/lwjgl-shaderc-3.4.3-natives-windows-arm64.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-shaderc/3.4.3/lwjgl-shaderc-3.4.3-natives-windows-arm64.jar",
+   "size": 2359649,
+   "sha1": "bb28dabb8b7d8bea1a35de1a2be6aeade0e565d2"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-shaderc/3.4.3/lwjgl-shaderc-3.4.3-natives-macos-arm64.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-shaderc/3.4.3/lwjgl-shaderc-3.4.3-natives-macos-arm64.jar",
+   "size": 2293240,
+   "sha1": "89bf79fc7200f1fa73563c9ab25316723145b4ba"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-shaderc/3.4.1/lwjgl-shaderc-3.4.1-natives-windows-arm64.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-shaderc/3.4.1/lwjgl-shaderc-3.4.1-natives-windows-arm64.jar",
+   "size": 2277252,
+   "sha1": "50884f728fdd7cff33731403fdc53b724ff09c85"
+  },
+  {
+   "path": "com/google/guava/guava/17.0/guava-17.0.jar",
+   "url": "https://libraries.minecraft.net/com/google/guava/guava/17.0/guava-17.0.jar",
+   "size": 2243036,
+   "sha1": "9c6ef172e8de35fd8d4d8783e4821e57cdef7445"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-shaderc/3.4.1/lwjgl-shaderc-3.4.1-natives-macos-arm64.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-shaderc/3.4.1/lwjgl-shaderc-3.4.1-natives-macos-arm64.jar",
+   "size": 2186840,
+   "sha1": "48aa2727e8616154d399d4dab0d8e8479741fa4f"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-shaderc/3.4.1/lwjgl-shaderc-3.4.1-natives-windows-x86.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-shaderc/3.4.1/lwjgl-shaderc-3.4.1-natives-windows-x86.jar",
+   "size": 2184640,
+   "sha1": "cd3ab907c096e27a9024917dcab4379e90c7799d"
+  },
+  {
+   "path": "org/apache/logging/log4j/log4j-core/2.25.2/log4j-core-2.25.2.jar",
+   "url": "https://libraries.minecraft.net/org/apache/logging/log4j/log4j-core/2.25.2/log4j-core-2.25.2.jar",
+   "size": 2018265,
+   "sha1": "d4d0ad2e51e03e531f784891fbfff1bae1e13a12"
+  },
+  {
+   "path": "org/apache/logging/log4j/log4j-core/2.26.0/log4j-core-2.26.0.jar",
+   "url": "https://libraries.minecraft.net/org/apache/logging/log4j/log4j-core/2.26.0/log4j-core-2.26.0.jar",
+   "size": 2015101,
+   "sha1": "d267ca60b27ddb075e0b4e75e7875859717bf85f"
+  },
+  {
+   "path": "net/java/dev/jna/jna/5.17.0/jna-5.17.0.jar",
+   "url": "https://libraries.minecraft.net/net/java/dev/jna/jna/5.17.0/jna-5.17.0.jar",
+   "size": 2002589,
+   "sha1": "33d12735bef894440780fce64f9758d420c7bae2"
+  },
+  {
+   "path": "net/java/dev/jna/jna/5.15.0/jna-5.15.0.jar",
+   "url": "https://libraries.minecraft.net/net/java/dev/jna/jna/5.15.0/jna-5.15.0.jar",
+   "size": 2001532,
+   "sha1": "01ee1d80ff44f08280188f7c0e740d57207841ac"
+  },
+  {
+   "path": "org/apache/logging/log4j/log4j-core/2.24.1/log4j-core-2.24.1.jar",
+   "url": "https://libraries.minecraft.net/org/apache/logging/log4j/log4j-core/2.24.1/log4j-core-2.24.1.jar",
+   "size": 1910958,
+   "sha1": "c85285146f28d8c8962384f786e2dff04172fb43"
+  },
+  {
+   "path": "org/apache/logging/log4j/log4j-core/2.22.1/log4j-core-2.22.1.jar",
+   "url": "https://libraries.minecraft.net/org/apache/logging/log4j/log4j-core/2.22.1/log4j-core-2.22.1.jar",
+   "size": 1900022,
+   "sha1": "7183a25510a02ad00cc6a95d3b3d2a7d3c5a8dc4"
+  },
+  {
+   "path": "net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar",
+   "url": "https://libraries.minecraft.net/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar",
+   "size": 1879325,
+   "sha1": "1200e7ebeedbe0d10062093f32925a912020e747"
+  },
+  {
+   "path": "net/java/dev/jna/jna/5.14.0/jna-5.14.0.jar",
+   "url": "https://libraries.minecraft.net/net/java/dev/jna/jna/5.14.0/jna-5.14.0.jar",
+   "size": 1878533,
+   "sha1": "67bf3eaea4f0718cb376a181a629e5f88fa1c9dd"
+  },
+  {
+   "path": "net/java/dev/jna/jna/5.12.1/jna-5.12.1.jar",
+   "url": "https://libraries.minecraft.net/net/java/dev/jna/jna/5.12.1/jna-5.12.1.jar",
+   "size": 1866196,
+   "sha1": "b1e93a735caea94f503e95e6fe79bf9cdc1e985d"
+  },
+  {
+   "path": "org/apache/logging/log4j/log4j-core/2.19.0/log4j-core-2.19.0.jar",
+   "url": "https://libraries.minecraft.net/org/apache/logging/log4j/log4j-core/2.19.0/log4j-core-2.19.0.jar",
+   "size": 1864386,
+   "sha1": "3b6eeb4de4c49c0fe38a4ee27188ff5fee44d0bb"
+  },
+  {
+   "path": "org/apache/logging/log4j/log4j-core/2.17.0/log4j-core-2.17.0.jar",
+   "url": "https://libraries.minecraft.net/org/apache/logging/log4j/log4j-core/2.17.0/log4j-core-2.17.0.jar",
+   "size": 1789339,
+   "sha1": "fe6e7a32c1228884b9691a744f953a55d0dd8ead"
+  },
+  {
+   "path": "io/netty/netty-all/4.0.23.Final/netty-all-4.0.23.Final.jar",
+   "url": "https://libraries.minecraft.net/io/netty/netty-all/4.0.23.Final/netty-all-4.0.23.Final.jar",
+   "size": 1779991,
+   "sha1": "0294104aaf1781d6a56a07d561e792c5d0c95f45"
+  },
+  {
+   "path": "net/java/dev/jna/jna/5.10.0/jna-5.10.0.jar",
+   "url": "https://libraries.minecraft.net/net/java/dev/jna/jna/5.10.0/jna-5.10.0.jar",
+   "size": 1756400,
+   "sha1": "7cf4c87dd802db50721db66947aa237d7ad09418"
+  }
+ ],
+ "small": [
+  {
+   "path": "org/lwjgl/lwjgl-openal/3.4.3/lwjgl-openal-3.4.3-natives-windows-arm64.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-openal/3.4.3/lwjgl-openal-3.4.3-natives-windows-arm64.jar",
+   "size": 897409,
+   "sha1": "6198ef79d4c7a220fb65689b584e8e3a148c81b7"
+  },
+  {
+   "path": "com/nimbusds/oauth2-oidc-sdk/11.18/oauth2-oidc-sdk-11.18.jar",
+   "url": "https://libraries.minecraft.net/com/nimbusds/oauth2-oidc-sdk/11.18/oauth2-oidc-sdk-11.18.jar",
+   "size": 896918,
+   "sha1": "07c7ec4f4066625ff07a711ad856fa04da1ff9de"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-freetype/3.3.3/lwjgl-freetype-3.3.3-natives-windows-arm64.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-freetype/3.3.3/lwjgl-freetype-3.3.3-natives-windows-arm64.jar",
+   "size": 886068,
+   "sha1": "82028265a0a2ff33523ca75137ada7dc176e5210"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-openal/3.4.1/lwjgl-openal-3.4.1-natives-windows-arm64.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-openal/3.4.1/lwjgl-openal-3.4.1-natives-windows-arm64.jar",
+   "size": 885200,
+   "sha1": "4b996cc3321a807ee34e7ce53aba7fe529dc485a"
+  },
+  {
+   "path": "com/nimbusds/oauth2-oidc-sdk/11.9.1/oauth2-oidc-sdk-11.9.1.jar",
+   "url": "https://libraries.minecraft.net/com/nimbusds/oauth2-oidc-sdk/11.9.1/oauth2-oidc-sdk-11.9.1.jar",
+   "size": 883761,
+   "sha1": "fa9a2e447e2cef4dfda40a854dd7ec35624a7799"
+  },
+  {
+   "path": "com/github/oshi/oshi-core/5.8.5/oshi-core-5.8.5.jar",
+   "url": "https://libraries.minecraft.net/com/github/oshi/oshi-core/5.8.5/oshi-core-5.8.5.jar",
+   "size": 879623,
+   "sha1": "1d0ec654d820741327f5a9229d513732a4b7ce50"
+  },
+  {
+   "path": "com/github/oshi/oshi-core/5.8.2/oshi-core-5.8.2.jar",
+   "url": "https://libraries.minecraft.net/com/github/oshi/oshi-core/5.8.2/oshi-core-5.8.2.jar",
+   "size": 879038,
+   "sha1": "3a4c610d5991654009653e55b3204065441e2f0d"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-freetype/3.3.3/lwjgl-freetype-3.3.3-natives-windows-x86.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-freetype/3.3.3/lwjgl-freetype-3.3.3-natives-windows-x86.jar",
+   "size": 877480,
+   "sha1": "15a8c1de7f51d07a92eae7ce1222557073a0c0c3"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-spvc/3.4.1/lwjgl-spvc-3.4.1-natives-windows-x86.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-spvc/3.4.1/lwjgl-spvc-3.4.1-natives-windows-x86.jar",
+   "size": 841941,
+   "sha1": "cea4bc145dce25e8a436575f9034a7bd142b0528"
+  },
+  {
+   "path": "com/github/oshi/oshi-core/5.7.4/oshi-core-5.7.4.jar",
+   "url": "https://libraries.minecraft.net/com/github/oshi/oshi-core/5.7.4/oshi-core-5.7.4.jar",
+   "size": 835937,
+   "sha1": "7d46a42de1af8c81d401d50082f285853307b31d"
+  },
+  {
+   "path": "com/github/oshi/oshi-core/5.7.5/oshi-core-5.7.5.jar",
+   "url": "https://libraries.minecraft.net/com/github/oshi/oshi-core/5.7.5/oshi-core-5.7.5.jar",
+   "size": 835738,
+   "sha1": "725374463734aacde70a3b20f018aca3f922655f"
+  },
+  {
+   "path": "org/lwjgl/lwjgl-opengl/3.1.6/lwjgl-opengl-3.1.6.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl-opengl/3.1.6/lwjgl-opengl-3.1.6.jar",
+   "size": 821814,
+   "sha1": "964a2332ab3b396bcf67f12b8b93d39c79c978c2"
+  },
+  {
+   "path": "io/netty/netty-common/4.2.16.Final/netty-common-4.2.16.Final.jar",
+   "url": "https://libraries.minecraft.net/io/netty/netty-common/4.2.16.Final/netty-common-4.2.16.Final.jar",
+   "size": 819965,
+   "sha1": "c2bc7fa5acfa2afc777e944d84f0aa65559cc81e"
+  },
+  {
+   "path": "io/netty/netty-common/4.2.15.Final/netty-common-4.2.15.Final.jar",
+   "url": "https://libraries.minecraft.net/io/netty/netty-common/4.2.15.Final/netty-common-4.2.15.Final.jar",
+   "size": 818260,
+   "sha1": "7222492c1af9c2d4d78d521eea340a619e242fda"
+  },
+  {
+   "path": "org/joml/joml/1.10.9/joml-1.10.9.jar",
+   "url": "https://libraries.minecraft.net/org/joml/joml/1.10.9/joml-1.10.9.jar",
+   "size": 814581,
+   "sha1": "438e036486bad66b189bff385dd07dea4f74a146"
+  },
+  {
+   "path": "com/nimbusds/nimbus-jose-jwt/9.40/nimbus-jose-jwt-9.40.jar",
+   "url": "https://libraries.minecraft.net/com/nimbusds/nimbus-jose-jwt/9.40/nimbus-jose-jwt-9.40.jar",
+   "size": 810931,
+   "sha1": "42b1dfa0360e4062951b070bac52dd8d96fd7b38"
+  },
+  {
+   "path": "io/netty/netty-common/4.2.7.Final/netty-common-4.2.7.Final.jar",
+   "url": "https://libraries.minecraft.net/io/netty/netty-common/4.2.7.Final/netty-common-4.2.7.Final.jar",
+   "size": 789111,
+   "sha1": "11aa30df26af4fca3239ac1917f303a280f301e1"
+  },
+  {
+   "path": "org/lwjgl/lwjgl/3.3.2/lwjgl-3.3.2.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl/3.3.2/lwjgl-3.3.2.jar",
+   "size": 786196,
+   "sha1": "4421d94af68e35dcaa31737a6fc59136a1e61b94"
+  },
+  {
+   "path": "org/apache/httpcomponents/httpclient/4.5.14/httpclient-4.5.14.jar",
+   "url": "https://libraries.minecraft.net/org/apache/httpcomponents/httpclient/4.5.14/httpclient-4.5.14.jar",
+   "size": 785639,
+   "sha1": "1194890e6f56ec29177673f2f12d0b8e627dec98"
+  },
+  {
+   "path": "org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3.jar",
+   "url": "https://libraries.minecraft.net/org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3.jar",
+   "size": 785029,
+   "sha1": "29589b5f87ed335a6c7e7ee6a5775f81f97ecb84"
+  },
+  {
+   "path": "org/apache/httpcomponents/httpclient/4.5.13/httpclient-4.5.13.jar",
+   "url": "https://libraries.minecraft.net/org/apache/httpcomponents/httpclient/4.5.13/httpclient-4.5.13.jar",
+   "size": 780321,
+   "sha1": "e5f6cae5ca7ecaac1ec2827a9e2d65ae2869cada"
+  },
+  {
+   "path": "com/nimbusds/nimbus-jose-jwt/9.37.3/nimbus-jose-jwt-9.37.3.jar",
+   "url": "https://libraries.minecraft.net/com/nimbusds/nimbus-jose-jwt/9.37.3/nimbus-jose-jwt-9.37.3.jar",
+   "size": 779374,
+   "sha1": "700f71ffefd60c16bd8ce711a956967ea9071cec"
+  },
+  {
+   "path": "org/joml/joml/1.10.8/joml-1.10.8.jar",
+   "url": "https://libraries.minecraft.net/org/joml/joml/1.10.8/joml-1.10.8.jar",
+   "size": 778846,
+   "sha1": "fc0a71dad90a2cf41d82a76156a0e700af8e4f8d"
+  },
+  {
+   "path": "com/mojang/datafixerupper/10.0.21/datafixerupper-10.0.21.jar",
+   "url": "https://libraries.minecraft.net/com/mojang/datafixerupper/10.0.21/datafixerupper-10.0.21.jar",
+   "size": 753612,
+   "sha1": "b6b2ae770c02e0c1eb90f9985b151e9085a38d0b"
+  }
+ ]
+}

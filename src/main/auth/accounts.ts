@@ -47,6 +47,25 @@ export function offlineUuid(name: string): string {
   return digest.toString("hex");
 }
 
+/**
+ * 第三方角色列表规范化：只保留「32 位无横线 UUID + 非空名字」的条目，
+ * 服务端多塞的字段一律丢掉，坏条目单独丢弃而不影响整份列表。
+ */
+function normalizeProfiles(raw: unknown): { id: string; name: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const list: { id: string; name: string }[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const src = item as Record<string, unknown>;
+    const id = typeof src.id === "string" ? src.id.replace(/[^0-9a-fA-F]/g, "").toLowerCase() : "";
+    const name = typeof src.name === "string" ? src.name : "";
+    if (!UUID_PATTERN.test(id) || !name) continue;
+    if (list.some((p) => p.id === id)) continue;
+    list.push({ id, name });
+  }
+  return list;
+}
+
 function normalizeAccount(raw: unknown): Account | null {
   if (!raw || typeof raw !== "object") return null;
   const src = raw as Record<string, unknown>;
@@ -90,6 +109,9 @@ function normalizeAccount(raw: unknown): Account | null {
       expiresAt: typeof ygg.expiresAt === "number" ? ygg.expiresAt : 0,
     };
     if (typeof ygg.siteName === "string" && ygg.siteName.length > 0) account.yggdrasil.siteName = ygg.siteName;
+    // 角色切换列表必须落盘，否则重启后又只剩当前角色
+    const profiles = normalizeProfiles(ygg.profiles);
+    if (profiles.length > 0) account.yggdrasil.profiles = profiles;
   }
   return account;
 }
@@ -110,7 +132,11 @@ function normalizeStore(raw: unknown): AccountStore {
 function clone(account: Account): Account {
   const copy: Account = { ...account };
   if (account.microsoft) copy.microsoft = { ...account.microsoft };
-  if (account.yggdrasil) copy.yggdrasil = { ...account.yggdrasil };
+  if (account.yggdrasil) {
+    copy.yggdrasil = { ...account.yggdrasil };
+    // 数组要独立拷贝：调用方改到 profiles 不能污染缓存
+    if (account.yggdrasil.profiles) copy.yggdrasil.profiles = account.yggdrasil.profiles.map((p) => ({ ...p }));
+  }
   return copy;
 }
 
@@ -304,6 +330,8 @@ export interface YggdrasilAccountInput {
   clientToken: string;
   expiresAt: number;
   siteName?: string;
+  /** authenticate 返回的全部角色（availableProfiles，只有 selectedProfile 时就是那一条）。 */
+  profiles?: { id: string; name: string }[];
 }
 
 /** 同一站点、同一角色重复登录时更新既有账号，只有新角色才追加，并自动设为当前账号。 */
@@ -323,6 +351,8 @@ export async function upsertYggdrasilAccount(input: YggdrasilAccountInput): Prom
     expiresAt: input.expiresAt,
   };
   if (input.siteName) yggdrasil.siteName = input.siteName;
+  const profiles = normalizeProfiles(input.profiles);
+  if (profiles.length > 0) yggdrasil.profiles = profiles;
 
   let account: Account;
   let accounts: Account[];
@@ -343,6 +373,43 @@ export async function upsertYggdrasilAccount(input: YggdrasilAccountInput): Prom
 
   await persist({ accounts, activeId: account.id });
   await syncActiveSetting(account.id);
+  return clone(account);
+}
+
+export interface YggdrasilProfilePatch {
+  /** 切换后的角色 UUID（无横线 32 位）。 */
+  uuid?: string;
+  /** 切换后的角色名。 */
+  name?: string;
+  accessToken?: string;
+  clientToken?: string;
+  /** 该账号的全部角色（留在账号上，下次切换不必重新登录）。 */
+  profiles?: { id: string; name: string }[];
+}
+
+/**
+ * 切换角色后回写账号：uuid/name 换成新角色，令牌一并更新。
+ * 调用方（skin.ts）已经过 authserver/refresh，这里只负责落盘。
+ */
+export async function updateYggdrasilProfile(id: string, patch: YggdrasilProfilePatch): Promise<Account> {
+  const store = await load();
+  const existing = store.accounts.find((a) => a.id === id);
+  if (!existing || existing.type !== "yggdrasil" || !existing.yggdrasil) throw new Error("第三方账号不存在：" + id);
+
+  const uuid = (patch.uuid ?? existing.uuid).toLowerCase();
+  if (!UUID_PATTERN.test(uuid)) throw new Error("角色 UUID 不合法：" + uuid);
+  const name = patch.name ?? existing.name;
+  if (!name) throw new Error("角色名不能为空");
+
+  const yggdrasil: NonNullable<Account["yggdrasil"]> = { ...existing.yggdrasil };
+  if (patch.accessToken) yggdrasil.accessToken = patch.accessToken;
+  if (patch.clientToken) yggdrasil.clientToken = patch.clientToken;
+  const profiles = normalizeProfiles(patch.profiles ?? yggdrasil.profiles);
+  if (profiles.length > 0) yggdrasil.profiles = profiles;
+
+  const account: Account = { ...existing, uuid, name, yggdrasil };
+  const accounts = store.accounts.map((a) => (a.id === id ? account : a));
+  await persist({ accounts, activeId: store.activeId });
   return clone(account);
 }
 

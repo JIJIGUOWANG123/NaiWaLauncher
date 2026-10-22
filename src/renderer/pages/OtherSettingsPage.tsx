@@ -85,11 +85,11 @@ function DownloadCard({ settings }: { settings: Settings }) {
   const persist = usePersist();
   const { push } = useToast();
 
-  const [threads, setThreads] = useSliderDraft(settings.concurrentDownloads, (value) => {
-    void persist({ concurrentDownloads: value }, "最大线程数");
-  });
   const [connections, setConnections] = useSliderDraft(settings.connectionsPerFile, (value) => {
-    void persist({ connectionsPerFile: value }, "单文件连接数");
+    void persist({ connectionsPerFile: value }, "单文件分片连接数");
+  });
+  const [threads, setThreads] = useSliderDraft(settings.concurrentDownloads, (value) => {
+    void persist({ concurrentDownloads: value }, "多线程下载（文件并发数）");
   });
   const [speed, setSpeed] = useSliderDraft(settings.speedLimitKbps, (value) => {
     void persist({ speedLimitKbps: value }, "速度限制");
@@ -136,25 +136,29 @@ function DownloadCard({ settings }: { settings: Settings }) {
           />
         </Field>
 
-        <Field label="最大线程数" hint="同时下载的文件数量，1–16">
-          <Slider
-            value={threads}
-            min={1}
-            max={16}
-            onChange={setThreads}
-            format={(value) => `${value} 个`}
-          />
-        </Field>
-
-        <Field label="单文件连接数" hint="每个文件并行连接数，1–16；网络不稳定时调小">
+        <Field label="单文件分片连接数" hint="一个大文件用几条连接并行拉（1–16，默认 4）">
           <Slider
             value={connections}
             min={1}
             max={16}
             onChange={setConnections}
-            format={(value) => `${value} 线程`}
+            format={(value) => `${value} 条`}
           />
         </Field>
+
+        <Field label="多线程下载（文件并发数）" hint="多个文件同时下载（1–32，默认 12），安装整合包/资源时提速明显">
+          <Slider
+            value={threads}
+            min={1}
+            max={32}
+            onChange={setThreads}
+            format={(value) => `${value} 个`}
+          />
+        </Field>
+
+        <p className="field-hint dl-parallel-note" data-dl-parallel-note>
+          文件并发数 × 单文件分片数 = 理论最大连接数，过高可能被 CDN 限速
+        </p>
 
         <Field label="速度限制" hint="0 表示不限速，改动即时生效">
           <Slider

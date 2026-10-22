@@ -4,6 +4,7 @@ import type { InstanceMeta, ModContentKind } from "../../shared/types";
 import { createTask } from "../core/events";
 import { downloadFile } from "../core/http";
 import { logger } from "../core/logger";
+import { invalidateInstanceDiskUsage } from "../minecraft/instances";
 import { getPaths, instanceDir } from "../core/paths";
 import { getSettings } from "../core/settings";
 import { modsDirForInstance, sha1OfFile } from "./installed";
