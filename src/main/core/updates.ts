@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** 兜底版本号（与 package.json 同步维护）。 */
-const APP_VERSION_FALLBACK = "0.1.3";
+const APP_VERSION_FALLBACK = "0.1.4";
 import { logger } from "./logger";
 import type { UpdateCheckResult } from "../../shared/types";
 
@@ -14,7 +14,9 @@ const REPO = "JIJIGUOWANG123/NaiWaLauncher";
 const CHANNELS: { id: UpdateCheckResult["channel"]; url: string }[] = [
   { id: "github-api", url: `https://api.github.com/repos/${REPO}/releases/latest` },
   { id: "gh-proxy", url: `https://gh-proxy.com/https://api.github.com/repos/${REPO}/releases/latest` },
+  { id: "sakuramoe", url: `https://ghproxy.sakuramoe.dev/https://raw.githubusercontent.com/${REPO}/main/package.json` },
   { id: "jsdelivr", url: `https://cdn.jsdelivr.net/gh/${REPO}@main/package.json` },
+  { id: "raw", url: `https://raw.githubusercontent.com/${REPO}/main/package.json` },
 ];
 
 function parseVersion(input: string): number[] {

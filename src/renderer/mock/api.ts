@@ -4,7 +4,7 @@ import type {
 import type {
   Account, DownloadJob, InstalledModInfo, InstanceMeta, InstalledJava, LanAddress, LoaderKind, MapEntry,
   MicrosoftLoginState, ModCategory, ModContentKind, ModFilterOptions, ModProviderId, ModSearchResult,
-  NatfrpStatus, NatfrpTunnel, NatfrpUser, PortProbeResult, TaskKind,
+  NatfrpStatus, NatfrpTunnel, NatfrpUser, PortProbeResult, SkinInfo, TaskKind,
 } from "../../shared/types";
 import { loaderLabel } from "../lib/format";
 import {
@@ -65,6 +65,24 @@ function mockYggLoginError(): string | null {
 function mockYggInvalidReason(): string | null {
   const reason = (globalThis as { __naiwaMockYggInvalid?: string }).__naiwaMockYggInvalid;
   return typeof reason === "string" && reason ? reason : null;
+}
+
+/** 皮肤样例纹理：64×64 RGBA，底色透明（棋盘格能透出来），渲染层直接用 <img> 显示。 */
+const MOCK_SKIN_TEXTURE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAnklEQVR42u3WwQnCQBRF0SlEXGUl4tKtHdiKYAHahxWkDnf2YC9fEAa+oAExgmbOgbeIYEguA1oKAMALsygxNAGm7nLax9CaCLBezO+rL52vnQABGgmw668PcwJaCQC0ZbU9RN67398cz1FXfzHyZ58+X77XGPcTQIA/C/D1/yECCDBegGcTQIAfD9B1y8gTQIDGAgAAAAAAAAAAk3MDAfN1yzvK5/UAAAAASUVORK5CYII=";
+/** 应用皮肤后换成的另一张纹理：用来断言「上传成功后预览真的刷新了」。 */
+const MOCK_SKIN_TEXTURE_UPLOADED = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAnklEQVR42u3WsQnCUBSG0axi+xpttHMBwQ2cKE0GcAnHsHQEN7mC8OAJGhAjaO458BcRDMnHA+06AIAX+m2JsQkwd9dTH2NLEWBZNvfVl26vnQABkgS4DOeHOQFZAgC57NaHaPfu94/7IerqL0b72afP195rivsJIMCfBfj6/xABBJguwLMJIMCPByiLVbQTQIBkAQAAAAAAAACA2bkBs6yDw2fy90sAAAAASUVORK5CYII=";
+const MOCK_SKIN_PICKED = "C:\\Users\\Public\\Pictures\\NAIWA-skin.png";
+const SKIN_NO_UPLOAD_ERROR = "该微软应用尚未获得 Minecraft 服务授权，暂时无法编辑皮肤";
+
+/** 自检钩子：`__naiwaMockSkinNoUpload = true` 时皮肤只读（canUpload=false 并带上原因）。 */
+function mockSkinNoUpload(): boolean {
+  return (globalThis as { __naiwaMockSkinNoUpload?: boolean }).__naiwaMockSkinNoUpload === true;
+}
+
+/** 自检钩子：`__naiwaMockSkinUploadFail` 是字符串时上传抛该错误原文。 */
+function mockSkinUploadFailure(): string | null {
+  const message = (globalThis as { __naiwaMockSkinUploadFail?: string }).__naiwaMockSkinUploadFail;
+  return typeof message === "string" && message ? message : null;
 }
 
 /**
@@ -209,6 +227,8 @@ export function createMockApi(): NaiwaApi {
   let accounts: Account[] = MOCK_ACCOUNTS.map((item) => ({ ...item }));
   /** 设备码 → 已轮询次数：预览下前两次 pending，第三次返回新账号。 */
   const devicePolls = new Map<string, number>();
+  /** 账号 id → 已应用的皮肤（上传成功后写入，恢复默认时删掉）。 */
+  const appliedSkins = new Map<string, { skinUrl: string; model: "classic" | "slim" }>();
   let instances: InstanceMeta[] = MOCK_INSTANCES.map((item) => ({ ...item }));
   const installedJava: InstalledJava[] = MOCK_INSTALLED_JAVA.map((item) => ({ ...item }));
   // 实例 mods 目录的内存态：首次访问时用种子数据填充。
@@ -690,6 +710,56 @@ export function createMockApi(): NaiwaApi {
         const reason = mockYggInvalidReason();
         if (reason) return { ok: false, error: reason };
         return { ok: true, name: account.name, uuid: account.uuid };
+      },
+      skin: async (id: string): Promise<SkinInfo> => {
+        trace("accounts.skin", { id });
+        const account = findAccount(id);
+        await sleep(240);
+        if (account.type === "offline") {
+          return { source: "none", canUpload: false, error: "离线账号没有皮肤服务：先用正版或第三方账号登录。" };
+        }
+        const source = account.type === "microsoft" ? ("mojang" as const) : ("yggdrasil" as const);
+        // 微软应用没拿到 Minecraft 服务授权时只读：预览照常给，但 canUpload=false 并说明原因。
+        if (mockSkinNoUpload()) {
+          return { source, skinUrl: MOCK_SKIN_TEXTURE, model: "classic", canUpload: false, error: SKIN_NO_UPLOAD_ERROR };
+        }
+        const applied = appliedSkins.get(id);
+        return {
+          source,
+          skinUrl: applied?.skinUrl ?? MOCK_SKIN_TEXTURE,
+          model: applied?.model ?? "classic",
+          canUpload: true,
+        };
+      },
+      pickSkinFile: async () => {
+        // 自检钩子：__naiwaMockSkinPick 覆盖返回路径（指向磁盘上真实存在的图片），__naiwaMockSkinPickCancel 模拟取消。
+        const overridden = (globalThis as { __naiwaMockSkinPick?: string }).__naiwaMockSkinPick;
+        const picked = typeof overridden === "string" && overridden ? overridden : MOCK_SKIN_PICKED;
+        const cancelled = (globalThis as { __naiwaMockSkinPickCancel?: boolean }).__naiwaMockSkinPickCancel === true;
+        trace("accounts.pickSkinFile", { path: cancelled ? null : picked });
+        await sleep(260);
+        return cancelled ? null : picked;
+      },
+      uploadSkin: async (id: string, filePath: string, model: "classic" | "slim") => {
+        trace("accounts.uploadSkin", { id, filePath, model });
+        const account = findAccount(id);
+        if (account.type === "offline") throw new Error("离线账号不支持上传皮肤。");
+        if (mockSkinNoUpload()) throw new Error(SKIN_NO_UPLOAD_ERROR);
+        const failure = mockSkinUploadFailure();
+        if (failure) {
+          await sleep(400);
+          throw new Error(failure);
+        }
+        await sleep(700);
+        appliedSkins.set(id, { skinUrl: MOCK_SKIN_TEXTURE_UPLOADED, model });
+      },
+      resetSkin: async (id: string) => {
+        trace("accounts.resetSkin", { id });
+        const account = findAccount(id);
+        if (account.type === "offline") throw new Error("离线账号没有皮肤服务。");
+        await sleep(520);
+        if (mockSkinNoUpload()) throw new Error(SKIN_NO_UPLOAD_ERROR);
+        appliedSkins.delete(id);
       },
       beginMicrosoft: async () => {
         trace("accounts.beginMicrosoft");

@@ -3,7 +3,7 @@ import type {
   DownloadJob, InstalledModInfo, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
   PortProbeResult, SaveInfo, UpdateCheckResult, InstanceExportResult, InstanceImportResult,
   LoaderKind, LoaderVersionInfo, LogLine, ModCategory, ModFileInfo, ModFilterOptions, ModProviderId,
-  ModSearchResult, ModSourceFilter, Settings, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
+  ModSearchResult, ModSourceFilter, Settings, SkinInfo, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
 } from "./types";
 
 export type { ModSourceFilter } from "./types";
@@ -58,6 +58,10 @@ export const IPC = {
   accountsSetActive: "accounts:setActive",
   accountsLoginYggdrasil: "accounts:loginYggdrasil",
   accountsValidateYggdrasil: "accounts:validateYggdrasil",
+  skinsGet: "skins:get",
+  skinsUpload: "skins:upload",
+  skinsReset: "skins:reset",
+  skinsPickFile: "skins:pickFile",
   accountsBeginMicrosoft: "accounts:beginMicrosoft",
   accountsPollMicrosoft: "accounts:pollMicrosoft",
 
@@ -241,6 +245,14 @@ export interface NaiwaApi {
     loginYggdrasil(apiUrl: string, username: string, password: string): Promise<Account>;
     /** 用已保存的令牌校验/刷新第三方账号（返回是否仍有效）。 */
     validateYggdrasil(id: string): Promise<{ ok: boolean; name?: string; uuid?: string; error?: string }>;
+    /** 读取该账号当前皮肤/披风信息。 */
+    skin(id: string): Promise<SkinInfo>;
+    /** 选择本地皮肤图片（打开文件框），返回绝对路径或 null。 */
+    pickSkinFile(): Promise<string | null>;
+    /** 上传并应用皮肤。 */
+    uploadSkin(id: string, filePath: string, model: "classic" | "slim"): Promise<void>;
+    /** 恢复默认皮肤。 */
+    resetSkin(id: string): Promise<void>;
     /** 启动微软设备码登录，返回要展示给用户的 code 与链接。 */
     beginMicrosoft(): Promise<DeviceCodeChallenge>;
     /** 轮询登录结果：pending 表示用户还没授权。 */

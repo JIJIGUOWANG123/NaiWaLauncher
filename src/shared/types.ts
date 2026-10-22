@@ -320,7 +320,7 @@ export interface UpdateCheckResult {
   /** 免安装版更新包的直链（Release 里的 NaiWaLauncher.exe）。 */
   assetUrl?: string;
   /** 实际取数的通道（便于排查）。 */
-  channel: "github-api" | "gh-proxy" | "jsdelivr" | "none";
+  channel: "github-api" | "gh-proxy" | "jsdelivr" | "sakuramoe" | "raw" | "none";
   /** 检查失败时的原因。 */
   error?: string;
 }
@@ -475,6 +475,22 @@ export interface Account {
     expiresAt: number;
     xuid?: string;
   };
+}
+
+/** 账号皮肤信息。 */
+export interface SkinInfo {
+  /** 用哪种接口拿到的：yggdrasil / mojang / none。 */
+  source: "yggdrasil" | "mojang" | "none";
+  /** 当前皮肤直链（可为空）。 */
+  skinUrl?: string;
+  /** 披风直链（可为空）。 */
+  capeUrl?: string;
+  /** 皮肤模型：classic（Steve）或 slim（Alex）。 */
+  model?: "classic" | "slim";
+  /** 是否支持上传/更换皮肤。 */
+  canUpload: boolean;
+  /** 不支持或失败的原因。 */
+  error?: string;
 }
 
 /** 微软设备码登录的挑战信息，交给界面展示。 */

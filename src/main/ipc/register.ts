@@ -5,7 +5,7 @@ import { IPC } from "../../shared/ipc";
 import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest,
 } from "../../shared/ipc";
-import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledModInfo, LanAddress, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
+import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledModInfo, LanAddress, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinInfo, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { checkAppUpdates } from "../core/updates";
@@ -15,6 +15,7 @@ import { natfrpCreate, natfrpNodes, natfrpStart, natfrpStatus, natfrpStop, natfr
 import { createOffline, listAccounts, removeAccount, setActiveAccount } from "../auth/accounts";
 import { beginDeviceCode, pollDeviceCode } from "../auth/microsoft";
 import { loginYggdrasil, validateYggdrasilAccount } from "../auth/yggdrasil";
+import { getSkin, pickSkinFile, resetSkin, uploadSkin } from "../auth/skin";
 import { SOURCES, probeSources, setActiveSource } from "../core/sources";
 import { listVersions } from "../minecraft/manifest";
 import { createInstance, deleteInstance, listInstances, listSaves, setLoader, updateInstance } from "../minecraft/instances";
@@ -175,6 +176,11 @@ export function registerIpc(): void {
   handle<void>(IPC.accountsRemove, (id: string) => removeAccount(id));
   handle<Account>(IPC.accountsLoginYggdrasil, (apiUrl: string, username: string, password: string) => loginYggdrasil(apiUrl, username, password));
   handle<{ ok: boolean; name?: string; uuid?: string; error?: string }>(IPC.accountsValidateYggdrasil, (id: string) => validateYggdrasilAccount(id));
+
+  handle<SkinInfo>(IPC.skinsGet, (id: string) => getSkin(id));
+  handle<string | null>(IPC.skinsPickFile, () => pickSkinFile());
+  handle<void>(IPC.skinsUpload, (id: string, filePath: string, model: "classic" | "slim") => uploadSkin(id, filePath, model));
+  handle<void>(IPC.skinsReset, (id: string) => resetSkin(id));
 
   handle<void>(IPC.accountsSetActive, (id: string) => setActiveAccount(id));
   handle<DeviceCodeChallenge>(IPC.accountsBeginMicrosoft, () => beginDeviceCode());

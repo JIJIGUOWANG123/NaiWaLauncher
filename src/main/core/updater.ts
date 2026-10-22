@@ -21,17 +21,37 @@ export function canSelfUpdate(): boolean {
   return true;
 }
 
-/** 下载新版本到 NaiWa/update，返回文件路径。 */
+/** 生成候选下载地址：官方直链 → gh-proxy 镜像 → ghproxy.net 镜像。 */
+function downloadCandidates(url: string): string[] {
+  const list = [url];
+  if (/^https?:\/\/github\.com\//i.test(url)) {
+    list.push(`https://ghproxy.sakuramoe.dev/${url}`, `https://gh-proxy.com/${url}`, `https://ghproxy.net/${url}`);
+  }
+  return list;
+}
+
+/** 下载新版本到 NaiWa/update，返回文件路径；直连失败会自动换镜像。 */
 async function downloadToStaging(url: string): Promise<string> {
   const dir = join(getPaths().dataRoot, "update");
   await mkdir(dir, { recursive: true });
   const dest = join(dir, SINGLE_EXE_NAME);
-  await rm(dest, { force: true });
-  await downloadFile(url, dest, { label: "更新启动器", connections: 4 });
-  const size = (await readFile(dest)).byteLength;
-  if (size < 20 * 1024 * 1024) throw new Error(`更新包大小异常（${size} 字节），已取消`);
-  return dest;
+  let lastError = "";
+  for (const candidate of downloadCandidates(url)) {
+    await rm(dest, { force: true });
+    try {
+      log.info(`[updater] 下载更新包：${candidate}`);
+      await downloadFile(candidate, dest, { label: "更新启动器", connections: 4 });
+      const size = (await readFile(dest)).byteLength;
+      if (size < 20 * 1024 * 1024) throw new Error(`更新包大小异常（${size} 字节）`);
+      return dest;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      log.warn(`[updater] 该地址下载失败（${candidate}）：${lastError}`);
+    }
+  }
+  throw new Error(`更新包下载失败：${lastError || "网络不可用"}。若一直失败，请点「前往下载」用浏览器手动下载。`);
 }
+
 
 /** 生成替换脚本：等主进程退出后覆盖 exe，再启动新版。 */
 async function writeSwapScript(staged: string, target: string): Promise<string> {
@@ -59,7 +79,12 @@ export async function installUpdate(url: string): Promise<void> {
   }
   const target = app.getPath("exe");
   log.info(`[updater] 开始更新：${target}`);
-  const staged = await downloadToStaging(url);
+  let staged = "";
+  try {
+    staged = await downloadToStaging(url);
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : `更新失败：${String(err)}`);
+  }
   log.info(`[updater] 下载完成，准备替换`);
   const script = await writeSwapScript(staged, target);
   spawn("cmd.exe", ["/c", "start", "/min", script], { detached: true, stdio: "ignore", windowsHide: true }).unref();

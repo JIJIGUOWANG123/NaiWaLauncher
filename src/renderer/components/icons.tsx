@@ -328,6 +328,27 @@ export function IconLink(props: IconProps) {
   );
 }
 
+/** 皮肤文件：相框 + 山峦。 */
+export function IconImage(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3.6" y="4.8" width="16.8" height="14.4" rx="2.2" />
+      <circle cx="9" cy="9.8" r="1.4" />
+      <path d="m4.6 17.4 4.5-4.2 3.2 2.9 3.1-2.6 4 3.6" />
+    </Svg>
+  );
+}
+
+/** 皮肤：一件短袖上衣。 */
+export function IconSkin(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8.4 4.6 4.2 6.9a2.4 2.4 0 0 0-1.1 3l.9 2 2.2-1v8.1h11.6v-8.1l2.2 1 .9-2a2.4 2.4 0 0 0-1.1-3L15.6 4.6" />
+      <path d="M9 4.6a3 3 0 0 0 6 0" />
+    </Svg>
+  );
+}
+
 /** 问题反馈：对话气泡。 */
 export function IconMessage(props: IconProps) {
   return (

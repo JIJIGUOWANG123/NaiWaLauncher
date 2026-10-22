@@ -70,7 +70,7 @@ export const MOCK_APP_INFO: AppInfo = {
   nameEn: "NaiWa Launcher",
   nameZh: "奶娃启动器",
   developer: "奶龙",
-  version: "0.1.3-mock",
+  version: "0.1.4-mock",
   rootDir: MOCK_ROOT,
   gameRoot: MOCK_GAME_ROOT,
 };

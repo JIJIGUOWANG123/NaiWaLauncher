@@ -94,7 +94,7 @@ export function AboutPage() {
   const [confirming, setConfirming] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [downloadHighlight, setDownloadHighlight] = useState(false);
-  const version = info?.version ?? "0.1.3";
+  const version = info?.version ?? "0.1.4";
   // 发布说明只展示前 3 行，避免长文档把首屏顶开。
   const updateNotes = (update?.notes ?? "")
     .split("\n")
