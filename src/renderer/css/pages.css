@@ -1,0 +1,401 @@
+/* 页面通用骨架、实例卡片、版本列表、Java 列表 */
+
+/* ---------- 页面通用 ---------- */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding-bottom: 4px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  background: var(--title-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.page-sub {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  max-width: 70ch;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-glass);
+}
+
+/* 版本类型三连勾选（下载页筛选栏 / 新建实例弹窗） */
+.version-type-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.filter-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 4px 0 14px;
+}
+
+.search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.search-input {
+  padding-left: 34px;
+}
+
+.checkline {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.checkline input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--amber);
+  cursor: pointer;
+}
+
+.filter-count {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel {
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background-color: rgb(var(--surface-rgb) / calc(0.92 * var(--ui-opacity, 1)));
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--text) 2.4%, transparent), color-mix(in srgb, var(--shadow-color) 5%, transparent));
+  box-shadow: var(--shadow-soft);
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.panel-count {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.hint-card,
+.guide-card {
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  border: 1px dashed color-mix(in srgb, var(--accent-2) 28%, transparent);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--accent-2) 9%, transparent), var(--surface-glass));
+}
+
+.hint-title {
+  font-size: 13.5px;
+  color: var(--cream);
+  margin-bottom: 6px;
+}
+
+.hint-text {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.guide-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---------- 实例 ---------- */
+
+.instance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.instance-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background-color: rgb(var(--surface-rgb) / calc(0.95 * var(--ui-opacity, 1)));
+  background-image: linear-gradient(170deg, color-mix(in srgb, var(--text) 2.2%, transparent), color-mix(in srgb, var(--shadow-color) 6%, transparent));
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.instance-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent-2) 28%, transparent);
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--shadow-color) 36%, transparent);
+}
+
+.instance-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.instance-avatar {
+  border-radius: 12px;
+  object-fit: cover;
+  flex: 0 0 auto;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.instance-titles {
+  min-width: 0;
+  flex: 1;
+}
+
+.instance-name {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instance-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.dot {
+  opacity: 0.5;
+}
+
+.instance-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-recess-strong);
+}
+
+.instance-facts dt {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.instance-facts dd {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instance-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: auto;
+}
+
+.instance-actions .btn-play {
+  grid-column: 1 / -1;
+}
+
+.instance-actions .btn-icon {
+  padding: 7px 6px;
+  font-size: 12px;
+  gap: 5px;
+}
+
+/* ---------- 版本列表 ---------- */
+
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.version-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-glass);
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.version-row:hover {
+  border-color: color-mix(in srgb, var(--accent-2) 22%, transparent);
+  background: var(--surface-glass);
+}
+
+.version-row.is-installing {
+  border-color: color-mix(in srgb, var(--accent-2) 42%, transparent);
+  background: var(--surface-glass);
+}
+
+.version-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.version-id {
+  font-size: 13.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.version-date {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.version-action {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.row-progress {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.row-progress-text {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Java ---------- */
+
+.java-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.java-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-recess);
+}
+
+.java-icon {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent-ink);
+  flex: 0 0 auto;
+}
+
+.java-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.java-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+}
+
+.java-version {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.java-path {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

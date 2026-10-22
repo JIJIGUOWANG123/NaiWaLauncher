@@ -1,0 +1,227 @@
+/* 账号页：当前账号卡片、离线/微软添加卡片、设备码登录 */
+
+.account-current {
+  gap: 16px;
+}
+
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.account-avatar {
+  flex: 0 0 auto;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 23px;
+  font-weight: 700;
+  color: var(--on-accent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--shadow-color) 14%, transparent), 0 6px 16px color-mix(in srgb, var(--shadow-color) 28%, transparent);
+}
+
+.account-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.account-name {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-tags {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.account-since {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.account-badge {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+}
+
+.account-offline {
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.account-microsoft {
+  color: var(--on-info);
+  background: linear-gradient(135deg, var(--info-2), var(--info));
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.account-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px 18px;
+}
+
+.account-facts dt {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-bottom: 5px;
+}
+
+.account-facts dd {
+  margin: 0;
+}
+
+.account-uuid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.account-uuid code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12.5px;
+  letter-spacing: 0.4px;
+  color: var(--cream);
+  background: color-mix(in srgb, var(--shadow-color) 30%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 3px 9px;
+}
+
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.account-add {
+  gap: 12px;
+}
+
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.account-row .input {
+  flex: 1;
+  min-width: 150px;
+}
+
+.account-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.account-hint {
+  font-size: 12px;
+  color: var(--accent-ink);
+}
+
+.account-note {
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--text-dim);
+}
+
+.account-link {
+  margin-left: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12.5px;
+  color: var(--accent-ink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.account-link:hover {
+  color: var(--accent-ink);
+}
+
+.account-error {
+  font-size: 12.5px;
+  color: var(--red);
+}
+
+.device-code {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--line-strong);
+  background: color-mix(in srgb, var(--shadow-color) 24%, transparent);
+}
+
+.device-code-label {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.device-code-value {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 30px;
+  line-height: 1.2;
+  letter-spacing: 3px;
+  font-weight: 700;
+  color: var(--accent-ink);
+}
+
+.device-code-meta {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 微软登录失败引导卡片（AppID 审批 / AADSTS70002） */
+.ms-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(224, 169, 59, 0.42);
+  background: rgba(224, 169, 59, 0.09);
+}
+
+.ms-guide-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-2);
+}
+
+.ms-guide-text {
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--text-dim);
+}
+
+.device-code .account-link {
+  align-self: flex-start;
+  margin-left: 0;
+  text-align: left;
+  word-break: break-all;
+}

@@ -1,0 +1,332 @@
+/* 联机页：局域网地址列表 / 端口检查 / 樱花穿透 */
+
+.net-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+  color: var(--accent-ink);
+  vertical-align: -3px;
+}
+
+.net-addr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.net-addr-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.net-addr-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.net-addr-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.net-addr-family {
+  font-size: 11px;
+  color: var(--text-faint);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.net-addr-value {
+  margin-left: auto;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-tint);
+  border-radius: 8px;
+  padding: 4px 10px;
+}
+
+.net-inline-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.net-inline-form .field {
+  min-width: 220px;
+}
+
+.net-inline-form .field:has(.input[inputmode="numeric"]) {
+  min-width: 120px;
+}
+
+.net-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+.net-result {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.net-result.ok {
+  color: var(--ok);
+}
+
+.net-result.bad {
+  color: var(--danger);
+}
+
+/* ---------- 联机方式 Tab ---------- */
+
+.net-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.net-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 216px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface-recess-strong);
+  color: var(--text-dim);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.net-tab:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.net-tab.active {
+  border-color: var(--accent-tint);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+}
+
+.net-tab-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.net-tab-hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.net-tab.active .net-tab-hint {
+  color: var(--accent-ink);
+}
+
+.net-head-actions,
+.net-frp-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ---------- 樱花穿透 ---------- */
+
+.net-frp {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.net-frp-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent-2) 32%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+.net-frp-notice svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-2);
+}
+
+.net-frp-notice strong {
+  color: var(--text-strong);
+}
+
+.net-frp-account {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.net-frp-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.net-frp-figure {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.net-frp-figure strong {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.net-frp-sign {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.net-frp-signed {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--ok) 38%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  font-weight: 600;
+}
+
+.net-frp-sign-note {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.net-frp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.net-frp-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.net-frp-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.net-frp-row-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.net-frp-state.is-online {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 36%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.net-frp-state.is-offline {
+  color: var(--text-faint);
+}
+
+.net-frp-row-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.net-frp-port {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.net-frp-row-actions {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.net-frp-row-addr {
+  display: flex;
+  align-items: center;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.net-frp-addr-label {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.net-frp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.net-frp-warn {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 34%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--danger);
+}
+.net-frp-row-addr .net-addr-value {
+  margin-left: 0;
+}

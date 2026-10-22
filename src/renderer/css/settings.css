@@ -1,0 +1,164 @@
+/* 设置页：下载源卡片、表单排版、关于区块 */
+
+/* ---------- 设置 ---------- */
+
+.settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.source-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: rgb(var(--surface-2-rgb) / calc(0.9 * var(--ui-opacity, 1)));
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.source-card:hover {
+  border-color: color-mix(in srgb, var(--text) 24%, transparent);
+}
+
+.source-card.active {
+  border-color: color-mix(in srgb, var(--accent-2) 45%, transparent);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--accent-2) 13%, transparent), color-mix(in srgb, var(--accent) 4%, transparent));
+}
+
+.radio-dot {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--text) 30%, transparent);
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.radio-dot.on {
+  border-color: var(--cream);
+}
+
+.radio-dot.on::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--cream);
+}
+
+.source-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.source-name {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.source-desc {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.latency {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+.latency.ok {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--ok) 36%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+
+.latency.bad {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 36%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.key-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.key-row .input {
+  flex: 1;
+}
+
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.about-grid dt {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.about-grid dd {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.about-path {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-recess);
+}
+
+.about-path dd {
+  margin-top: 0;
+}
+
+.about-path .btn {
+  padding: 4px 9px;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.mono {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.about-note {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.7;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

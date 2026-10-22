@@ -1,0 +1,6 @@
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+ignoredBuiltDependencies:
+  - electron-winstaller
+verifyDepsBeforeRun: false

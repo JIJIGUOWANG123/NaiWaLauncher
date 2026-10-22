@@ -1,0 +1,37 @@
+name: build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
+      - name: electron-builder (unpacked)
+        run: pnpm exec electron-builder --win --dir
+      - name: NSIS installer
+        run: node scripts/build-installer.mjs
+      - name: portable zip
+        shell: powershell
+        run: ./scripts/build-zip.ps1
+      - name: portable single exe
+        run: pnpm exec electron-builder --win portable --x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: naiwa-launcher-windows
+          path: |
+            release/*.exe
+            release/*.zip

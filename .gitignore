@@ -1,0 +1,12 @@
+node_modules/
+backup/
+dist/
+dist-electron/
+release/
+.tools/
+.scratch/
+.minecraft/
+NaiWa/
+*.log
+Thumbs.db
+.DS_Store

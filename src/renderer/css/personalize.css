@@ -1,0 +1,416 @@
+/* ---------- 应用外壳：背景层 + 自绘标题栏 ---------- */
+
+.app-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+.app-shell {
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* 轮播换图时先淡出再淡入（lib/background.ts 的 BG_FADE_MS 与此一致） */
+  transition: opacity 0.32s ease;
+}
+
+.app-bg.is-fading {
+  opacity: 0;
+}
+
+/* 半透明深色蒙版，保证背景图上的文字可读 */
+.app-bg.has-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--bg-image-overlay);
+}
+
+/* 「叠加彩色背景」开启时改用主题色蒙版 */
+html[data-bg-tint="on"] .app-bg.has-image::after {
+  background-color: var(--accent-soft);
+  background-image: var(--bg-image-overlay);
+}
+
+.bg-audio {
+  display: none;
+}
+
+/* ---------- 自绘标题栏（窗口无边框，始终渲染） ---------- */
+
+.titlebar {
+  flex: 0 0 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 6px 0 14px;
+  /* 精简模式：主题渐变（滑稽彩 / 欧皇彩 / 纯色自定义主题下两个色标同色） */
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  position: relative;
+  z-index: 3;
+  user-select: none;
+  -webkit-app-region: drag;
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--shadow-color) 32%, transparent);
+}
+
+/* 遮罩层与图片层在内容之下 */
+.titlebar > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 图片模式：当前背景图做条底 + 半透明遮罩 + 主题色描边 */
+.titlebar-has-image {
+  background-size: cover;
+  background-position: center;
+  /* 条底是任意图片，文字统一用白色 + 阴影，遮罩保证对比度 */
+  color: #fff;
+  border-bottom: 2px solid var(--accent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 2px 12px color-mix(in srgb, var(--shadow-color) 32%, transparent);
+}
+
+.titlebar-has-image::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  /* 半透明遮罩：压暗背景图但保留可见纹理，白色文字才有足够对比度 */
+  background: rgba(8, 10, 14, 0.44);
+}
+
+.titlebar-has-image .titlebar-text,
+.titlebar-has-image .titlebar-btn {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+.titlebar-has-image .titlebar-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.titlebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 30%, transparent);
+}
+
+.titlebar-logo {
+  border-radius: 6px;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--shadow-color) 30%, transparent);
+}
+
+.titlebar-brand strong {
+  font-size: 12.5px;
+  letter-spacing: 0.5px;
+}
+
+/* 自定义标题文字可能很长：单行省略，不挤压右侧窗口按钮 */
+.titlebar-text {
+  display: inline-block;
+  max-width: 46vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar-brand span {
+  font-size: 11px;
+  opacity: 0.84;
+  letter-spacing: 0.4px;
+}
+
+.titlebar-drag {
+  flex: 1 1 auto;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
+.titlebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-btn {
+  width: 36px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.14s ease;
+}
+
+.titlebar-btn:hover {
+  background: color-mix(in srgb, var(--shadow-color) 20%, transparent);
+}
+
+.titlebar-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--text) 72%, transparent);
+  outline-offset: -2px;
+}
+
+.titlebar-close:hover {
+  background: var(--danger);
+}
+
+/* ---------- 个性化页 ---------- */
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.theme-dot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 4px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: var(--surface-recess);
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease, transform 0.14s ease;
+}
+
+.theme-dot:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.theme-dot.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.theme-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--shadow-color) 22%, transparent), 0 2px 6px color-mix(in srgb, var(--shadow-color) 32%, transparent);
+}
+
+.theme-dot.active .theme-swatch {
+  box-shadow: 0 0 0 2px var(--accent), 0 2px 8px color-mix(in srgb, var(--shadow-color) 42%, transparent);
+}
+
+.theme-name {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.theme-dot.active .theme-name {
+  color: var(--text);
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.color-row .btn {
+  margin-left: auto;
+}
+
+/* 渐变配色编辑器：预览条直接用 --accent-grad，拖动取色器时实时变化 */
+.grad-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.grad-preview {
+  height: 22px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--surface) 45%, transparent);
+}
+
+.color-input {
+  width: 46px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.color-input::-webkit-color-swatch-wrapper {
+  padding: 3px;
+}
+
+.color-input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 5px;
+}
+
+.color-value {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+.media-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.media-preview img {
+  width: 96px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in srgb, var(--shadow-color) 30%, transparent);
+}
+
+.media-preview-name {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.media-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 界面图标：正方形缩略图 + 可选文件网格 */
+.icon-preview img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.input-with-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-with-action .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.input-with-action .btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+.icon-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.icon-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-recess);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.icon-choice:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.icon-choice.active {
+  color: var(--text);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.icon-choice img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--shadow-color) 30%, transparent);
+}
+
+.icon-filename {
+  font-size: 12px;
+  max-width: 168px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.music-row .slider {
+  flex: 1;
+}
+
+.titlebar-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.media-empty {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--line-strong);
+  background: var(--surface-recess);
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.interval-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.interval-input {
+  width: 108px;
+}
+
+.interval-unit {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}

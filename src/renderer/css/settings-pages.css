@@ -1,0 +1,204 @@
+/* 启动 / 其它 设置页：折叠面板、内存条、模板预览、路径行 */
+
+.collapse-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.collapse-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 15px 18px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.collapse-head .panel-count {
+  margin-left: auto;
+}
+
+.collapse-head:hover .panel-title {
+  color: var(--cream);
+}
+
+.collapse-icon {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.collapse-icon.open {
+  transform: rotate(180deg);
+  color: var(--cream);
+}
+
+.collapse-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.ext-note {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.7;
+}
+
+.ext-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ext-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 14px;
+}
+
+.ext-path {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-recess);
+}
+
+.ext-path-label {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.ext-path .btn {
+  padding: 4px 9px;
+  font-size: 12px;
+  gap: 4px;
+}
+
+/* ---------- 内存分配 ---------- */
+
+.mem-head-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.mem-head-row .field {
+  flex: 1 1 260px;
+}
+
+.mem-hint {
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.7;
+}
+
+.mem-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.mem-bar-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.mem-bar-value {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.mem-bar-head .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bar-track {
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--grad-warm);
+  transition: width 0.25s ease;
+}
+
+.bar-fill.alt {
+  background: linear-gradient(135deg, var(--ok) 0%, var(--ok-2) 100%);
+}
+
+/* ---------- 窗口大小 / 文件名模板 ---------- */
+
+.window-size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.window-size-row .select-wrap {
+  flex: 1 1 180px;
+}
+
+.window-size-row .input[type="number"] {
+  width: 90px;
+}
+
+.window-size-x {
+  color: var(--text-faint);
+}
+
+.template-preview {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in srgb, var(--accent-2) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 7%, transparent);
+  color: var(--cream);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.checkline-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+}
+
+.checkline-stack .field-hint {
+  padding-left: 22px;
+  margin-bottom: 6px;
+}
+
+.slider input[type="range"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

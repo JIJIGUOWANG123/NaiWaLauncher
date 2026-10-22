@@ -1,0 +1,1003 @@
+/* 模组页：筛选侧栏、结果卡片、抽屉文件列表 */
+
+/* ---------- 一级标签（模组 / 光影 / 资源包 / 整合包 / 地图） ---------- */
+
+.kind-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-glass);
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.kind-tab {
+  flex: 0 0 auto;
+  padding: 7px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-dim);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.kind-tab:hover {
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.kind-tab.active {
+  color: var(--on-accent);
+  background: var(--accent-grad);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+/* 地图标签顶部的来源说明 */
+.kind-notice {
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ---------- 卡片标题行 + 类型徽标 ---------- */
+
+.mod-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mod-title-row .mod-title {
+  min-width: 0;
+}
+
+.kind-badge {
+  flex: 0 0 auto;
+  color: var(--accent-ink);
+  border-color: var(--accent-tint);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+/* ---------- 麦块社区地图卡片 ---------- */
+
+.map-grid {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.map-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background-color: rgb(var(--surface-rgb) / calc(0.94 * var(--ui-opacity, 1)));
+  background-image: linear-gradient(168deg, color-mix(in srgb, var(--text) 2%, transparent), color-mix(in srgb, var(--shadow-color) 6%, transparent));
+}
+
+.map-cover {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--surface-recess);
+  display: block;
+}
+
+/* 没有封面时用首字色块占位，保持卡片高度一致。 */
+.map-cover-fallback {
+  display: grid;
+  place-items: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--text) 8%, transparent));
+}
+
+.map-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 13px 13px;
+  flex: 1;
+}
+
+.map-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.map-title {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.map-badge-bad {
+  flex: 0 0 auto;
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  font-weight: 600;
+}
+
+.map-desc {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.map-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.map-versions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.map-versions-label {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.map-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.map-login-hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+/* ---------- 模组 ---------- */
+
+.mods-layout {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.mods-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--surface-glass), var(--surface-glass));
+  position: sticky;
+  top: 0;
+}
+
+.aside-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aside-hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.mods-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mod-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: 13px;
+}
+
+.mod-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background-color: rgb(var(--surface-rgb) / calc(0.94 * var(--ui-opacity, 1)));
+  background-image: linear-gradient(168deg, color-mix(in srgb, var(--text) 2%, transparent), color-mix(in srgb, var(--shadow-color) 6%, transparent));
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.mod-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent-2) 30%, transparent);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--shadow-color) 32%, transparent);
+}
+
+.mod-card-top {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.mod-icon {
+  border-radius: 11px;
+  object-fit: cover;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.mod-titles {
+  min-width: 0;
+}
+
+.mod-title {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 有中文译名时，英文原名降为副标：字号更小、颜色更淡，保持标题层级。 */
+.mod-subtitle {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
+.mod-author {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-desc {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 40px;
+}
+
+.mod-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.mod-downloads {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.mod-categories {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+
+/* ---------- 资源页：左侧筛选栏 / 顶部工具条 / 资源卡片 ---------- */
+
+/* 数据包标签暂时禁用：保留位置与提示，不可点。 */
+.kind-tab.is-disabled,
+.kind-tab:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.kind-tab.is-disabled:hover,
+.kind-tab:disabled:hover {
+  color: var(--text-dim);
+  background: transparent;
+}
+
+.res-aside {
+  gap: 14px;
+}
+
+.cat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 218px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.cat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.cat-item:hover {
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.cat-item.active {
+  color: var(--accent-ink);
+  border-color: var(--accent-tint);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.cat-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-count {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.res-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.res-toolbar .search-wrap {
+  flex: 1 1 240px;
+  min-width: 200px;
+}
+
+.res-count {
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.res-sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.res-sort-label {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.res-sort .select-wrap {
+  width: 118px;
+}
+
+.res-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.res-chips-label {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+/* 已选分类 chip：点一下即取消。 */
+.chip-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--accent-ink);
+  border-color: var(--accent-tint);
+  background: var(--accent-soft);
+}
+
+.res-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(336px, 1fr));
+  gap: 12px;
+}
+
+.res-card {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background-color: rgb(var(--surface-rgb) / calc(0.94 * var(--ui-opacity, 1)));
+  background-image: linear-gradient(168deg, color-mix(in srgb, var(--text) 2%, transparent), color-mix(in srgb, var(--shadow-color) 6%, transparent));
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.res-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent-2) 30%, transparent);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--shadow-color) 32%, transparent);
+}
+
+.res-card-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 0;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+}
+
+.res-icon {
+  flex: 0 0 auto;
+  border-radius: 12px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.res-card-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.res-card-headline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.res-card-title {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.res-card-orig {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.res-card-desc {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.res-card-tags {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.res-card-stats {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.res-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 来源徽标：三家各自一个色系，扫一眼就知道文件从哪来。 */
+.res-source {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.res-source-modrinth {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--ok) 32%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+
+.res-source-curseforge {
+  color: var(--accent-ink);
+  border-color: var(--accent-tint);
+  background: var(--accent-soft);
+}
+
+.res-source-minekuai {
+  color: var(--info);
+  border-color: color-mix(in srgb, var(--info) 32%, transparent);
+  background: color-mix(in srgb, var(--info) 10%, transparent);
+}
+
+.res-card-side {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.fav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.fav-btn:hover {
+  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.fav-btn.on {
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+}
+
+/* 卡片上的【选择实例】下拉：绝对定位在按钮下方，点空白处关闭（逻辑在页面里）。 */
+.res-picker {
+  position: relative;
+}
+
+.res-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 236px;
+  padding: 6px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background-color: rgb(var(--surface-rgb) / 0.98);
+  box-shadow: 0 18px 36px color-mix(in srgb, var(--shadow-color) 46%, transparent);
+}
+
+.res-menu-title {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.res-menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.res-menu-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.res-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.res-menu-item.is-link {
+  color: var(--accent-ink);
+}
+
+.res-menu-name {
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.res-menu-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.res-create {
+  font-size: 11.5px;
+}
+
+.drawer-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+.hint-inline {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.drawer-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-recess);
+}
+
+.file-row.is-match {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  background: color-mix(in srgb, var(--ok) 8%, transparent);
+}
+
+.file-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.file-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.file-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.file-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+@media (max-width: 1080px) {
+  .mods-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .mods-aside {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .aside-block {
+    flex: 1 1 220px;
+  }
+}
+
+/* ---------- 模组详情面板（右侧抽屉） ---------- */
+
+.mod-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mod-detail-hero {
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-recess);
+}
+
+.mod-detail-icon {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.mod-detail-hero-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mod-detail-title {
+  font-size: 15.5px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+/* 详情标题用中文译名时，英文原名以更小字号跟一行。 */
+.mod-detail-title-orig {
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
+.mod-detail-author {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.mod-detail-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.mod-detail-stats b {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.mod-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-glass);
+}
+
+.mod-detail-summary {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+/* 纯文本渲染：保留换行与空白，不解析 HTML。 */
+.mod-detail-body {
+  max-height: 320px;
+  overflow-y: auto;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mod-detail-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mod-detail-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mod-detail-tag-label {
+  min-width: 56px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.mod-detail-more {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.mod-gallery {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.mod-gallery-shot {
+  flex: 0 0 auto;
+  width: 176px;
+  height: 99px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  object-fit: cover;
+  background: var(--surface-recess);
+}
+
+.mod-detail-foot-hint {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.mod-detail-foot-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mod-detail-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mod-detail-hero-skeleton {
+  height: 92px;
+}
+
+/* ---------- 安装前的前置确认框 ---------- */
+
+.dep-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dep-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-recess);
+}
+
+.dep-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dep-name {
+  font-size: 13px;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.dep-file {
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
+/* 已安装 = 绿色，将一并安装 = 黄色（跟随主题 accent）。 */
+.dep-badge-ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 36%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.dep-badge-missing {
+  color: var(--accent-ink);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.dep-hint {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.6;
+}
+
+@media (max-width: 780px) {
+  .mod-gallery-shot {
+    width: 140px;
+    height: 79px;
+  }
+}

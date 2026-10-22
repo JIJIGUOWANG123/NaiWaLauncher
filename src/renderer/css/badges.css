@@ -1,0 +1,99 @@
+/* 加载器 / 版本类型 / 徽标 / 胶囊标签 */
+
+/* ---------- 徽标 ---------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.loader-badge {
+  font-weight: 600;
+}
+
+.loader-vanilla { color: var(--text-dim); border-color: color-mix(in srgb, var(--text-strong) 35%, transparent); background: color-mix(in srgb, var(--text-strong) 12%, transparent); }
+.loader-fabric { color: var(--accent-ink); border-color: var(--accent-tint); background: var(--accent-soft); }
+.loader-forge { color: var(--accent-ink); border-color: var(--accent-tint); background: var(--accent-soft); }
+.loader-neoforge { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 36%, transparent); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.loader-quilt { color: var(--info); border-color: color-mix(in srgb, var(--info) 38%, transparent); background: color-mix(in srgb, var(--info) 12%, transparent); }
+.loader-liteloader { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 44%, transparent); background: color-mix(in srgb, var(--accent-2) 10%, transparent); }
+
+.type-release { color: var(--green); border-color: color-mix(in srgb, var(--ok) 34%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.type-snapshot { color: var(--accent-ink); border-color: var(--accent-tint); background: var(--accent-soft); }
+.type-beta { color: var(--accent-ink); border-color: var(--accent-tint); background: var(--accent-soft); }
+.type-alpha { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 34%, transparent); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.type-old_beta,
+.type-old_alpha { color: var(--text-faint); }
+
+.lts-tag {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  font-weight: 600;
+}
+
+.match-tag {
+  color: var(--on-accent);
+  background: var(--green);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.muted-tag {
+  color: var(--text-faint);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.chip-sm {
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  border: 1px solid var(--line);
+}
+
+.pill-live {
+  color: var(--cream);
+  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-2) 30%, transparent);
+}
+
+.pill-done {
+  color: var(--green);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+}
+
+.muted-text {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.inline-error {
+  color: var(--danger);
+  font-size: 12.5px;
+}
