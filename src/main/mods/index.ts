@@ -620,13 +620,15 @@ async function probeUpdates(
 
 export async function installed(instanceId: string, kind: ModContentKind = "mod"): Promise<InstalledModInfo[]> {
   await requireInstance(instanceId);
-  const mods = await scanInstalledContent(instanceId, kind);
+  // 列表只要名字/大小/可更新标记：不算 sha1（读满整个目录字节是这里最贵的部分），走轻量扫描 + 缓存
+  const mods = await scanInstalledContent(instanceId, kind, { hash: false });
   return mods.map(toPublic);
 }
 
 export async function checkUpdates(instanceId: string, kind: ModContentKind = "mod"): Promise<InstalledModInfo[]> {
   const instance = await requireInstance(instanceId);
-  const mods = await scanInstalledContent(instanceId, kind);
+  // 反查更新必须按内容哈希问远端：这里一定要算 sha1，不能走轻量扫描
+  const mods = await scanInstalledContent(instanceId, kind, { hash: true });
   const probes = await probeUpdates(instance, mods, kind);
 
   return mods.map((mod) => {
@@ -666,7 +668,7 @@ export async function update(
 ): Promise<{ fileName: string; path: string }> {
   const instance = await requireInstance(instanceId);
   const target = safeFileName(fileName);
-  const mods = await scanInstalledContent(instanceId, kind);
+  const mods = await scanInstalledContent(instanceId, kind, { hash: true });
   const mod = mods.find((item) => item.fileName === target);
   if (!mod) throw new Error(`${KIND_NOUN[kind]}文件不存在：${target}`);
 

@@ -2,6 +2,8 @@ import { BrowserWindow } from "electron";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { perfMark } from "./core/perf";
+
 const SPLASH_WIDTH = 460;
 const SPLASH_HEIGHT = 460;
 
@@ -31,6 +33,21 @@ function splashHtml(logoDataUrl: string): string {
     <div class="en">NaiWa Launcher</div>
     <div class="bar"><i></i></div>
   </div></body></html>`;
+}
+
+/**
+ * 启动画面的最小可见时长：容器入场 .45s + logo 动画 .75s + 约 .25s 停留。
+ * 低于这个值动画会被切断，观感变差；高于这个值就是在无谓等待。
+ */
+export const SPLASH_MIN_VISIBLE_MS = 1250;
+
+/**
+ * 交棒前还要等多久（毫秒）。原先固定等 1500ms，与启动画面自己出现多久无关，恒定多付一笔；
+ * 这里按「启动画面从创建到现在过了多久」补差值：窗口就绪得越慢就等得越少，
+ * 但总可见时长永远不低于 SPLASH_MIN_VISIBLE_MS。
+ */
+export function splashHoldRemaining(startedAt: number): number {
+  return Math.max(0, SPLASH_MIN_VISIBLE_MS - (Date.now() - startedAt));
 }
 
 export function createSplash(logoPath: string): BrowserWindow {
@@ -76,6 +93,8 @@ export async function fadeInWindow(win: BrowserWindow, durationMs = 260): Promis
   if (win.isDestroyed()) return;
   win.setOpacity(0);
   win.show();
+  // 用户真正看到界面的时刻（ready-to-show 之后还要等 splash 补时 + 淡入）
+  perfMark("window-shown");
   const steps = 8;
   for (let i = 1; i <= steps; i += 1) {
     if (win.isDestroyed()) return;

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppProvider, useApp } from "./lib/store";
 import { TaskProvider } from "./lib/tasks";
 import { ToastProvider } from "./components/Toast";
@@ -23,6 +23,7 @@ import { backgroundUrl, musicUrl } from "./lib/media";
 import { useBackgroundPlayback } from "./lib/background";
 import { attachAudio, pauseMusic, playMusic, setMusicVolume } from "./lib/music";
 import { playStartupSound, stopStartupSound } from "./lib/startupSound";
+import { afterFirstFrame, perfMark, perfTime } from "./lib/perf";
 import { applyTheme } from "./lib/theme";
 import { useAsync } from "./lib/useAsync";
 
@@ -41,7 +42,12 @@ export function App() {
 function Shell() {
   const { page, booted, settings, iconUrl } = useApp();
   // 背景层与标题栏图片都要用 dirs，外壳自己拉一次媒体列表。
-  const media = useAsync(() => api.media.list(), []);
+  // 它只影响背景图/背景音乐这类装饰，延后到首帧之后再要，别和 boot 的 IPC 抢时间。
+  const [mediaReady, setMediaReady] = useState(false);
+  useEffect(() => {
+    afterFirstFrame(() => setMediaReady(true));
+  }, []);
+  const media = useAsync(async () => (mediaReady ? perfTime("media-list", api.media.list()) : null), [mediaReady]);
   // 背景图播放（单张 / 顺序轮播 / 随机轮播）由设置驱动，改间隔即时生效。
   const playback = useBackgroundPlayback(
     media.data,
@@ -54,6 +60,14 @@ function Shell() {
   const musicName = settings?.backgroundMusic ?? "";
   const musicSource = musicUrl(media.data, musicName);
   const volume = settings?.musicVolume ?? 0.5;
+
+  // 首屏：booted 之后这一次 commit 就是用户看到的第一帧主界面
+  useEffect(() => {
+    if (!booted) return;
+    perfMark("first-commit");
+    const frame = window.requestAnimationFrame(() => perfMark("first-paint"));
+    return () => window.cancelAnimationFrame(frame);
+  }, [booted]);
 
   useEffect(() => {
     if (settings) applyTheme(settings);

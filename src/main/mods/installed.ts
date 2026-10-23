@@ -6,6 +6,7 @@ import type { ModContentKind } from "../../shared/types";
 import AdmZip from "adm-zip";
 import type { InstalledModInfo } from "../../shared/types";
 import { logger } from "../core/logger";
+import { perfSpan } from "../core/perf";
 import { getPaths, instanceDir, instanceModsDir } from "../core/paths";
 import { getSettings } from "../core/settings";
 import { messageOf } from "./provider";
@@ -15,6 +16,79 @@ const log = logger("mods");
 /** 扫描结果带绝对路径：checkUpdates 要按路径重算指纹，渲染进程看不到它。 */
 export interface ScannedMod extends InstalledModInfo {
   path: string;
+}
+
+/**
+ * 扫描选项。
+ * hash=false 时不读文件内容算 sha1：列表展示与「判重」都只用名字/大小/元数据，
+ * sha1 唯一的用途是按哈希反查更新（checkUpdates / update）。读满整个目录的字节是这类扫描最贵的部分。
+ */
+export interface ScanOptions {
+  /** 是否计算 sha1，默认 true（保守：只有明确说不要才不算）。 */
+  hash?: boolean;
+}
+
+interface CachedScan {
+  signature: string;
+  items: ScannedMod[];
+}
+
+/**
+ * 进程内扫描缓存：目录签名（文件名 + 大小 + mtime）没变就直接复用上一次的结果。
+ * 安装/删除/手动丢文件都会改签名，于是自然失效；这比让每个调用方记得来失效更不容易漏。
+ */
+const scanCache = new Map<string, CachedScan>();
+
+/** 显式失效（实例被删除等）时清掉对应缓存；不传则全清。 */
+export function invalidateScanCache(instanceId?: string): void {
+  if (!instanceId) {
+    scanCache.clear();
+    return;
+  }
+  const prefix = `${instanceId}\u0000`;
+  for (const key of [...scanCache.keys()]) {
+    if (key.startsWith(prefix)) scanCache.delete(key);
+  }
+}
+
+/** 缓存里的结果复印一份给调用方：外面改字段不该污染下一次调用。 */
+function copyItems(items: ScannedMod[]): ScannedMod[] {
+  return items.map((item) => ({ ...item }));
+}
+
+interface DirFile {
+  name: string;
+  path: string;
+  sizeBytes: number;
+}
+
+/**
+ * 列目录 + 每个目标文件的 stat。签名用「名字 + 大小 + mtime」拼成，
+ * 只 stat 不读内容，比逐个算 sha1 便宜两个数量级。
+ */
+async function inspectDir(dir: string, pattern: RegExp): Promise<{ signature: string; files: DirFile[] }> {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return { signature: "", files: [] };
+  }
+  const files: DirFile[] = [];
+  const parts: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !pattern.test(entry.name)) continue;
+    const path = join(dir, entry.name);
+    try {
+      const info = await stat(path);
+      files.push({ name: entry.name, path, sizeBytes: info.size });
+      parts.push(`${entry.name}:${info.size}:${Math.round(info.mtimeMs)}`);
+    } catch (err) {
+      log.warn(`跳过无法读取的文件：${entry.name} · ${messageOf(err)}`);
+    }
+  }
+  files.sort((a, b) => a.name.localeCompare(b.name));
+  parts.sort();
+  return { signature: parts.join("|"), files };
 }
 
 /** 流式哈希：模组 jar 可能几十 MB，不能整体读进内存。 */
@@ -170,39 +244,47 @@ export function contentDirOf(instance: { id: string }, sub: string): string {
   return join(instanceDir(instance.id), sub);
 }
 
-/** 扫描实例 mods 目录：只看 .jar（.bak 是备份，不是已装模组）。 */
-export async function scanInstalledMods(instanceId: string): Promise<ScannedMod[]> {
+/**
+ * 扫描实例 mods 目录：只看 .jar（.bak 是备份，不是已装模组）。
+ * hash=false 时不读内容（不算 sha1），并且命中目录签名缓存时连元数据都不用重新解析。
+ */
+export async function scanInstalledMods(instanceId: string, options: ScanOptions = {}): Promise<ScannedMod[]> {
+  return perfSpan("scan-mod", () => scanModsOnDisk(instanceId, options));
+}
+
+async function scanModsOnDisk(instanceId: string, options: ScanOptions): Promise<ScannedMod[]> {
+  const wantHash = options.hash ?? true;
   const dir = modsDirForInstance({ id: instanceId });
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
+  const { signature, files } = await inspectDir(dir, /\.jar$/i);
+  if (files.length === 0) return [];
+
+  const cacheKey = `${instanceId}\u0000mod`;
+  if (!wantHash) {
+    const cached = scanCache.get(cacheKey);
+    if (cached && cached.signature === signature) return copyItems(cached.items);
   }
 
   const mods: ScannedMod[] = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || !/\.jar$/i.test(entry.name)) continue;
-    const path = join(dir, entry.name);
+  for (const file of files) {
     try {
-      const sizeBytes = (await stat(path)).size;
-      const sha1 = await sha1OfFile(path);
-      const meta = await readModMetadata(path);
+      const sha1 = wantHash ? await sha1OfFile(file.path) : "";
+      const meta = await readModMetadata(file.path);
       mods.push({
-        path,
-        fileName: entry.name,
-        sizeBytes,
+        path: file.path,
+        fileName: file.name,
+        sizeBytes: file.sizeBytes,
         sha1,
         modId: meta.modId,
-        name: meta.name ?? fallbackName(entry.name),
+        name: meta.name ?? fallbackName(file.name),
         version: meta.version,
         update: null,
       });
     } catch (err) {
-      log.warn(`跳过无法读取的模组文件：${entry.name} · ${messageOf(err)}`);
+      log.warn(`跳过无法读取的模组文件：${file.name} · ${messageOf(err)}`);
     }
   }
   mods.sort((a, b) => (a.name ?? a.fileName).localeCompare(b.name ?? b.fileName) || a.fileName.localeCompare(b.fileName));
+  if (!wantHash) scanCache.set(cacheKey, { signature, items: copyItems(mods) });
   return mods;
 }
 
@@ -258,40 +340,49 @@ function readPackDescription(path: string): string | undefined {
  * 扫描实例里的某类内容：mod 复用 mods 目录口径，光影/资源包只看对应目录下的 .zip。
  * 名称回退文件名，说明取 pack.mcmeta；目录不存在即视为没有。
  */
-export async function scanInstalledContent(instanceId: string, kind: ModContentKind = "mod"): Promise<ScannedMod[]> {
-  if (kind === "mod") return scanInstalledMods(instanceId);
+export async function scanInstalledContent(
+  instanceId: string,
+  kind: ModContentKind = "mod",
+  options: ScanOptions = {},
+): Promise<ScannedMod[]> {
+  if (kind === "mod") return scanInstalledMods(instanceId, options);
+  return perfSpan(`scan-${kind}`, () => scanPacksOnDisk(instanceId, kind, options));
+}
+
+async function scanPacksOnDisk(instanceId: string, kind: ModContentKind, options: ScanOptions): Promise<ScannedMod[]> {
   const sub = PACK_SUBDIR[kind];
   const noun = PACK_NOUN[kind];
   // 整合包/地图没有「已装内容」这个概念：给空列表，不去猜一个目录
   if (!sub || !noun) return [];
 
+  const wantHash = options.hash ?? true;
   const dir = contentDirOf({ id: instanceId }, sub);
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
+  const { signature, files } = await inspectDir(dir, /\.zip$/i);
+  if (files.length === 0) return [];
+
+  const cacheKey = `${instanceId}\u0000${kind}`;
+  if (!wantHash) {
+    const cached = scanCache.get(cacheKey);
+    if (cached && cached.signature === signature) return copyItems(cached.items);
   }
 
   const packs: ScannedMod[] = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || !/\.zip$/i.test(entry.name)) continue; // .bak 备份与目录都不算已装
-    const path = join(dir, entry.name);
+  for (const file of files) {
     try {
-      const sizeBytes = (await stat(path)).size;
       packs.push({
-        path,
-        fileName: entry.name,
-        sizeBytes,
-        sha1: await sha1OfFile(path),
-        name: fallbackName(entry.name),
-        description: readPackDescription(path),
+        path: file.path,
+        fileName: file.name,
+        sizeBytes: file.sizeBytes,
+        sha1: wantHash ? await sha1OfFile(file.path) : "",
+        name: fallbackName(file.name),
+        description: readPackDescription(file.path),
         update: null,
       });
     } catch (err) {
-      log.warn(`跳过无法读取的${noun}文件：${entry.name} · ${messageOf(err)}`);
+      log.warn(`跳过无法读取的${noun}文件：${file.name} · ${messageOf(err)}`);
     }
   }
   packs.sort((a, b) => (a.name ?? a.fileName).localeCompare(b.name ?? b.fileName) || a.fileName.localeCompare(b.fileName));
+  if (!wantHash) scanCache.set(cacheKey, { signature, items: copyItems(packs) });
   return packs;
 }

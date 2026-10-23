@@ -219,7 +219,20 @@ function touch(job: DownloadJob, patch: Partial<DownloadJob>): void {
 }
 
 /** 读盘；把上次被强行关闭时残留的 running 记录改判为 interrupted。 */
-export async function load(): Promise<DownloadJob[]> {
+/** 读盘 + 修复的 promise：启动时跑到后台，读一次就够，界面问起来直接等它。 */
+let loadPromise: Promise<DownloadJob[]> | null = null;
+
+/** 记录就绪：还没开始读就先读，读过的直接复用同一次结果（改判中断只做一次）。 */
+export function ready(): Promise<DownloadJob[]> {
+  return loadPromise ?? load();
+}
+
+export function load(): Promise<DownloadJob[]> {
+  if (!loadPromise) loadPromise = loadFromDisk();
+  return loadPromise;
+}
+
+async function loadFromDisk(): Promise<DownloadJob[]> {
   loaded = true;
   let text: string | null = null;
   try {

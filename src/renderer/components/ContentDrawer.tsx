@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InstalledModInfo, InstanceMeta } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatBytes } from "../lib/format";
+import { perfNow, perfSince } from "../lib/perf";
 import { useApp } from "../lib/store";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "./Toast";
@@ -68,6 +69,7 @@ function PackSection({
 
   const load = useCallback(async () => {
     if (!instanceId) return;
+    const from = perfNow();
     setLoading(true);
     try {
       setItems(await api.mods.installed(instanceId, kind));
@@ -76,17 +78,27 @@ function PackSection({
       setError(errorMessage(err));
     } finally {
       setLoading(false);
+      perfSince(`content-tab-load-${kind}`, from);
     }
   }, [instanceId, kind]);
 
+  /**
+   * 首次切到本分区才读盘：三个分区一起打开就并发扫三份目录，而用户通常只看模组那一个。
+   * 只影响「第一次」，读过之后切来切去都不会再读（既有契约：切换不重新加载）。
+   */
+  const [activated, setActivated] = useState(false);
+  useEffect(() => {
+    if (!hidden) setActivated(true);
+  }, [hidden]);
+
   // 换实例或重新打开时先清空，否则会短暂显示上一个实例的列表；搜索词也一并清掉，免得新实例被旧关键词过滤成空。
   useEffect(() => {
-    if (!open || !instanceId) return;
+    if (!open || !instanceId || !activated) return;
     setItems(null);
     setError(null);
     setSearch("");
     void load();
-  }, [open, instanceId, load]);
+  }, [open, instanceId, activated, load]);
 
   // 分段控件上的条数来自本分区自己的数据；还没加载完时上报 null（不显示 0）。
   useEffect(() => {
@@ -343,11 +355,19 @@ export function ContentDrawer({
 
   useEffect(() => {
     if (!open || !instanceId) return;
+    const from = perfNow();
     setMods(null);
     setModsError(null);
     setModSearch("");
-    void loadMods();
+    void loadMods().then(() => perfSince("content-drawer-open", from));
   }, [open, instanceId, loadMods]);
+
+  // 切换分段：测「点到下一帧」的耗时；是否重新读盘由各分区自己决定
+  const switchTab = useCallback((next: ContentTab) => {
+    const from = perfNow();
+    setContentTab(next);
+    window.requestAnimationFrame(() => perfSince(`content-tab-switch-${next}`, from));
+  }, []);
 
   const modQuery = useMemo(() => normalizeSearch(modSearch), [modSearch]);
   // 搜索只决定展示哪几行：mods 仍是全量数据，删除/刷新后按最新列表重新过滤。
@@ -424,7 +444,7 @@ export function ContentDrawer({
                 aria-checked={active}
                 className={`source-card content-tab ${active ? "active" : ""}`.trim()}
                 data-content-tab={tab.value}
-                onClick={() => setContentTab(tab.value)}
+                onClick={() => switchTab(tab.value)}
               >
                 <span className={`radio-dot ${active ? "on" : ""}`} aria-hidden="true" />
                 <span className="source-name">{count === null ? tab.label : `${tab.label} ${count}`}</span>

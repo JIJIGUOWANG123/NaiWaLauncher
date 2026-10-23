@@ -208,7 +208,12 @@ function persist(next: Settings): Promise<void> {
   return run;
 }
 
-export async function loadSettings(): Promise<Settings> {
+/** 读盘的 promise：启动链路里多处要设置，共享同一次读盘 + 同一份校验结果。 */
+let loadPromise: Promise<Settings> | null = null;
+/** 缓存对应的设置文件路径：换了根目录（测试/便携切换）必须重新读。 */
+let loadFor: string | null = null;
+
+async function readSettings(): Promise<Settings> {
   loaded = true;
   const base = defaults();
   let text: string;
@@ -219,7 +224,9 @@ export async function loadSettings(): Promise<Settings> {
     return cached;
   }
   try {
-    cached = normalize(JSON.parse(text), base);
+    // 编辑器/PowerShell 写出的 json 可能带 UTF-8 BOM，JSON.parse 会直接抛错并让整份设置回落默认值，
+    // 所以先摘掉 BOM 再解析（否则用户改过的设置会被静默重置）。
+    cached = normalize(JSON.parse(text.replace(/^\uFEFF/, "")), base);
   } catch {
     log.warn("设置文件损坏，已回退到默认值");
     cached = base;
@@ -228,6 +235,26 @@ export async function loadSettings(): Promise<Settings> {
   if (cached.deeplApiKey) registerSecret(cached.deeplApiKey);
   if (cached.natfrpToken) registerSecret(cached.natfrpToken);
   return cached;
+}
+
+/**
+ * 读设置。同一份设置文件只读一次盘：main.ts 在 whenReady 里要它决定是否显示启动画面，
+ * bootstrap() 里又要它决定下载源，两次都读盘等于把同一个 json 解析两遍（还重复注册敏感值）。
+ */
+export async function loadSettings(): Promise<Settings> {
+  const file = getPaths().settingsFile;
+  if (loadPromise && loadFor === file) return loadPromise;
+  loadFor = file;
+  const run = readSettings();
+  loadPromise = run;
+  // 读失败也要清掉缓存，否则后续重试永远拿到同一个失败的 promise
+  run.catch(() => {
+    if (loadPromise === run) {
+      loadPromise = null;
+      loadFor = null;
+    }
+  });
+  return run;
 }
 
 export function getSettings(): Settings {

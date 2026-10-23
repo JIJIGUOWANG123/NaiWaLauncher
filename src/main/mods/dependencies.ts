@@ -7,6 +7,7 @@ import type {
   InstalledContentRef, InstanceMeta, ModContentKind, ModDependency, ModFileInfo, ModProviderId,
 } from "../../shared/types";
 import { logger } from "../core/logger";
+import { perfSpan } from "../core/perf";
 import { getPaths } from "../core/paths";
 import { contentDirForInstance, downloadModFile, safeFileName } from "./install";
 import { modsDirForInstance, readModMetadata, scanInstalledContent, type ScannedMod } from "./installed";
@@ -450,13 +451,17 @@ const SOURCE_RANK: Record<NonNullable<InstalledContentRef["source"]>, number> = 
  * （逐个 jar 解压读元数据是真实 IO 成本，一次调用里每个文件只解析一次）。
  */
 export async function listInstalledContent(instanceId: string): Promise<InstalledContentRef[]> {
+  return perfSpan("installed-content", () => listInstalledContentOnDisk(instanceId));
+}
+
+async function listInstalledContentOnDisk(instanceId: string): Promise<InstalledContentRef[]> {
   const records = (await readInstallMap())[instanceId] ?? {};
 
-  // kind → fileName → 扫描结果
+  // kind → fileName → 扫描结果。判重只比文件名/元数据，不需要 sha1：走轻量扫描（+ 目录签名缓存）
   const scanned = new Map<ModContentKind, Map<string, ScannedMod>>();
   for (const kind of SCAN_KINDS) {
     const byFile = new Map<string, ScannedMod>();
-    for (const item of await scanInstalledContent(instanceId, kind)) byFile.set(item.fileName, item);
+    for (const item of await scanInstalledContent(instanceId, kind, { hash: false })) byFile.set(item.fileName, item);
     scanned.set(kind, byFile);
   }
 

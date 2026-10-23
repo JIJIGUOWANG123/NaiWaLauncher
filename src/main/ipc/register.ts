@@ -28,7 +28,7 @@ import { listMapEntries } from "../mods/minekuai";
 import { checkUpdates, getModDependencies, getModDetail, installMod, installed, listInstalledContent, listInstalledMods, installModpack, listCategories, listFilterOptions, listModFiles, remove as removeMod, searchMods, update as updateMod } from "../mods/index";
 import {
   cancel as cancelDownloadJob, clearFinished as clearFinishedDownloads, hintNextJob, list as listDownloadJobs,
-  remove as removeDownloadJob, resume as resumeDownloadJob, runCancellable,
+  ready as readyDownloadJobs, remove as removeDownloadJob, resume as resumeDownloadJob, runCancellable,
 } from "../downloads/index";
 
 const handle = <T>(channel: string, fn: (...args: any[]) => Promise<T> | T): void => {
@@ -271,7 +271,11 @@ export function registerIpc(): void {
   handle<InstalledContentRef[]>(IPC.modsInstalledContent, (instanceId: string) => listInstalledContent(instanceId));
 
   // 下载记录：持久化的安装任务列表，重启后可继续
-  handle<DownloadJob[]>(IPC.downloadsList, () => listDownloadJobs());
+  // 下载记录在窗口起来之后才异步读盘（启动路径不再等它）：这里等它一次，界面不会读到空列表
+  handle<DownloadJob[]>(IPC.downloadsList, async () => {
+    await readyDownloadJobs();
+    return listDownloadJobs();
+  });
   handle<void>(IPC.downloadsResume, (id: string) => resumeDownloadJob(id));
   handle<void>(IPC.downloadsCancel, (id: string) => cancelDownloadJob(id));
   handle<void>(IPC.downloadsRemove, (id: string) => removeDownloadJob(id));

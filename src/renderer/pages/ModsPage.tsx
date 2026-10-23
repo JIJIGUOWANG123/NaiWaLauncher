@@ -12,6 +12,7 @@ import {
   type KindFilesRequest, type KindInstallRequest, type KindSearchRequest, type ModSort, type ModSourceFilter,
   type UiContentKind,
 } from "../lib/modKind";
+import { perfNow, perfSince } from "../lib/perf";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
@@ -238,6 +239,12 @@ function IconStar({ filled, size = 16 }: { filled: boolean; size?: number }) {
 
 export function ModsPage() {
   const { instances, currentInstance, setCurrentInstanceId, reloadInstances, settings, navigate } = useApp();
+  // 资源页首屏：从挂载到第一帧渲染完成
+  const mountedAt = useRef(0);
+  if (mountedAt.current === 0) mountedAt.current = perfNow();
+  useEffect(() => {
+    window.requestAnimationFrame(() => perfSince("mods-page-first-render", mountedAt.current));
+  }, []);
   const { push } = useToast();
   /** 一级标签：默认模组；数据包因后端缺口禁用。 */
   const [kind, setKind] = useState<UiContentKind>("mod");
@@ -423,7 +430,9 @@ export function ModsPage() {
 
   // 新快照落地 = 缓存重新可信；此前（含刚安装完的那段窗口）都按旧数据/脏数据处理。
   useEffect(() => {
-    if (installedRefs.data !== null) setInstalledStale(false);
+    if (installedRefs.data === null) return;
+    setInstalledStale(false);
+    perfSince("mods-page-installed-refs", mountedAt.current);
   }, [installedRefs.data]);
 
   /** 卡片列表：后端排序之外再兜一层本地排序，切换排序立即见效。 */

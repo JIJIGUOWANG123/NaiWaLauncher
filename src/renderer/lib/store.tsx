@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AppInfo, InstanceMeta, Settings, UpdateCheckResult, VersionBrief } from "../../shared/types";
 import { api } from "./api";
 import { NO_APP_ICON, fetchAppIcon, type AppIconInfo } from "./appIcon";
+import { afterFirstFrame, perfMark, perfNow, perfSince, perfTime } from "./perf";
 import { errorMessage } from "./useAsync";
 
 export type PageId = "instances" | "accounts" | "download" | "downloads" | "mods" | "net" | "java" | "personalize" | "launch" | "other" | "about" | "settings";
@@ -61,18 +62,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   });
 
+  /** 占用统计的代次：连续 reload 时只认最后一次的结果，避免旧数据覆盖新列表。 */
+  const diskUsageGeneration = useRef(0);
+
+  /**
+   * 占用统计是展示型数据（主进程要遍历实例目录），首帧之后再逐个补，不占启动链路。
+   * 主进程 instances:list 只返回元数据，缺 diskUsageBytes 的在这里补齐。
+   */
+  const scheduleDiskUsage = useCallback((list: InstanceMeta[]) => {
+    const missing = list.filter((item) => item.diskUsageBytes === undefined || item.diskUsageBytes === null);
+    if (missing.length === 0) return;
+    const generation = diskUsageGeneration.current + 1;
+    diskUsageGeneration.current = generation;
+    afterFirstFrame(() => {
+      void (async () => {
+        const from = perfNow();
+        const settled = await Promise.all(missing.map(async (item) => {
+          try {
+            return { id: item.id, bytes: (await api.instances.usage(item.id)).bytes };
+          } catch {
+            // 统计失败就保持「计算中…」的缺省态，不影响列表本身
+            return null;
+          }
+        }));
+        if (diskUsageGeneration.current !== generation) return;
+        perfSince("instances-disk-usage", from);
+        setInstances((prev) => prev.map((item) => {
+          const hit = settled.find((entry) => entry !== null && entry.id === item.id);
+          return hit ? { ...item, diskUsageBytes: hit.bytes } : item;
+        }));
+      })();
+    });
+  }, []);
+
   const reloadInstances = useCallback(async () => {
     setInstancesLoading(true);
     try {
       const list = await api.instances.list();
       setInstances(list);
       setInstancesError(null);
+      scheduleDiskUsage(list);
     } catch (error: unknown) {
       setInstancesError(errorMessage(error));
     } finally {
       setInstancesLoading(false);
     }
-  }, []);
+  }, [scheduleDiskUsage]);
 
   const reloadVersions = useCallback(async (force?: boolean) => {
     try {
@@ -115,9 +150,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let alive = true;
     void (async () => {
+      perfMark("boot-start");
       try {
         const [infoResult, settingsResult, iconResult] = await Promise.all([
-          api.app.info(), api.settings.get(), fetchAppIcon(),
+          perfTime("appinfo", api.app.info()),
+          perfTime("settings", api.settings.get()),
+          perfTime("icon", fetchAppIcon()),
         ]);
         if (!alive) return;
         setInfo(infoResult);
@@ -127,9 +165,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       } catch (error: unknown) {
         if (alive) setSettingsError(errorMessage(error));
       }
-      await reloadInstances();
-      await reloadVersions(false);
-      if (alive) setBooted(true);
+      // 实例列表是首屏内容（默认页），必须等；版本清单只服务下拉框与新建实例弹窗，
+      // 放在首帧之后拉，别让它挡着界面出来。
+      await perfTime("instances", reloadInstances());
+      if (!alive) return;
+      setBooted(true);
+      perfMark("booted");
+      afterFirstFrame(() => {
+        if (alive) void perfTime("versions", reloadVersions(false));
+      });
     })();
     return () => {
       alive = false;

@@ -1,3 +1,4 @@
+import { perfMark } from "./lib/perf";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
@@ -15,6 +16,8 @@ import "./css/settings-pages.css";
 import "./css/accounts.css";
 import "./css/about.css";
 import "./css/downloads.css";
+
+perfMark("renderer-module-loaded");
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

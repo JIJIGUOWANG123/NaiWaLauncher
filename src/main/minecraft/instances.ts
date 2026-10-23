@@ -178,10 +178,9 @@ export async function instanceDiskUsage(id: string, force = false): Promise<{ by
 }
 
 /**
- * 列表里的占用：有缓存直接用；没有就并行统计。
- * 取舍：不做「先返回 0 再后台异步补」——那需要额外的推送通道与竞态处理；
- * 这里每个实例自带 20k 条目 / 3s 上限，并行跑完才返回，最坏也就一次 3s，
- * 之后 5 分钟内全部命中缓存，界面照常秒开。
+ * 列表只出元数据。占用统计要遍历整个实例目录（20k 条目 / 3s 两道闸），
+ * 属于展示型数据，由界面在首帧之后按 IPC instances:usage 逐个补（缓存 5 分钟）。
+ * 这里不再并行统计：那会把「列出实例」这条首屏链路卡在最慢的那个目录上。
  */
 export async function listInstances(): Promise<InstanceMeta[]> {
   const dir = getPaths().instances;
@@ -198,11 +197,6 @@ export async function listInstances(): Promise<InstanceMeta[]> {
     if (meta) metas.push(meta);
     else log.warn(`实例文件损坏，已跳过：${entry}`);
   }
-  await Promise.all(
-    metas.map(async (meta) => {
-      meta.diskUsageBytes = (await instanceDiskUsage(meta.id)).bytes;
-    }),
-  );
   return sortInstances(metas);
 }
 
