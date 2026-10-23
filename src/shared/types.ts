@@ -645,6 +645,8 @@ export interface LocalSkinSelection {
 export interface LocalCape {
   fileName: string;
   name: string;
+  /** official = 随程序分发的内置披风（只读）；user = 用户导入（<dataRoot>/capes）。 */
+  source: "official" | "user";
   /** 绝对路径。 */
   path: string;
   sizeBytes: number;

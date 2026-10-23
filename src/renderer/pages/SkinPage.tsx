@@ -16,6 +16,12 @@ const LITTLESKIN_URL = "https://littleskin.cn/";
 /** 第三方账号是只读预览：皮肤由皮肤站托管，启动器里不选中、不上传、不本地应用。 */
 const READONLY_HINT = "第三方账号的皮肤由皮肤站管理，启动器只做预览";
 const READONLY_NOTE = "第三方账号：只预览皮肤站上的皮肤，上传与本地应用请到皮肤站网页操作。";
+const MCSTAT_URL = "https://mcstat.org/zh-Hans/skins/capes";
+/**
+ * 披风贴图规则（与主进程一致）：64×32、22×17，或 64×32 的整数倍放大图（如 1024×512），
+ * 放大图导入时由主进程自动缩放到 64×32。
+ */
+const CAPE_RULE = "支持 64×32、22×17，或 64×32 的整数倍放大图（如 1024×512），放大图会自动缩放到 64×32";
 /** 披风只读说明：微软走 Mojang 官网，第三方走皮肤站。 */
 const CAPE_READONLY_HINT: Record<"microsoft" | "yggdrasil", string> = {
   microsoft: "官方披风来自 Mojang 账号，只能在官网更换",
@@ -26,7 +32,12 @@ const TAB_LABEL: Record<SkinTab, string> = { saved: "已保存皮肤", official:
 
 type SkinTab = "saved" | "official";
 
-/** 小人当前贴图：带来源标记，页面用 data-skin-preview-source 暴露出去。 */
+/** 披风分段：与皮肤同款两段（已保存 = 用户导入，内置 = 随程序分发）。 */
+type CapeTab = "saved" | "official";
+
+const CAPE_TAB_LABEL: Record<CapeTab, string> = { saved: "已保存披风", official: "内置披风" };
+
+/** 小人当前贴图：带来源标记，页面用 data-skin-preview-source 暴露出来。 */
 type PreviewTexture = SkinTexture & { source: "account" | "local" };
 
 /** 只收 PNG：主进程按 PNG 头解析尺寸，别的格式必然打不开。 */
@@ -66,6 +77,7 @@ export function SkinPage() {
   const [capeBusy, setCapeBusy] = useState<string | null>(null);
   const [capeImporting, setCapeImporting] = useState(false);
   const [capeToDelete, setCapeToDelete] = useState<string | null>(null);
+  const [capeTab, setCapeTab] = useState<CapeTab>("saved");
   const capeInputRef = useRef<HTMLInputElement | null>(null);
 
   // 默认账号：设置里选中的那个，没有就取第一个；页面上仍可切换。
@@ -161,8 +173,8 @@ export function SkinPage() {
     : null;
 
   const loadCapes = useCallback(async () => {
-    // 只读账号不读本地披风库：省一次 IPC，也不会让人误以为能选。
-    if (!accountId || !capeEditable) {
+    // 只读账号也要拿到列表（卡片灰化展示），只是不能选。
+    if (!accountId) {
       setCapes([]);
       return;
     }
@@ -171,20 +183,24 @@ export function SkinPage() {
     } catch (err: unknown) {
       push(errorMessage(err), "error");
     }
-  }, [accountId, capeEditable, push]);
+  }, [accountId, push]);
 
   useEffect(() => {
     void loadCapes();
   }, [loadCapes]);
 
+  const userCapes = useMemo(() => (capes ?? []).filter((item) => item.source === "user"), [capes]);
+  const officialCapes = useMemo(() => (capes ?? []).filter((item) => item.source === "official"), [capes]);
+  const listCapes = capeTab === "saved" ? userCapes : officialCapes;
+
   /**
-   * 当前预览的披风：离线优先用本地选中的那张，其次账号自带（一般没有）；
+   * 当前预览的披风：离线优先用本地选中的那张（内置或用户导入都算），其次账号自带（一般没有）；
    * 微软/第三方只认 SkinInfo.capeUrl。
    */
   const previewCape = useMemo<CapeTexture | null>(() => {
     const list = capes ?? [];
     if (capeEditable) {
-      const chosen = list.find((item) => item.active) ?? null;
+      const chosen = list.find((item) => item.active) ?? null; // 内置与用户披风都可能是 active
       if (chosen) return { url: skinImageUrl(chosen.path), source: "local", label: chosen.fileName };
     }
     const capeUrl = accountSkin.data?.capeUrl;
@@ -290,8 +306,10 @@ export function SkinPage() {
     try {
       const paths = pngs.map((file) => api.capes.pathForFile(file));
       const result = await api.capes.import(paths);
-      push(result.imported.length > 0 ? `已导入 ${result.imported.length} 张披风` : "没有新的披风可导入", result.imported.length > 0 ? "success" : "info");
-      if (result.skipped.length > 0) push(`已跳过：${result.skipped.join("、")}`, "info");
+      if (result.imported.length > 0) push(`已导入 ${result.imported.length} 张披风`, "success");
+      // 契约里 skipped 只有文件名（没有失败原因），所以把尺寸规则原样贴出来，不自己编原因。
+      if (result.skipped.length > 0) push(`${CAPE_RULE}；以下文件被跳过：${result.skipped.join("、")}`, "error");
+      else if (result.imported.length === 0) push("没有新的披风可导入", "info");
       await loadCapes();
     } catch (err: unknown) {
       push(errorMessage(err), "error");
@@ -377,14 +395,18 @@ export function SkinPage() {
     }
   };
 
-  const openLittleSkin = async () => {
+  /** LittleSkin / mcstat 都走主进程 openExternal，避免渲染层直接开网页。 */
+  const openSite = async (url: string, label: string) => {
     try {
-      await api.app.openExternal(LITTLESKIN_URL);
-      push("已用外部浏览器打开 LittleSkin", "success");
+      await api.app.openExternal(url);
+      push(`已用外部浏览器打开 ${label}`, "success");
     } catch (err: unknown) {
       push(errorMessage(err), "error");
     }
   };
+
+  const openLittleSkin = () => openSite(LITTLESKIN_URL, "LittleSkin");
+  const openMcstat = () => openSite(MCSTAT_URL, "mcstat");
 
   const renderCard = (skin: LocalSkin) => (
     <div
@@ -611,7 +633,9 @@ export function SkinPage() {
         <div className="panel-head">
           <h2 className="panel-title">披风</h2>
           <span className="panel-count">
-            {capeEditable ? `${(capes ?? []).length} 张本地披风` : "账号自带 · 只读"}
+            {capeEditable
+              ? `${userCapes.length} 张已保存 · ${officialCapes.length} 张内置`
+              : "账号自带 · 只读"}
           </span>
         </div>
 
@@ -639,53 +663,102 @@ export function SkinPage() {
           </div>
         </div>
 
-        {capeEditable ? (
-          <div className="skin-grid skin-cape-grid" data-cape-grid>
-            {(capes ?? []).map((item) => (
+        {/* 与皮肤同款两段：已保存（用户导入，可增删）/ 内置（随程序分发，只读） */}
+        <div className="segmented skin-tabs" role="tablist" aria-label="披风列表">
+          {(["saved", "official"] as CapeTab[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={capeTab === key}
+              className={`segmented-item ${capeTab === key ? "active" : ""}`.trim()}
+              data-cape-tab={key}
+              onClick={() => setCapeTab(key)}
+            >
+              {CAPE_TAB_LABEL[key]} {key === "saved" ? userCapes.length : officialCapes.length}
+            </button>
+          ))}
+        </div>
+
+        {capes !== null && listCapes.length === 0 ? (
+          <EmptyState
+            title={capeTab === "saved" ? "还没有保存的披风" : "没有内置披风"}
+            hint={capeTab === "saved"
+              ? (capeEditable
+                ? "点下面的「添加披风」选一张披风 PNG（64×32、22×17 或 64×32 的整数倍放大图），导入后就能给自己用。"
+                : "当前账号只读：披风由账号服务托管，不能导入本地披风。")
+              : "内置披风随程序分发、只读；为空说明安装包缺资源，重装即可恢复。"}
+          />
+        ) : null}
+
+        <div className="skin-grid skin-cape-grid" data-cape-grid>
+          {listCapes.map((item) => {
+            // 微软 / 第三方：整块只读——卡片灰化，点一下只说明原因，不发请求。
+            const locked = !capeEditable;
+            const lockedHint = capeReadonlyType ? CAPE_READONLY_HINT[capeReadonlyType] : "先选择一个账号";
+            return (
               <div
                 key={item.fileName}
-                className={`skin-card ${item.active ? "is-active" : ""}`.trim()}
+                className={`skin-card ${item.active ? "is-active" : ""} ${locked ? "is-locked" : ""}`.trim()}
                 data-cape-card={item.fileName}
+                data-cape-source={item.source}
+                data-cape-locked={locked ? "true" : undefined}
               >
                 <button
                   type="button"
                   className="skin-card-main"
                   data-action="select-cape"
-                  onClick={() => void selectCape(item.fileName)}
+                  onClick={() => {
+                    if (locked) {
+                      push(lockedHint, "info");
+                      return;
+                    }
+                    void selectCape(item.fileName);
+                  }}
                   disabled={capeBusy === item.fileName}
-                  title={`${item.fileName} · ${item.width}×${item.height}`}
+                  aria-disabled={locked || undefined}
+                  title={locked ? lockedHint : `${item.fileName} · ${item.width}×${item.height}`}
                 >
                   <img className="skin-cape-thumb" src={skinImageUrl(item.path)} alt="" width={64} height={32} />
                   <span className="skin-card-name">{item.name}</span>
-                  <span className="skin-card-meta">{item.width}×{item.height}</span>
+                  <span className="skin-card-meta">
+                    {item.source === "official" ? "内置 · 只读 · " : ""}{item.width}×{item.height}
+                  </span>
                 </button>
                 {item.active ? <span className="badge skin-active-tag">使用中</span> : null}
-                <button
-                  type="button"
-                  className="skin-card-del"
-                  data-action="delete-cape"
-                  onClick={() => setCapeToDelete(item.fileName)}
-                  disabled={capeBusy === item.fileName}
-                  title="从本地披风库删除"
-                >
-                  <IconTrash size={14} />
-                  删除
-                </button>
+                {/* 内置披风没有删除入口（与内置皮肤一致），只读账号也不给删 */}
+                {capeEditable && item.source === "user" ? (
+                  <button
+                    type="button"
+                    className="skin-card-del"
+                    data-action="delete-cape"
+                    onClick={() => setCapeToDelete(item.fileName)}
+                    disabled={capeBusy === item.fileName}
+                    title="从本地披风库删除"
+                  >
+                    <IconTrash size={14} />
+                    删除
+                  </button>
+                ) : null}
               </div>
-            ))}
+            );
+          })}
+          {/* 「添加披风」只属于用户自己的披风库：内置披风随程序分发，用户不该改它 */}
+          {capeEditable && capeTab === "saved" ? (
             <button
               type="button"
               className="skin-add skin-cape-add"
               data-cape-add
               onClick={() => capeInputRef.current?.click()}
               disabled={capeImporting}
+              title={CAPE_RULE}
             >
               <IconPlus size={18} />
               <span>{capeImporting ? "导入中…" : "添加披风"}</span>
-              <span className="skin-add-hint">64×32 的 PNG</span>
+              <span className="skin-add-hint">{CAPE_RULE}</span>
             </button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </section>
 
       <footer className="skin-recommend">
@@ -693,6 +766,12 @@ export function SkinPage() {
         <button type="button" className="account-link" data-action="open-littleskin" onClick={() => void openLittleSkin()}>
           <IconLink size={14} />
           {LITTLESKIN_URL}
+        </button>
+        <span className="skin-recommend-sep" aria-hidden="true">·</span>
+        <span>想挑皮肤或披风，可以去 mcstat：</span>
+        <button type="button" className="account-link" data-action="open-mcstat" onClick={() => void openMcstat()}>
+          <IconLink size={14} />
+          {MCSTAT_URL}
         </button>
       </footer>
 

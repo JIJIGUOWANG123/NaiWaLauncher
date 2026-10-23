@@ -1,7 +1,7 @@
 // 皮肤 PNG 的最小解析：本地皮肤库只需要「宽高 + 像素 alpha」（宽高校验、手臂模型判定），
 // 不引入任何图像依赖（docs/CONTRACT.md 禁止新增 npm 依赖）。
 // 只支持真实皮肤会出现的形态：8bit、非隔行、RGBA / RGB / 调色板；其它一律当作「无法判定」由调用方兜底。
-import { inflateSync } from "node:zlib";
+import { deflateSync, inflateSync } from "node:zlib";
 
 /** 解码后的像素：RGBA8，行优先，长度 = width * height * 4。 */
 export interface PngImage {
@@ -172,4 +172,79 @@ export function detectSkinModel(image: PngImage): SkinModel {
   const rightBody = opaqueCount(image, unit(52), unit(54) - 1, unit(20), unit(32) - 1) > 0;
   const leftBody = opaqueCount(image, unit(44), unit(46) - 1, unit(52), unit(64) - 1) > 0;
   return rightEmpty && leftEmpty && rightBody && leftBody ? "slim" : "classic";
+}
+
+// ---------- 缩放与编码（披风导入用：放大图缩回标准 64×32） ----------
+
+/**
+ * 最近邻缩放：披风素材都是标准图的整数倍放大（1024×512 = 16×），
+ * 最近邻不做插值 —— 缩回去能一比一还原原始像素，也不会引入调色板外的颜色。
+ */
+export function scaleNearest(src: Buffer, srcWidth: number, srcHeight: number, dstWidth: number, dstHeight: number): Buffer {
+  const out = Buffer.alloc(dstWidth * dstHeight * 4);
+  for (let y = 0; y < dstHeight; y += 1) {
+    const sy = Math.min(srcHeight - 1, Math.floor((y * srcHeight) / dstHeight));
+    for (let x = 0; x < dstWidth; x += 1) {
+      const sx = Math.min(srcWidth - 1, Math.floor((x * srcWidth) / dstWidth));
+      const from = (sy * srcWidth + sx) * 4;
+      const to = (y * dstWidth + x) * 4;
+      out[to] = src[from];
+      out[to + 1] = src[from + 1];
+      out[to + 2] = src[from + 2];
+      out[to + 3] = src[from + 3];
+    }
+  }
+  return out;
+}
+
+const CRC_TABLE = (() => {
+  const table = new Int32Array(256);
+  for (let n = 0; n < 256; n += 1) {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c;
+  }
+  return table;
+})();
+
+function crc32(buf: Buffer): number {
+  let c = 0xffffffff;
+  for (const byte of buf) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const head = Buffer.alloc(8);
+  head.writeUInt32BE(data.length, 0);
+  head.write(type, 4, "ascii");
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type, "ascii"), data])), 0);
+  return Buffer.concat([head, data, crc]);
+}
+
+/**
+ * 最小 PNG 编码器：8bit RGBA、非隔行、每行 filter 0（不做预测，体积对 64×32 足够小）。
+ * 这样缩放后的披风落盘就是一张真正的 PNG，游戏与 authlib-injector 都能直接吃。
+ */
+export function encodePng(rgba: Buffer, width: number, height: number): Buffer {
+  const stride = width * 4;
+  const raw = Buffer.alloc(height * (stride + 1));
+  for (let y = 0; y < height; y += 1) {
+    raw[y * (stride + 1)] = 0;
+    rgba.copy(raw, y * (stride + 1) + 1, y * stride, (y + 1) * stride);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 6; // color type: RGBA
+  ihdr[10] = 0; // compression
+  ihdr[11] = 0; // filter
+  ihdr[12] = 0; // interlace
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", deflateSync(raw)),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
 }

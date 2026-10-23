@@ -1,24 +1,60 @@
-// 本地披风库：<dataRoot>/capes，与账号解耦，账号只记录「选了哪一张」。
-// 披风只给离线账号用（通过本地皮肤 API 注入）；微软账号走官方数据，不读这里。
+// 披风库：内置披风（随程序分发、只读）+ 用户披风（<dataRoot>/capes，可增删）。
+// 与内置皮肤完全对称；披风只给离线账号用（通过本地皮肤 API 注入），微软/第三方账号走各自官方数据。
 // 尺寸口径：披风贴图 64×32（现代）或 22×17（1.8 之前的老格式），其它一律视为无效文件。
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import type { LocalCape } from "../../shared/types";
+import { getAccount } from "../auth/accounts";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
-import { readPngSize } from "./png";
+import { decodePng, encodePng, readPngSize, scaleNearest } from "./png";
 
 const log = logger("skins");
 
-/** 只能收这两种披风尺寸（64x32 现代 / 22x17 老格式）。 */
+/** 落盘只允许这两种尺寸（64x32 现代 / 22x17 老格式）。 */
 const CAPE_SIZES = new Set(["64x32", "22x17"]);
+/** 尺寸不合规时的统一文案（导入失败原因要给用户看得懂）。 */
+const CAPE_SIZE_HINT = "披风尺寸需为 64×32、22×17，或 64×32 的整数倍放大图（如 1024×512）";
+
+/** 归一化后的披风：放大图会缩成 64×32，字节也是新的 PNG。 */
+interface PreparedCape {
+  bytes: Buffer;
+  width: number;
+  height: number;
+  /** 是否做过缩放（日志与自检用）。 */
+  scaled: boolean;
+}
+
+/**
+ * 校验并归一化披风图片：
+ * · 64×32 / 22×17 原样保留；
+ * · 64×32 的整数倍放大图（w=64k、h=32k，k≥2）用最近邻缩回 64×32 并重新编码成 PNG；
+ * · 其它尺寸抛错（文案见 CAPE_SIZE_HINT），不是 PNG 的也抛错。
+ */
+export function prepareCape(bytes: Buffer): PreparedCape {
+  const size = readPngSize(bytes);
+  if (!size) throw new Error("不是有效的 PNG（文件头不是 PNG）");
+  const width = size.width;
+  const height = size.height;
+  if (CAPE_SIZES.has(width + "x" + height)) return { bytes, width, height, scaled: false };
+  const factor = width % 64 === 0 && height % 32 === 0 ? width / 64 : 0;
+  if (factor >= 2 && height / 32 === factor) {
+    const image = decodePng(bytes);
+    if (!image) throw new Error("不是有效的 PNG（像素无法解码）");
+    const scaled = scaleNearest(image.data, width, height, 64, 32);
+    return { bytes: encodePng(scaled, 64, 32), width: 64, height: 32, scaled: true };
+  }
+  throw new Error(CAPE_SIZE_HINT);
+}
 /** 导入上限 1MB：正常披风几 KB。 */
 const MAX_IMPORT_BYTES = 1024 * 1024;
 const SELECTIONS_FILE = "local-capes.json";
 
-/** 选择记录：accountId → fileName（披风没有模型字段）。 */
-type StoredCapeSelection = { fileName: string };
+type CapeSource = "official" | "user";
+
+/** 选择记录：accountId → { fileName, source }（source 缺省按 user，兼容旧记录）。 */
+type StoredCapeSelection = { fileName: string; source: CapeSource };
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -28,23 +64,38 @@ function sha1Of(buf: Buffer): string {
   return createHash("sha1").update(buf).digest("hex");
 }
 
+/**
+ * 内置披风目录：与内置皮肤同一套解析 —— 打包后是 <安装目录>/resources/capes
+ * （electron-builder 的 extraResources 会随程序分发），开发态是 <仓库>/resources/capes。
+ * 只读：任何入口都不写、不删这里。
+ */
+function officialDir(): string {
+  const res = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  return res ? join(res, "capes") : join(getPaths().root, "resources", "capes");
+}
+
 /** 用户披风目录：<dataRoot>/capes。 */
-function capesDir(): string {
+function userDir(): string {
   return join(getPaths().dataRoot, "capes");
+}
+
+function dirOf(source: CapeSource): string {
+  return source === "official" ? officialDir() : userDir();
 }
 
 function selectionsFile(): string {
   return join(getPaths().meta, SELECTIONS_FILE);
 }
 
-async function ensureDir(): Promise<string> {
-  const dir = capesDir();
+async function ensureUserDir(): Promise<string> {
+  const dir = userDir();
   await mkdir(dir, { recursive: true });
   return dir;
 }
 
 const BAD_NAME_CHARS = /[\\/:*?"<>|\u0000-\u001f\u007f]/g;
 
+/** 只接受单级文件名：内置披风里有空格与中文，这里只掐路径成分，不改动其它字符。 */
 function safeCapeName(raw: string): string {
   const name = basename(String(raw ?? "").trim().replace(/\\/g, "/"));
   if (!name || name === "." || name === ".." || name.includes("\u0000")) throw new Error("披风文件名无效：" + String(raw));
@@ -89,7 +140,9 @@ async function readSelections(): Promise<Record<string, StoredCapeSelection>> {
   for (const [accountId, value] of Object.entries(raw as Record<string, unknown>)) {
     const entry = value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
     const fileName = typeof entry.fileName === "string" ? entry.fileName : "";
-    if (fileName) out[accountId] = { fileName };
+    if (!fileName) continue;
+    // 旧记录没有 source：那时只有用户目录，一律按 user 处理
+    out[accountId] = { fileName, source: entry.source === "official" ? "official" : "user" };
   }
   return out;
 }
@@ -114,52 +167,71 @@ async function writeSelections(map: Record<string, StoredCapeSelection>): Promis
   await run;
 }
 
-/** 某个披风文件名是否在库里，并给出绝对路径；不在或尺寸非法时抛错。 */
-async function locateCape(fileName: string): Promise<{ path: string; fileName: string }> {
-  const name = safeCapeName(fileName);
-  const path = join(capesDir(), name);
+/** 读一个披风并校验（存在 / 是文件 / 尺寸合法），不合法返回 undefined。 */
+async function readCapeFile(
+  source: CapeSource,
+  fileName: string,
+): Promise<{ path: string; fileName: string; source: CapeSource; sizeBytes: number; width: number; height: number } | undefined> {
+  const path = join(dirOf(source), fileName);
   const info = await stat(path).catch(() => undefined);
-  if (!info || !info.isFile()) throw new Error("披风不存在：" + name);
-  const bytes = await readFile(path);
+  if (!info || !info.isFile()) return undefined;
+  const bytes = await readFile(path).catch(() => undefined);
+  if (!bytes) return undefined;
   const size = readPngSize(bytes);
-  if (!size || !CAPE_SIZES.has(size.width + "x" + size.height)) {
-    throw new Error("披风尺寸无效（只支持 64x32 / 22x17）：" + name);
-  }
-  return { path, fileName: name };
+  if (!size || !CAPE_SIZES.has(size.width + "x" + size.height)) return undefined;
+  return { path, fileName, source, sizeBytes: info.size, width: size.width, height: size.height };
 }
 
-/** 列出本地披风（按文件名排序），accountId 用来标记当前选中。 */
-export async function listCapes(accountId?: string): Promise<LocalCape[]> {
-  const dir = await ensureDir();
-  const selections = await readSelections();
-  const selected = accountId ? selections[accountId] : undefined;
+/** 定位披风：给了 source 就只查那个目录，否则内置优先（内置与用户同名时以内置为准）。 */
+async function locateCape(
+  fileName: string,
+  source?: CapeSource,
+): Promise<{ path: string; fileName: string; source: CapeSource; sizeBytes: number; width: number; height: number }> {
+  const name = safeCapeName(fileName);
+  const order: CapeSource[] = source ? [source] : ["official", "user"];
+  for (const candidate of order) {
+    const found = await readCapeFile(candidate, name);
+    if (found) return found;
+  }
+  throw new Error(source === "official" ? "内置披风不存在：" + name : "披风不存在：" + name);
+}
+
+/** 列出一个目录里的披风（按文件名排序）。 */
+async function listDir(source: CapeSource, selected: StoredCapeSelection | undefined): Promise<LocalCape[]> {
+  const dir = dirOf(source);
   const names = (await readdir(dir).catch(() => [] as string[])).sort();
   const out: LocalCape[] = [];
   for (const fileName of names) {
     if (!/\.png$/i.test(fileName)) continue;
-    const path = join(dir, fileName);
-    const info = await stat(path).catch(() => undefined);
-    if (!info || !info.isFile()) continue;
-    const bytes = await readFile(path).catch(() => undefined);
-    if (!bytes) continue;
-    const size = readPngSize(bytes);
-    if (!size || !CAPE_SIZES.has(size.width + "x" + size.height)) continue;
+    const found = await readCapeFile(source, fileName);
+    if (!found) continue;
     out.push({
       fileName,
       name: basename(fileName, extname(fileName)),
-      path,
-      sizeBytes: info.size,
-      width: size.width,
-      height: size.height,
-      active: Boolean(selected && selected.fileName === fileName),
+      source,
+      path: found.path,
+      sizeBytes: found.sizeBytes,
+      width: found.width,
+      height: found.height,
+      active: Boolean(selected && selected.fileName === fileName && selected.source === source),
     });
   }
   return out;
 }
 
-/** 导入披风：只收 .png / ≤1MB / 尺寸合法；sha1 重复跳过；同名不同内容加 -2/-3。 */
+/** 列出披风：内置在前、用户在后，各自按文件名排序；accountId 用来标记当前选中。 */
+export async function listCapes(accountId?: string): Promise<LocalCape[]> {
+  await ensureUserDir();
+  const selections = await readSelections();
+  const selected = accountId ? selections[accountId] : undefined;
+  const official = await listDir("official", selected);
+  const user = await listDir("user", selected);
+  return [...official, ...user];
+}
+
+/** 导入披风：只收 .png / ≤1MB / 尺寸合法；sha1 重复跳过；同名不同内容加 -2/-3；永远只写用户目录。 */
 export async function importCapes(paths: string[]): Promise<{ imported: string[]; skipped: string[] }> {
-  const dir = await ensureDir();
+  const dir = await ensureUserDir();
   const imported: string[] = [];
   const skipped: string[] = [];
 
@@ -176,26 +248,33 @@ export async function importCapes(paths: string[]): Promise<{ imported: string[]
     const source = typeof raw === "string" ? raw.trim() : "";
     const label = source ? basename(source) : "";
     if (!source || !/\.png$/i.test(source)) {
+      log.warn("跳过披风 " + (label || source) + "：只支持 .png 文件");
       skipped.push(label || source);
       continue;
     }
     let bytes: Buffer;
     try {
       bytes = await readFile(source);
-    } catch {
+    } catch (err) {
+      log.warn("跳过披风 " + label + "：无法读取 · " + messageOf(err));
       skipped.push(label);
       continue;
     }
     if (bytes.length === 0 || bytes.length > MAX_IMPORT_BYTES) {
+      log.warn("跳过披风 " + label + "：文件为 " + bytes.length + " 字节，超过 1MB 上限");
       skipped.push(label);
       continue;
     }
-    const size = readPngSize(bytes);
-    if (!size || !CAPE_SIZES.has(size.width + "x" + size.height)) {
+    let prepared: PreparedCape;
+    try {
+      prepared = prepareCape(bytes);
+    } catch (err) {
+      log.warn("跳过披风 " + label + "：" + messageOf(err));
       skipped.push(label);
       continue;
     }
-    const sha1 = sha1Of(bytes);
+    // 去重按「归一化后的字节」算：同一张披风的 1024×512 与 64×32 版本算同一张
+    const sha1 = sha1Of(prepared.bytes);
     if (bySha.has(sha1)) {
       skipped.push(label);
       continue;
@@ -204,7 +283,7 @@ export async function importCapes(paths: string[]): Promise<{ imported: string[]
     let fileName = stem + ".png";
     for (let n = 2; taken.has(fileName) && n <= 99; n += 1) fileName = stem + "-" + n + ".png";
     try {
-      await writeFile(join(dir, fileName), bytes, { flag: "wx" });
+      await writeFile(join(dir, fileName), prepared.bytes, { flag: "wx" });
     } catch (err) {
       log.warn("导入披风失败：" + label + " · " + messageOf(err));
       skipped.push(label);
@@ -213,22 +292,34 @@ export async function importCapes(paths: string[]): Promise<{ imported: string[]
     taken.add(fileName);
     bySha.set(sha1, fileName);
     imported.push(fileName);
-    log.info("已导入本地披风 " + fileName + "（" + size.width + "x" + size.height + "，" + bytes.length + " 字节）");
+    log.info(
+      "已导入本地披风 " +
+        fileName +
+        "（" +
+        prepared.width +
+        "x" +
+        prepared.height +
+        (prepared.scaled ? "，已从放大图缩放到 64×32" : "") +
+        "，" +
+        prepared.bytes.length +
+        " 字节）",
+    );
   }
   return { imported, skipped };
 }
 
-/** 删除本地披风，并清掉指向它的选择记录。 */
+/** 删除用户披风；内置披风直接报错（只读）。 */
 export async function removeCape(fileName: string): Promise<LocalCape[]> {
   const name = safeCapeName(fileName);
-  const target = join(capesDir(), name);
+  if (await readCapeFile("official", name)) throw new Error("内置披风不能删除：" + name);
+  const target = join(userDir(), name);
   const info = await stat(target).catch(() => undefined);
   if (!info || !info.isFile()) throw new Error("披风不存在：" + name);
   await unlink(target);
   const selections = await readSelections();
   let changed = false;
   for (const [accountId, selection] of Object.entries(selections)) {
-    if (selection.fileName === name) {
+    if (selection.source === "user" && selection.fileName === name) {
       delete selections[accountId];
       changed = true;
     }
@@ -238,10 +329,17 @@ export async function removeCape(fileName: string): Promise<LocalCape[]> {
   return listCapes();
 }
 
-/** 选中/取消某账号的本地披风（传 null 表示不使用本地披风）。 */
+/**
+ * 选中/取消某账号的披风。只有离线账号可以选本地/内置披风：
+ * 第三方与正版账号的皮肤披风必须来自各自官方数据，主进程这层直接拒绝（不只靠界面禁）。
+ */
 export async function selectCape(accountId: string, fileName: string | null): Promise<LocalCape[]> {
   const account = String(accountId ?? "").trim();
   if (!account) throw new Error("账号 id 不能为空");
+  const record = await getAccount(account);
+  if (!record) throw new Error("账号不存在：" + account);
+  if (record.type !== "offline") throw new Error("第三方与正版账号不能使用本地/内置披风");
+
   const selections = await readSelections();
   const name = fileName === null || fileName === undefined ? "" : safeCapeName(fileName);
   if (!name) {
@@ -249,21 +347,29 @@ export async function selectCape(accountId: string, fileName: string | null): Pr
     await writeSelections(selections);
     return listCapes(account);
   }
-  await locateCape(name);
-  selections[account] = { fileName: name };
+  const cape = await locateCape(name);
+  selections[account] = { fileName: cape.fileName, source: cape.source };
   await writeSelections(selections);
-  log.info("账号 " + account + " 选用本地披风 " + name);
+  log.info("账号 " + account + " 选用" + (cape.source === "official" ? "内置" : "本地") + "披风 " + cape.fileName);
   return listCapes(account);
 }
 
-/** 本地皮肤 API 用：该账号当前选中的披风文件（不存在/已删则 undefined）。 */
-export async function selectedLocalCape(accountId: string): Promise<{ path: string; fileName: string } | undefined> {
+/** 本地皮肤 API 用：该账号当前选中的披风（按记录的 source 解析；找不到就当没有披风）。 */
+export async function selectedLocalCape(
+  accountId: string,
+): Promise<{ path: string; fileName: string; source: CapeSource } | undefined> {
   const selections = await readSelections();
   const selection = selections[accountId];
   if (!selection) return undefined;
+  const found = await readCapeFile(selection.source, safeCapeNameSafe(selection.fileName));
+  return found ? { path: found.path, fileName: found.fileName, source: found.source } : undefined;
+}
+
+/** safeCapeName 的「不抛错」版本：记录被手改坏时只当没有披风。 */
+function safeCapeNameSafe(raw: string): string {
   try {
-    return await locateCape(selection.fileName);
+    return safeCapeName(raw);
   } catch {
-    return undefined;
+    return "";
   }
 }

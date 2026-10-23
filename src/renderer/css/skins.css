@@ -403,6 +403,14 @@
   min-height: 108px;
 }
 
+/* 披风的格式规则比「添加皮肤」长，允许换行，别把卡片撑破 */
+.skin-cape-add .skin-add-hint {
+  white-space: normal;
+  line-height: 1.45;
+  text-align: center;
+  max-width: 100%;
+}
+
 /* ---- 底部推荐 ---- */
 
 .skin-recommend {
@@ -416,6 +424,11 @@
   background: linear-gradient(120deg, color-mix(in srgb, var(--accent-2) 8%, transparent), var(--surface-glass));
   font-size: 12px;
   color: var(--text-dim);
+}
+
+/* 两条推荐之间的分隔点 */
+.skin-recommend-sep {
+  opacity: 0.45;
 }
 
 @media (max-width: 780px) {

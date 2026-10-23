@@ -1634,13 +1634,18 @@ export function createMockApi(): NaiwaApi {
         const skipped: string[] = [];
         for (const target of filePaths) {
           const fileName = target.split(/[\\/]/).pop() || "cape.png";
-          if (!/\.png$/i.test(fileName) || localCapes.some((item) => item.fileName === fileName)) {
+          // 预览里用文件名模拟「尺寸不合法」：真实链路由主进程按 PNG 头判断（64×32 / 22×17 / 整数倍放大图），
+          // 契约里 skipped 只回文件名、不回原因，所以界面上统一贴规则文案。
+          const badSize = /(16x16|32x16|bad|invalid)/i.test(fileName);
+          if (badSize || !/\.png$/i.test(fileName) || localCapes.some((item) => item.fileName === fileName)) {
             skipped.push(fileName);
             continue;
           }
           localCapes = [...localCapes, {
             fileName,
             name: fileName.replace(/\.png$/i, ""),
+            // 用户导入的一律是 user；内置披风只来自程序分发的种子数据。
+            source: "user",
             path: MOCK_SKIN_CAPE_OFFICIAL,
             sizeBytes: 64 * 32 * 4,
             width: 64,
@@ -1654,9 +1659,9 @@ export function createMockApi(): NaiwaApi {
       remove: async (fileName: string) => {
         trace("capes.remove", { fileName });
         await sleep(200);
-        if (!localCapes.some((item) => item.fileName === fileName)) {
-          throw new Error(`披风库里没有这个文件：${fileName}`);
-        }
+        const target = localCapes.find((item) => item.fileName === fileName);
+        if (!target) throw new Error(`披风库里没有这个文件：${fileName}`);
+        if (target.source === "official") throw new Error("内置披风不能删除（随程序分发、只读）");
         localCapes = localCapes.filter((item) => item.fileName !== fileName);
         for (const [accountId, picked] of capeSelection) {
           if (picked === fileName) capeSelection.delete(accountId);
@@ -1666,6 +1671,11 @@ export function createMockApi(): NaiwaApi {
       select: async (accountId: string, fileName: string | null) => {
         trace("capes.select", { accountId, fileName });
         await sleep(120);
+        // 主进程只允许离线账号选本地披风；这里同样拒绝，让界面的报错路径可点验。
+        const account = findAccount(accountId);
+        if (account.type !== "offline") {
+          throw new Error("只有离线账号能选择本地披风：正版与第三方账号的披风由账号服务托管");
+        }
         if (fileName === null) {
           capeSelection.delete(accountId);
         } else {

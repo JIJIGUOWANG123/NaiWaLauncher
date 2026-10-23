@@ -1034,14 +1034,40 @@ export const MOCK_SERVERS: ServerEntry[] = [
 ];
 
 
-/** 本地披风假数据：两张用户导入的 64×32 披风（<dataRoot>/capes）。 */
+/**
+ * 披风假数据：内置 2 张（source=official，随程序分发、只读）+ 用户导入 2 张（source=user）。
+ * 浏览器预览没有真实文件系统，path 直接用内联 PNG（64×32），渲染层照常当图片地址用。
+ */
+const MOCK_CAPE_OFFICIAL_GOLD = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAARUlEQVR42u3XMQ0AIAADwQphQABqUIoa7IADwgq5S2rgtyYkc/R1s68DlNqOE0AAAQQQQAABBBBAAAEEEMAdBgAAAB62AURiJXBPzeZiAAAAAElFTkSuQmCC";
+const MOCK_CAPE_OFFICIAL_FROST = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAATElEQVR42u3TsQkAIRBFwa3S+qzKKgyMTBUEQUyM75iBn5jtAyOIqK2PcymXtftdAAEEEEAAAX5oH/yaAL6AAAIIIIAAAgAAAACfNgHxZTGfSOSlMAAAAABJRU5ErkJggg==";
 const MOCK_CAPE_BLUE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAAR0lEQVR42u3YMQ0AIBAEwVOEJDSiBBGIoIWajhpmkjOw1ecTklLbupkAAnwQoI95TAABBBBAAAEEEMAlKIAAAngcAAAAwBM2bVCX2J2ubkMAAAAASUVORK5CYII=";
 const MOCK_CAPE_GREEN = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAARElEQVR42u3WMQ0AIBRDwUpCEIqQyYQA9o8FVshdUgNvakIy96qbCSDAp9rodTMBBBBAAAEEEEAAAVxhAQQAAAAAnnUAChSwkALsDLwAAAAASUVORK5CYII=";
 
 export const MOCK_LOCAL_CAPES: LocalCape[] = [
   {
+    fileName: "内置-金边披风.png",
+    name: "金边披风（内置）",
+    source: "official",
+    path: MOCK_CAPE_OFFICIAL_GOLD,
+    sizeBytes: 64 * 32 * 4,
+    width: 64,
+    height: 32,
+    active: false,
+  },
+  {
+    fileName: "内置-霜纹披风.png",
+    name: "霜纹披风（内置）",
+    source: "official",
+    path: MOCK_CAPE_OFFICIAL_FROST,
+    sizeBytes: 64 * 32 * 4,
+    width: 64,
+    height: 32,
+    active: false,
+  },
+  {
     fileName: "蓝色披风.png",
     name: "蓝色披风",
+    source: "user",
     path: MOCK_CAPE_BLUE,
     sizeBytes: 64 * 32 * 4,
     width: 64,
@@ -1051,6 +1077,7 @@ export const MOCK_LOCAL_CAPES: LocalCape[] = [
   {
     fileName: "绿色披风.png",
     name: "绿色披风",
+    source: "user",
     path: MOCK_CAPE_GREEN,
     sizeBytes: 64 * 32 * 4,
     width: 64,
