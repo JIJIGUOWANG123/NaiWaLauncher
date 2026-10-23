@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { existsSync } from "node:fs";
 import { getPaths } from "./core/paths";
 import { ensureDirs, initPaths } from "./core/paths";
-import { getSettings, loadSettings } from "./core/settings";
+import { getSettings, loadSettings, peekShowSplash } from "./core/settings";
 import { setEventSink } from "./core/events";
 import { load as loadDownloadJobs, setChangedSink as setDownloadsChangedSink, trackProgress, trackResult } from "./downloads/index";
 import { setLogSink, logger } from "./core/logger";
@@ -112,10 +112,12 @@ app.whenReady().then(async () => {
   // 之前 initPaths 在 bootstrap 里，whenReady 的第一次 loadSettings 撞上「paths not initialised」
   // 被 catch 静默吞掉、回落默认值 —— 于是 showSplash 从来没按设置生效，还白读了一遍设置文件。
   initPaths(root);
-  const bootSettings = await loadSettings();
+  // 启动画面要在任何 await 之前出来：它只是「用户双击后能否马上看到反应」的关键一步。
+  // 是否显示由同步预读决定（设置文件很小），完整设置稍后照常异步加载。
   const splashStartedAt = Date.now();
-  const splash = bootSettings.showSplash ? createSplash(logoPathFor(root, app.isPackaged)) : null;
+  const splash = peekShowSplash() ? createSplash(logoPathFor(root, app.isPackaged)) : null;
   perfMark("splash-created");
+  const bootSettings = await loadSettings();
   await bootstrap();
   perfMark("bootstrap-done");
 

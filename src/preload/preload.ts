@@ -17,6 +17,7 @@ const api: NaiwaApi = {
     checkUpdates: () => invoke(IPC.appCheckUpdates),
     installUpdate: (url) => invoke(IPC.appInstallUpdate, url),
     revealInFolder: (path) => invoke(IPC.appReveal, path),
+    changelog: (limit) => invoke(IPC.appChangelog, limit),
     openInstanceMods: (instanceId) => invoke(IPC.openInstanceMods, instanceId),
     openInstanceContent: (instanceId, kind) => invoke(IPC.openInstanceContent, instanceId, kind),
     openExternal: (url) => invoke(IPC.openExternal, url),

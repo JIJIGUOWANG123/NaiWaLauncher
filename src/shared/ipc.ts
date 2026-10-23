@@ -1,6 +1,6 @@
 import type {
   Account, AppInfo, DeviceCodeChallenge, DownloadSourceId, DownloadSourceInfo, InstanceMeta, InstalledJava,
-  DownloadJob, InstalledModInfo, InstalledContentRef, LocalCape, LocalSkin, LocalSkinSelection, SkinApplyResult, ServerBuildInfo, ServerConsoleLine, ServerCoreId, ServerCoreInfo, ServerEntry, ServerMeta, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
+  ChangelogSection, DownloadJob, InstalledModInfo, InstalledContentRef, LocalCape, LocalSkin, LocalSkinSelection, SkinApplyResult, ServerBuildInfo, ServerConsoleLine, ServerCoreId, ServerCoreInfo, ServerEntry, ServerMeta, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
   PortProbeResult, SaveInfo, UpdateCheckResult, InstanceExportResult, InstanceImportResult,
   LoaderKind, LoaderVersionInfo, LogLine, ModCategory, ModFileInfo, ModFilterOptions, ModProviderId,
   ModSearchResult, ModSourceFilter, Settings, SkinInfo, SkinProfile, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
@@ -19,6 +19,7 @@ export const IPC = {
   appCheckUpdates: "app:checkUpdates",
   appInstallUpdate: "app:installUpdate",
   appReveal: "app:reveal",
+  appChangelog: "app:changelog",
   downloadsList: "downloads:list",
   downloadsResume: "downloads:resume",
   downloadsCancel: "downloads:cancel",
@@ -217,6 +218,8 @@ export interface NaiwaApi {
     installUpdate(url: string): Promise<void>;
     /** 在资源管理器里定位文件/文件夹（不受启动器根目录限制，用于导出结果）。 */
     revealInFolder(path: string): Promise<void>;
+    /** 读取随程序分发的 CHANGELOG.md，按版本倒序返回（默认最多 3 段）。 */
+    changelog(limit?: number): Promise<ChangelogSection[]>;
     /** 打开指定实例的模组目录（自动按版本隔离模式定位）。 */
     openInstanceMods(instanceId: string): Promise<void>;
     /** 打开指定实例的某一类内容目录：mod → mods、shader → shaderpacks、resourcepack → resourcepacks（跟随版本隔离设置）。 */

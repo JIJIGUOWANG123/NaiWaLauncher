@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Settings } from "../../shared/types";
 import { usePersist } from "../lib/persist";
 import { useApp } from "../lib/store";
-import { Field, Select, TextInput } from "../components/Form";
+import { Field, Select, TextInput, Toggle } from "../components/Form";
 import { ErrorState, LoadingState } from "../components/State";
 import { useToast } from "../components/Toast";
 import { AdvancedCard, MemoryCard, OfflineSkinCard } from "./LaunchCards";
@@ -127,6 +127,39 @@ function LaunchOptionsCard({ settings }: { settings: Settings }) {
             options={ISOLATION_OPTIONS}
             ariaLabel="默认版本隔离"
             onChange={(value) => void persist({ versionIsolation: value as Settings["versionIsolation"] }, "版本隔离")}
+          />
+        </Field>
+
+        <Field
+          label="游戏内存优化"
+          hint="开启后启动游戏会追加一套面向低延迟的 G1GC 参数（减少整合包卡顿）；关掉则只下发 -Xmx/-Xms，交给 JVM 默认 GC。实例里的「额外 JVM 参数」始终优先级最高。"
+        >
+          <Toggle
+            label="开启游戏内存优化（G1GC 低延迟参数）"
+            checked={settings.memoryOptimize}
+            onChange={(value) => void persist({ memoryOptimize: value }, "游戏内存优化")}
+          />
+        </Field>
+
+        <Field
+          label="高级进程操作（默认关闭 · 可能触发杀毒误报）"
+          hint="开启后启动游戏会旁挂一个隐藏的 PowerShell 脚本去设置进程优先级、修改游戏窗口标题。这类操作别的进程的行为是杀毒软件的重点特征，默认关闭；不需要就别开。"
+        >
+          <Toggle
+            label="允许设置游戏进程优先级 / 窗口标题"
+            checked={settings.advancedProcessTweaks}
+            onChange={(value) => void persist({ advancedProcessTweaks: value }, "高级进程操作")}
+          />
+        </Field>
+
+        <Field
+          label="离线本地皮肤 API（默认关闭 · 可能触发杀毒误报）"
+          hint="开启后离线账号启动时会注入 authlib-injector，让游戏直接读本地皮肤与披风（实例内不必装模组）。注入 javaagent 属敏感行为，默认关闭；关掉时请用「一键安装 CustomSkinLoader」的方式。"
+        >
+          <Toggle
+            label="允许为离线账号注入本地皮肤 API"
+            checked={settings.localSkinApi}
+            onChange={(value) => void persist({ localSkinApi: value }, "离线本地皮肤 API")}
           />
         </Field>
 

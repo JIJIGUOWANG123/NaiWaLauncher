@@ -231,6 +231,27 @@
   border-top: 1px dashed var(--line-strong);
 }
 
+/* 更新日志：按版本分段，最新一段在最上面 */
+.about-log-version + .about-log-version {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.about-log-version-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.about-log-latest {
+  font-size: 10.5px;
+  padding: 1px 6px;
+}
+
 /* 更新日志 + 团队：宽屏并排，窄屏落回单列 */
 .about-columns {
   display: grid;

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
@@ -69,6 +70,9 @@ export function defaults(): Settings {
     windowSize: "default",
     translateMods: true,
     translateSearch: true,
+    memoryOptimize: true,
+    advancedProcessTweaks: false,
+    localSkinApi: false,
     appIcon: "",
     startupSound: "off",
     startupVolume: 0.6,
@@ -172,6 +176,9 @@ function normalize(raw: unknown, base: Settings): Settings {
     windowSize: pickString(src.windowSize, base.windowSize),
     translateMods: pickBool(src.translateMods, base.translateMods),
     translateSearch: pickBool(src.translateSearch, base.translateSearch),
+    memoryOptimize: pickBool(src.memoryOptimize, base.memoryOptimize),
+    advancedProcessTweaks: pickBool(src.advancedProcessTweaks, base.advancedProcessTweaks),
+    localSkinApi: pickBool(src.localSkinApi, base.localSkinApi),
     appIcon: pickString(src.appIcon, base.appIcon),
     startupSound: pickString(src.startupSound, base.startupSound),
     startupVolume: clampFloat(src.startupVolume, 0, 1, base.startupVolume),
@@ -206,6 +213,21 @@ function persist(next: Settings): Promise<void> {
   );
   writeQueue = run.catch(() => undefined);
   return run;
+}
+
+/**
+ * 同步预读「是否显示启动画面」：createSplash 要抢在第一个 await 之前，
+ * 而完整的 loadSettings 是异步的。设置文件很小（几百字节），同步读一次代价可以忽略；
+ * 任何异常都按「显示」处理，与默认值一致。
+ */
+export function peekShowSplash(): boolean {
+  try {
+    const text = readFileSync(getPaths().settingsFile, "utf8");
+    const raw = JSON.parse(text.replace(/^\uFEFF/, "")) as Record<string, unknown>;
+    return typeof raw.showSplash === "boolean" ? raw.showSplash : true;
+  } catch {
+    return true;
+  }
 }
 
 /** 读盘的 promise：启动链路里多处要设置，共享同一次读盘 + 同一份校验结果。 */

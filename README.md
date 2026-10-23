@@ -117,6 +117,11 @@ pnpm dist             # 打包：electron-builder --dir + 自研 NSIS 安装包
 
 MIT，见 [LICENSE](LICENSE)。开发者：**奶龙**。
 
+## 杀毒软件误报
+
+本程序不加壳、不混淆（`asar: false`，应用文件为明文目录），exe 版本信息完整。若被杀软报毒，多半是行为特征触发（例如可选的托盘、可选的进程优先级脚本、第三方账号必需的 authlib-injector 注入）——**这些敏感行为默认关闭**，需要时可在设置里开启。
+误报申诉所需的完整行为清单与提交入口见 [docs/AV-FALSE-POSITIVE.md](docs/AV-FALSE-POSITIVE.md)。单文件便携版是自解压结构，如有误报请优先用 `Setup` 安装版或 `portable-x64.zip`。
+
 ## 产物
 
 全部产物都落在 `release/` 下（`pnpm dist` 一次生成）：

@@ -126,6 +126,18 @@ export interface Settings {
   translateMods: boolean;
   /** 中文搜索：查询含中文时先译为英文再检索。 */
   translateSearch: boolean;
+  /** 游戏内存优化：启动时追加经过验证的 G1GC 参数（减少 GC 停顿），实例自定义参数仍然优先。 */
+  memoryOptimize: boolean;
+  /**
+   * 高级进程操作（默认关）：启动后用外部脚本设置游戏进程优先级、改游戏窗口标题。
+   * 这类「旁挂脚本 + 操作别的进程」是杀毒软件的行为特征，默认关闭以免误报。
+   */
+  advancedProcessTweaks: boolean;
+  /**
+   * 离线「本地皮肤 API」（默认关）：给离线账号注入 authlib-injector 让游戏读本地皮肤/披风。
+   * 注入 javaagent 同样是杀毒软件敏感行为，默认关闭；需要时在设置里打开。
+   */
+  localSkinApi: boolean;
   /** 自定义界面图标："" = 内置 logo；其它为 NaiWa/icons 下的文件名。 */
   appIcon: string;
   /** 启动音效：默认 "off"（关闭）；"" = 内置默认；其它为 NaiWa/music 下的文件名。 */
@@ -302,6 +314,14 @@ export interface ModSearchResult {
 
 /** 资源来源：具体站点或「所有来源」。 */
 export type ModSourceFilter = ModProviderId | "all";
+
+/** 更新日志里的一个版本段落（来自仓库根的 CHANGELOG.md）。 */
+export interface ChangelogSection {
+  /** 版本号，例如 "0.2.5"；来源不是版本标题时为 "未标注"。 */
+  version: string;
+  /** 该版本下的条目（已去掉 markdown 的前缀符号）。 */
+  lines: string[];
+}
 
 /** 软件更新检查结果（与 GitHub 仓库版本挂钩）。 */
 export interface UpdateCheckResult {

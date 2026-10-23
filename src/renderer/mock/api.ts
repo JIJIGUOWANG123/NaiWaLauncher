@@ -636,6 +636,17 @@ export function createMockApi(): NaiwaApi {
         console.info("[mock] 在文件管理器中定位", target);
         await sleep(80);
       },
+      changelog: async (limit?: number) => {
+        trace("app.changelog", { limit });
+        await sleep(60);
+        // 预览态用一份固定样本，形状与主进程 parseChangelog 的结果一致
+        const sections = [
+          { version: "0.2.5", lines: ["启动选项新增「游戏内存优化」开关（G1GC 低延迟参数）", "启动画面在本进程第一个 await 之前创建", "便携单文件版改为固定解压目录并复用缓存"] },
+          { version: "0.2.4", lines: ["「关闭到托盘」真正生效：关闭不退出，右下角图标可重开界面"] },
+          { version: "0.2.3", lines: ["内置披风随程序分发（只读，仅离线账号可用）", "披风导入支持 64×32 整数倍放大图并自动缩放"] },
+        ];
+        return sections.slice(0, Math.max(1, limit ?? 3));
+      },
       openExternal: async (url: string) => {
         trace("app.openExternal", { url });
         await sleep(80);

@@ -5,11 +5,12 @@ import { IPC } from "../../shared/ipc";
 import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest,
 } from "../../shared/ipc";
-import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
+import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, ChangelogSection, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { syncTray } from "../tray";
 import { checkAppUpdates } from "../core/updates";
+import { getChangelog } from "../core/changelog";
 import { installUpdate } from "../core/updater";
 import { isPortListening, listLanAddresses, probeTcp } from "../net/index";
 import { natfrpCreate, natfrpNodes, natfrpStart, natfrpStatus, natfrpStop, natfrpTunnels, natfrpUser } from "../net/natfrp";
@@ -139,6 +140,7 @@ export function registerIpc(): void {
   handle<UpdateCheckResult>(IPC.appCheckUpdates, () => checkAppUpdates());
   handle<void>(IPC.appInstallUpdate, (url: string) => installUpdate(url));
   // 导出到系统目录后的「打开所在文件夹」：shell.showItemInFolder 不受启动器根目录守卫限制
+  handle<ChangelogSection[]>(IPC.appChangelog, (limit?: number) => getChangelog(limit));
   handle<void>(IPC.appReveal, (target: string) => {
     if (!target) throw new Error("路径为空");
     shell.showItemInFolder(resolve(target));

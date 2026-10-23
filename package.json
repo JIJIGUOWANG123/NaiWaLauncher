@@ -1,7 +1,7 @@
 {
   "name": "naiwa-launcher",
   "productName": "NaiWa Launcher",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "NaiWa Launcher (奶娃启动器) - a modern Minecraft launcher",
   "author": {
     "name": "奶龙"
@@ -72,6 +72,10 @@
       {
         "from": "resources/capes",
         "to": "capes"
+      },
+      {
+        "from": "CHANGELOG.md",
+        "to": "CHANGELOG.md"
       }
     ],
     "win": {
@@ -87,7 +91,8 @@
       "artifactName": "NaiWaLauncher-${version}-${arch}-${target}.exe"
     },
     "portable": {
-      "artifactName": "NaiWaLauncher-${version}-single-exe.exe"
+      "artifactName": "NaiWaLauncher-${version}-single-exe.exe",
+      "unpackDirName": "NaiWaLauncher"
     },
     "asar": false
   }

@@ -5,7 +5,7 @@ import avatarXiaoqi from "../assets/team/xiaoqi.png";
 import avatarDeepseek from "../assets/team/deepseek.png";
 import { api } from "../lib/api";
 import { useApp } from "../lib/store";
-import { errorMessage } from "../lib/useAsync";
+import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
 import { ConfirmDialog } from "../components/Modal";
 import {
@@ -56,14 +56,7 @@ const LINKS = [
   { Icon: IconRocket, label: "推荐：Steamcommunity 302", hint: "羽翼城出品 · 改善 Steam 社区 / GitHub 访问", url: RECOMMEND_URL },
 ];
 
-/** 近期主要条目；卡片只展示最近 3 条，更多见项目 CHANGELOG.md。 */
-const CHANGELOG = [
-  { title: "下载器稳定性", desc: "分片并发下载与断点续传重做，切镜像不再丢进度。" },
-  { title: "Java 自动匹配", desc: "启动前按版本挑 JDK，缺少时从 BellSoft 自动下载。" },
-  { title: "存档直进", desc: "实例卡新增存档抽屉，选中世界直接启动并进入。" },
-  { title: "中文翻译", desc: "模组列表与详情实时译成中文，搜索支持中文关键词。" },
-  { title: "前置依赖", desc: "安装模组前检查前置，缺什么一次装齐。" },
-];
+
 
 /** 团队头像一律用首字色块占位，不放真人照片。 */
 const TEAM = [
@@ -99,6 +92,8 @@ export function AboutPage() {
   const [installing, setInstalling] = useState(false);
   const [downloadHighlight, setDownloadHighlight] = useState(false);
   const version = info?.version ?? "0.1.5";
+  // 更新日志读随程序分发的 CHANGELOG.md（不再硬编码，否则永远落后于发版）
+  const changelog = useAsync(() => api.app.changelog(3), []);
   // 发布说明只展示前 3 行，避免长文档把首屏顶开。
   const updateNotes = (update?.notes ?? "")
     .split("\n")
@@ -341,17 +336,34 @@ export function AboutPage() {
               <IconChevronRight size={14} />
             </button>
           </div>
-          <ul className="about-log">
-            {CHANGELOG.slice(0, 3).map((entry) => (
-              <li className="about-log-item" key={entry.title}>
-                <span className="about-log-dot" aria-hidden="true" />
-                <div className="about-log-text">
-                  <strong>{entry.title}</strong>
-                  <p>{entry.desc}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {changelog.loading && !changelog.data ? <p className="field-hint">正在读取更新日志…</p> : null}
+          {changelog.error ? (
+            <p className="field-hint">读取更新日志失败：{errorMessage(changelog.error)}</p>
+          ) : null}
+          {changelog.data && changelog.data.length === 0 ? (
+            <p className="field-hint">这个安装包里没有附带 CHANGELOG.md，点右上「查看完整」去仓库看。</p>
+          ) : null}
+          {(changelog.data ?? []).map((section: { version: string; lines: string[] }, index: number) => (
+            <div className="about-log-version" key={section.version} data-changelog-version={section.version}>
+              <p className="about-log-version-head">
+                <strong>{section.version === "最新" ? section.version : "v" + section.version}</strong>
+                {index === 0 ? <span className="badge about-log-latest">当前版本线</span> : null}
+              </p>
+              <ul className="about-log">
+                {section.lines
+                  .filter((line: string) => !(line.startsWith("〔") && line.endsWith("〕")))
+                  .slice(0, 6)
+                  .map((line: string, lineIndex: number) => (
+                    <li className="about-log-item" key={section.version + "-" + lineIndex}>
+                      <span className="about-log-dot" aria-hidden="true" />
+                      <div className="about-log-text">
+                        <p>{line}</p>
+                      </div>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ))}
         </section>
 
         <section className="panel">

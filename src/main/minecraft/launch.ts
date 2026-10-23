@@ -173,6 +173,8 @@ export function offlineSkinArgs(jarPath: string, apiBaseUrl: string): string[] {
 async function offlineLocalSkinInjection(instance: InstanceMeta, identity: LaunchIdentity): Promise<string[]> {
   const accountId = identity.offlineAccountId;
   if (!accountId) return [];
+  // 注入 javaagent 是杀毒软件重点盯的行为：默认关闭，只有用户显式打开才走这条路
+  if (!getSettings().localSkinApi) return [];
   try {
     const [skin, cape] = await Promise.all([selectedLocalSkin(accountId), selectedLocalCape(accountId)]);
     // 什么都没选：保持原样启动，不注入、不起服务
@@ -271,13 +273,17 @@ function launcherBrand(): string {
   return brand.length > 0 ? brand : DEFAULT_BRAND;
 }
 
-/** 内存与 GC 参数：G1 + 面向低延迟的固定组合，避免默认 GC 在整合包里卡顿。 */
-function jvmTuningArgs(memoryMb: number): string[] {
+/**
+ * 内存参数。Xms/Xmx 永远下发；设置里开启「游戏内存优化」时再追加一套面向低延迟的
+ * G1GC 组合（Aikar 风格），显著减少整合包里的 GC 卡顿；关掉就只留堆大小，交给 JVM 默认 GC。
+ */
+function jvmTuningArgs(memoryMb: number, optimize: boolean): string[] {
   const xmx = Math.max(512, Math.round(memoryMb));
   const xms = Math.min(xmx, 2048);
+  const heap = ["-Xms" + xms + "M", "-Xmx" + xmx + "M"];
+  if (!optimize) return heap;
   return [
-    "-Xms" + xms + "M",
-    "-Xmx" + xmx + "M",
+    ...heap,
     "-XX:+UseG1GC",
     "-XX:+ParallelRefProcEnabled",
     "-XX:MaxGCPauseMillis=200",
@@ -471,7 +477,7 @@ export async function buildLaunchArgs(instance: InstanceMeta): Promise<{ exe: st
   // -javaagent 放在最前面：必须在主类之前进入 JVM，也不必和内存参数抢位置
   const jvm = [
     ...injectorArgs,
-    ...jvmTuningArgs(instance.memoryMb ?? 2048),
+    ...jvmTuningArgs(instance.memoryMb ?? 2048, getSettings().memoryOptimize !== false),
     ...identityArgs,
     ...extraJvmArgs,
     ...jvmArgs,
@@ -803,7 +809,12 @@ export async function launchInstance(id: string, quickPlayLevel?: string): Promi
     "启动方式：spawn（" + exe + "）detached，参数以数组传递；工作目录 " + gameDir +
       "；优先级 " + priority + "（" + PRIORITY_LABEL[priority] + "）由 PowerShell 设置",
   );
-  if (pid > 0 && process.platform === "win32") {
+  // 旁挂 PowerShell 改优先级/窗口标题属于「操作其它进程」的敏感行为，默认关闭以减少误报
+  const tweakProcess = settings.advancedProcessTweaks === true;
+  if (!tweakProcess) {
+    log.info("已跳过进程设置助手（设置里「高级进程操作」未开启，默认关闭以降低杀毒误报）");
+  }
+  if (tweakProcess && pid > 0 && process.platform === "win32") {
     try {
       const command = await applyProcessSettings(pid, priority, title);
       write("# priority/title helper: " + command + "\r\n");
