@@ -515,3 +515,36 @@ html[data-bg-tint="on"] .app-bg.has-image::after {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
 }
+
+/* ---------- 背景总开关 / 来源开关 ---------- */
+
+/* 分段标签上的「已关闭」标记：来源关掉时一眼能看出来 */
+.segmented-item.is-off {
+  color: var(--text-faint);
+}
+
+.bg-source-off {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  border: 1px solid var(--line);
+  color: var(--text-faint);
+}
+
+.bg-off-notice {
+  color: var(--accent-ink);
+}
+
+/* 播放方式 + 轮播间隔：按来源各自一组 */
+.bg-playback {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 总开关关闭时：配置区整体压暗（仍可操作，方便先配好再打开） */
+.bg-panel.is-bg-off .bg-playback,
+.bg-panel.is-bg-off [data-bg-source-enabled] {
+  opacity: 0.55;
+}

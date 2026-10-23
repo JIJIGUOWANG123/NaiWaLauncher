@@ -23,6 +23,7 @@ import { api } from "./lib/api";
 import { iconSrc } from "./lib/appIcon";
 import { backgroundUrl, isVideoFile, mediaUrl, musicUrl } from "./lib/media";
 import { clampInterval, useBackgroundPlayback } from "./lib/background";
+import type { BackgroundMode } from "../shared/types";
 import { attachAudio, pauseMusic, playMusic, setMusicVolume } from "./lib/music";
 import { playStartupSound, stopStartupSound } from "./lib/startupSound";
 import { afterFirstFrame, perfMark, perfTime } from "./lib/perf";
@@ -50,12 +51,30 @@ function Shell() {
     afterFirstFrame(() => setMediaReady(true));
   }, []);
   const media = useAsync(async () => (mediaReady ? perfTime("media-list", api.media.list()) : null), [mediaReady]);
-  // 背景图播放（单张 / 顺序轮播 / 随机轮播）由设置驱动，改间隔即时生效。
+
+  // 背景的开关与播放参数（要在 useBackgroundPlayback 之前算好）：
+  // 总开关 backgroundEnabled × 当前来源自己的开关，任一为关就整层不渲染。
+  const bgSource = settings?.backgroundSource ?? "local";
+  const sourceEnabled = bgSource === "api"
+    ? settings?.backgroundApiEnabled ?? true
+    : bgSource === "wallpaperEngine"
+      ? settings?.backgroundWallpaperEnabled ?? true
+      : settings?.backgroundLocalEnabled ?? true;
+  const bgActive = (settings?.backgroundEnabled ?? true) && sourceEnabled;
+  // 本地与壁纸引擎各有自己的播放方式/间隔；API 来源用 apiBackground*。
+  const localMode: BackgroundMode = bgSource === "wallpaperEngine"
+    ? settings?.wallpaperBackgroundMode ?? "single"
+    : settings?.backgroundMode ?? "single";
+  const localInterval = bgSource === "wallpaperEngine"
+    ? settings?.wallpaperBackgroundIntervalSec ?? 20
+    : settings?.backgroundIntervalSec ?? 20;
+
+  // 背景图播放（单张 / 顺序轮播 / 随机轮播）由设置驱动，改间隔即时生效；关闭时不参与轮播。
   const playback = useBackgroundPlayback(
     media.data,
-    settings?.backgroundImage ?? "",
-    settings?.backgroundMode ?? "single",
-    settings?.backgroundIntervalSec ?? 20,
+    bgActive ? (settings?.backgroundImage ?? "") : "",
+    bgActive ? localMode : "single",
+    localInterval,
   );
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -66,12 +85,11 @@ function Shell() {
   const bgVideoVolume = Math.min(1, Math.max(0, settings?.backgroundVideoVolume ?? 0));
   const bgVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  // 背景来源三选：local / api / wallpaperEngine。local 与 wallpaperEngine 都用 settings.backgroundImage
-  // （文件名或绝对路径）；api 模式完全忽略 backgroundImage，改成向主进程要一张随机图。
-  const bgSource = settings?.backgroundSource ?? "local";
-  // API 随机图默认关闭：backgroundApiUrl 为空串就是「关」——一次请求都不发，背景层直接按「没有背景」处理。
+  // local 与 wallpaperEngine 都用 settings.backgroundImage（文件名或绝对路径）；
+  // api 模式完全忽略 backgroundImage，改成向主进程要一张随机图。
+  // 两层开关任意一层关掉时，API 来源也一次请求都不发。
   const apiUrl = (settings?.backgroundApiUrl ?? "").trim();
-  const apiRequested = bgSource === "api";
+  const apiRequested = bgSource === "api" && bgActive;
   const apiMode = apiRequested && apiUrl !== "";
   const [apiBg, setApiBg] = useState<{ url: string; kind: "image" | "video" } | null>(null);
   const apiPending = useRef(false);
@@ -99,20 +117,19 @@ function Shell() {
     void loadApiBackground();
   }, [apiMode, loadApiBackground, settings?.backgroundImage]);
 
-  // API 模式轮播：single 只由「立即换一张」驱动，sequence / random 按轮播间隔换新图。
+  // API 模式轮播：single 只由「立即换一张」驱动，sequence / random 按 apiBackgroundIntervalSec 换新图。
+  const apiMode2 = settings?.apiBackgroundMode ?? "single";
+  const apiInterval = settings?.apiBackgroundIntervalSec ?? 20;
   useEffect(() => {
     if (!apiMode) return;
-    if ((settings?.backgroundMode ?? "single") === "single") return;
-    const timer = setInterval(
-      () => void loadApiBackground(),
-      clampInterval(settings?.backgroundIntervalSec ?? 20) * 1000,
-    );
+    if (apiMode2 === "single") return;
+    const timer = setInterval(() => void loadApiBackground(), clampInterval(apiInterval) * 1000);
     return () => clearInterval(timer);
-  }, [apiMode, loadApiBackground, settings?.backgroundIntervalSec, settings?.backgroundMode]);
+  }, [apiInterval, apiMode, apiMode2, loadApiBackground]);
 
   const bgUrl = apiRequested
     ? (apiMode && apiBg ? mediaUrl("", apiBg.url) : "")
-    : backgroundUrl(media.data, playback.name);
+    : (bgActive ? backgroundUrl(media.data, playback.name) : "");
   // 背景资源里可能是图片也可能是视频：按文件类型分流，轮播逻辑不变（换的只是 playback.name）。
   const bgIsVideo = apiMode
     ? apiBg?.kind === "video"

@@ -88,6 +88,21 @@ export interface Settings {
   backgroundSource: "local" | "api" | "wallpaperEngine";
   /** 随机图 API 地址（返回图片本身，或返回含图片地址的 JSON）；空串表示未配置。 */
   backgroundApiUrl: string;
+  /** 背景总开关：关闭后任何来源都不渲染（API 也不会发请求）。 */
+  backgroundEnabled: boolean;
+  /** 三个来源各自的启用开关（关闭后即使 backgroundSource 指向它也不渲染）。 */
+  backgroundLocalEnabled: boolean;
+  backgroundApiEnabled: boolean;
+  backgroundWallpaperEnabled: boolean;
+  /** 本地背景的播放方式与轮播间隔（沿用旧字段名，老配置自动继承）。 */
+  backgroundMode: BackgroundMode;
+  backgroundIntervalSec: number;
+  /** API 随机图来源的播放方式与轮播间隔。 */
+  apiBackgroundMode: BackgroundMode;
+  apiBackgroundIntervalSec: number;
+  /** Steam 壁纸引擎来源的播放方式与轮播间隔。 */
+  wallpaperBackgroundMode: BackgroundMode;
+  wallpaperBackgroundIntervalSec: number;
   /** 关窗口时的行为：ask = 首次弹窗询问（默认）；tray = 隐藏到托盘；quit = 直接退出。 */
   closeAction: "ask" | "tray" | "quit";
   /** Wallpaper Engine 壁纸目录；留空表示自动探测 Steam 库。 */
@@ -100,10 +115,7 @@ export interface Settings {
   titleBar: TitleBarStyle;
   /** 标题栏自定义文字；空串用默认「奶娃启动器 NaiWa Launcher」。 */
   titleBarText: string;
-  /** 背景图播放方式：单张 / 顺序轮播 / 随机轮播。 */
-  backgroundMode: BackgroundMode;
-  /** 轮播间隔（秒）。 */
-  backgroundIntervalSec: number;
+
   /** 是否使用渐变配色（对所有主题生效；关闭时用纯色）。 */
   customGradient: boolean;
   /** 渐变起始色（空串表示跟随主题主色）。 */

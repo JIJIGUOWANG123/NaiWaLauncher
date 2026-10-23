@@ -1,5 +1,13 @@
 # 更新日志
 
+## 0.3.1
+
+### 背景：总开关 + 三个来源各自开关 + 各自播放方式
+- 背景面板新增**总开关**「启用背景」：关掉后任何来源都不渲染（背景层直接为空），API 随机图也**一次请求都不发**；下面的配置仍可操作（整体压暗，方便先配好再打开）。
+- **本地背景图 / API 随机图 / Steam 壁纸引擎**各自新增「启用此来源」开关：关掉的那个只在分段标签上标「已关闭」，仍可进去配置，但不参与渲染。
+- **播放方式与轮播间隔按来源拆开**：三个来源各存一套（`backgroundMode/backgroundIntervalSec`、`apiBackgroundMode/apiBackgroundIntervalSec`、`wallpaperBackgroundMode/wallpaperBackgroundIntervalSec`），切到哪个来源就显示/修改哪一组。
+- 升级兼容：新增的两个来源默认继承「本地」原有的播放方式与间隔，老配置观感不变。
+
 ## 0.3.0
 
 ### 背景支持三种来源

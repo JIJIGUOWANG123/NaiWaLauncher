@@ -98,10 +98,6 @@ export function PersonalizePage() {
     if (settings) setGradToDraft(settings.gradientTo);
   }, [settings?.gradientTo]);
 
-  useEffect(() => {
-    if (settings) setIntervalDraft(String(settings.backgroundIntervalSec));
-  }, [settings?.backgroundIntervalSec]);
-
   const openDir = async (kind: "backgrounds" | "music", label: string) => {
     try {
       await api.media.openDir(kind);
@@ -242,6 +238,57 @@ export function PersonalizePage() {
   const [apiError, setApiError] = useState<string | null>(null);
   const apiAutoRef = useRef(false);
 
+  /** 某个来源自己的开关：分段仍可切换用于配置，真正渲染与否看它 + 总开关。 */
+  const sourceEnabled = (source: Settings["backgroundSource"]): boolean => (
+    source === "api"
+      ? settings?.backgroundApiEnabled ?? true
+      : source === "wallpaperEngine"
+        ? settings?.backgroundWallpaperEnabled ?? true
+        : settings?.backgroundLocalEnabled ?? true
+  );
+
+  /** 当前来源对应的播放方式 / 间隔：三套字段互不干扰。 */
+  const playbackMode: BackgroundMode = bgSource === "api"
+    ? settings?.apiBackgroundMode ?? "single"
+    : bgSource === "wallpaperEngine"
+      ? settings?.wallpaperBackgroundMode ?? "single"
+      : settings?.backgroundMode ?? "single";
+  const playbackInterval = bgSource === "api"
+    ? settings?.apiBackgroundIntervalSec ?? 20
+    : bgSource === "wallpaperEngine"
+      ? settings?.wallpaperBackgroundIntervalSec ?? 20
+      : settings?.backgroundIntervalSec ?? 20;
+
+  const setPlaybackMode = (value: BackgroundMode) => {
+    if (bgSource === "api") {
+      void persist({ apiBackgroundMode: value }, "API 随机图播放方式");
+      return;
+    }
+    if (bgSource === "wallpaperEngine") {
+      void persist({ wallpaperBackgroundMode: value }, "壁纸引擎播放方式");
+      return;
+    }
+    void persist({ backgroundMode: value }, "背景图片播放方式");
+  };
+
+  const setPlaybackInterval = (value: number) => {
+    if (bgSource === "api") {
+      void persist({ apiBackgroundIntervalSec: value }, "API 随机图轮播间隔");
+      return;
+    }
+    if (bgSource === "wallpaperEngine") {
+      void persist({ wallpaperBackgroundIntervalSec: value }, "壁纸引擎轮播间隔");
+      return;
+    }
+    void persist({ backgroundIntervalSec: value }, "背景轮播间隔");
+  };
+
+  // 间隔草稿跟着「当前来源」的间隔走（切换来源就换成那一套字段）。
+  useEffect(() => {
+    if (settings) setIntervalDraft(String(playbackInterval));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackInterval]);
+
   useEffect(() => {
     setApiUrlDraft(settings?.backgroundApiUrl ?? "");
   }, [settings?.backgroundApiUrl]);
@@ -341,12 +388,12 @@ export function PersonalizePage() {
     void persist({ titleBarText: next }, next ? "标题栏文字" : "标题栏文字（已清空，用默认文字）");
   };
 
-  // 轮播间隔：5–600 秒，改完立即按新间隔重排定时器。
+  // 轮播间隔：5–600 秒，改完立即按新间隔重排定时器（落到当前来源那套字段）。
   const commitInterval = () => {
     const next = clampInterval(Number(intervalDraft));
     setIntervalDraft(String(next));
-    if (next === settings?.backgroundIntervalSec) return;
-    void persist({ backgroundIntervalSec: next }, "背景轮播间隔");
+    if (next === playbackInterval) return;
+    setPlaybackInterval(next);
   };
 
   const togglePlay = async () => {
@@ -518,7 +565,7 @@ export function PersonalizePage() {
           />
         </div>
 
-        <div className="panel">
+        <div className={`panel bg-panel ${settings.backgroundEnabled ? "" : "is-bg-off"}`.trim()}>
           <div className="panel-head">
             <h2 className="panel-title">背景</h2>
             <span className="panel-count">
@@ -526,21 +573,42 @@ export function PersonalizePage() {
             </span>
           </div>
 
+          {/* 总开关：关掉后整个背景层都不渲染，API 随机图也不发请求（配置仍可改） */}
+          <div data-bg-enabled={settings.backgroundEnabled ? "on" : "off"}>
+            <Toggle
+              label="启用背景"
+              hint="总开关：关掉后背景层完全不显示（API 随机图也不会发请求），下面的配置会保留，随时可以再打开"
+              checked={settings.backgroundEnabled}
+              onChange={(value) => void persist({ backgroundEnabled: value }, value ? "启用背景" : "关闭背景")}
+            />
+          </div>
+
+          {!settings.backgroundEnabled ? (
+            <p className="field-hint bg-off-notice" data-bg-off-notice>
+              背景总开关已关闭：下面仍可调整来源与参数，但不会显示任何背景，API 随机图也不会发请求。
+            </p>
+          ) : null}
+
           {/* 背景来源三选：只有「本地」与「壁纸引擎」会用 backgroundImage，API 模式走独立请求 */}
           <div className="segmented" role="tablist" aria-label="背景来源">
-            {BG_SOURCES.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                role="tab"
-                aria-selected={bgSource === item.value}
-                className={`segmented-item ${bgSource === item.value ? "active" : ""}`.trim()}
-                data-bg-source={item.value}
-                onClick={() => void persist({ backgroundSource: item.value }, "背景来源")}
-              >
-                {item.label}
-              </button>
-            ))}
+            {BG_SOURCES.map((item) => {
+              const on = sourceEnabled(item.value);
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={bgSource === item.value}
+                  className={`segmented-item ${bgSource === item.value ? "active" : ""} ${on ? "" : "is-off"}`.trim()}
+                  data-bg-source={item.value}
+                  data-bg-source-state={on ? "on" : "off"}
+                  onClick={() => void persist({ backgroundSource: item.value }, "背景来源")}
+                >
+                  {item.label}
+                  {on ? null : <span className="bg-source-off">已关闭</span>}
+                </button>
+              );
+            })}
           </div>
 
           {bgSource === "local" && media.loading ? <LoadingState label="读取背景图片…" /> : null}
@@ -560,6 +628,15 @@ export function PersonalizePage() {
           />
 
           {bgSource === "local" ? (
+            <>
+            <div data-bg-source-enabled="local" data-bg-source-state={settings.backgroundLocalEnabled ? "on" : "off"}>
+              <Toggle
+                label="启用本地背景"
+                hint="关掉后即使当前来源是「本地背景图」也不显示背景"
+                checked={settings.backgroundLocalEnabled}
+                onChange={(value) => void persist({ backgroundLocalEnabled: value }, value ? "启用本地背景" : "关闭本地背景")}
+              />
+            </div>
             <Field
               label="背景图 / 视频"
               hint="支持图片与视频（mp4 / webm / ogv）：把文件放进 NaiWa/backgrounds 后点刷新；选中后立即铺满窗口"
@@ -577,10 +654,19 @@ export function PersonalizePage() {
                 onChange={pickBackground}
               />
             </Field>
+            </>
           ) : null}
 
           {bgSource === "api" ? (
             <>
+              <div data-bg-source-enabled="api" data-bg-source-state={settings.backgroundApiEnabled ? "on" : "off"}>
+                <Toggle
+                  label="启用 API 随机图"
+                  hint="关掉后即使当前来源是「API 随机图」也不会请求、不会显示"
+                  checked={settings.backgroundApiEnabled}
+                  onChange={(value) => void persist({ backgroundApiEnabled: value }, value ? "启用 API 随机图" : "关闭 API 随机图")}
+                />
+              </div>
               <Field
                 label="随机图地址"
                 hint="地址可以直接返回图片，也可以返回包含图片地址的 JSON（主进程会挑出图片字段）。留空 = 关闭 API 随机图"
@@ -638,36 +724,39 @@ export function PersonalizePage() {
             </>
           ) : null}
 
-          <Field label="播放方式" hint="单张＝只用所选图片；顺序轮播＝按文件名排序循环；随机轮播＝每次随机取，不连续重复">
-            <Select
-              value={settings.backgroundMode}
-              options={BACKGROUND_MODES.map((item) => ({ value: item.value, label: item.label }))}
-              ariaLabel="背景播放方式"
-              disabled={backgrounds.length === 0}
-              onChange={(value) => void persist({ backgroundMode: value as BackgroundMode }, "背景图片播放方式")}
-            />
-          </Field>
-
-          <Field label="轮播间隔" hint="5–600 秒；轮播中修改会立即按新间隔重排">
-            <div className="interval-row">
-              <input
-                type="number"
-                className="input interval-input"
-                min={BACKGROUND_INTERVAL_MIN}
-                max={BACKGROUND_INTERVAL_MAX}
-                step={1}
-                value={intervalDraft}
-                aria-label="轮播间隔（秒）"
-                disabled={settings.backgroundMode === "single"}
-                onChange={(event) => setIntervalDraft(event.target.value)}
-                onBlur={commitInterval}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") commitInterval();
-                }}
+          {/* 播放方式与间隔：按当前来源落到各自的字段（local / api / wallpaperEngine 三套） */}
+          <div className="bg-playback" data-bg-playback={bgSource}>
+            <Field label="播放方式" hint="单张＝只用所选图片；顺序轮播＝按文件名排序循环；随机轮播＝每次随机取，不连续重复">
+              <Select
+                value={playbackMode}
+                options={BACKGROUND_MODES.map((item) => ({ value: item.value, label: item.label }))}
+                ariaLabel="背景播放方式"
+                disabled={bgSource === "local" && backgrounds.length === 0}
+                onChange={(value) => setPlaybackMode(value as BackgroundMode)}
               />
-              <span className="interval-unit">秒</span>
-            </div>
-          </Field>
+            </Field>
+
+            <Field label="轮播间隔" hint="5–600 秒；轮播中修改会立即按新间隔重排">
+              <div className="interval-row">
+                <input
+                  type="number"
+                  className="input interval-input"
+                  min={BACKGROUND_INTERVAL_MIN}
+                  max={BACKGROUND_INTERVAL_MAX}
+                  step={1}
+                  value={intervalDraft}
+                  aria-label="轮播间隔（秒）"
+                  disabled={playbackMode === "single"}
+                  onChange={(event) => setIntervalDraft(event.target.value)}
+                  onBlur={commitInterval}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") commitInterval();
+                  }}
+                />
+                <span className="interval-unit">秒</span>
+              </div>
+            </Field>
+          </div>
 
           {bgSource !== "api" && bgUrl ? (
             <div className="media-preview" data-media-preview={isVideoFile(settings.backgroundImage) ? "video" : "image"}>
@@ -738,6 +827,15 @@ export function PersonalizePage() {
           <p className="field-hint">
             识别路径：<code className="mono">&lt;Steam 库&gt;\steamapps\workshop\content\431960</code>；只识别视频类壁纸（creative workshop 应用 id 431960），扫不到时可以在设置里手动指定目录。
           </p>
+
+          <div data-bg-source-enabled="wallpaperEngine" data-bg-source-state={settings.backgroundWallpaperEnabled ? "on" : "off"}>
+            <Toggle
+              label="启用壁纸引擎背景"
+              hint="关掉后即使当前来源是「Steam 壁纸引擎」也不显示背景"
+              checked={settings.backgroundWallpaperEnabled}
+              onChange={(value) => void persist({ backgroundWallpaperEnabled: value }, value ? "启用壁纸引擎背景" : "关闭壁纸引擎背景")}
+            />
+          </div>
 
           {wallpapers.loading ? <LoadingState label="扫描壁纸引擎目录…" /> : null}
           {wallpapers.error ? <ErrorState message={wallpapers.error} onRetry={wallpapers.reload} /> : null}
