@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DownloadJob } from "../../shared/types";
 import { api } from "../lib/api";
-import { formatDateTime } from "../lib/format";
+import { formatBytes, formatDateTime, formatSpeed } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
@@ -29,6 +29,11 @@ const KIND_KEY: Record<DownloadJob["kind"], string> = {
 function clampProgress(progress: number): number {
   if (!Number.isFinite(progress)) return 0;
   return Math.max(0, Math.min(100, Math.round(progress)));
+}
+
+/** 只认「有意义的正数」：缺字段 / 0 / NaN / 负数一律返回 null，界面据此不渲染。 */
+function positiveBytes(value: number | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export function DownloadsPage() {
@@ -149,6 +154,22 @@ export function DownloadsPage() {
           <dt>{t("pages.downloads.progress")}</dt>
           <dd>{clampProgress(job.progress)}%</dd>
         </div>
+        {positiveBytes(job.bytesPerSecond) !== null && job.status === "running" ? (
+          <div className="dl-fact">
+            <dt>{t("pages.downloads.speed")}</dt>
+            <dd data-dl-speed>{formatSpeed(positiveBytes(job.bytesPerSecond) ?? 0)}</dd>
+          </div>
+        ) : null}
+        {positiveBytes(job.totalBytes) !== null ? (
+          <div className="dl-fact">
+            <dt>{t("pages.downloads.size")}</dt>
+            <dd data-dl-bytes>
+              {formatBytes(Math.min(positiveBytes(job.downloadedBytes) ?? 0, positiveBytes(job.totalBytes) ?? 0))}
+              {" / "}
+              {formatBytes(positiveBytes(job.totalBytes) ?? 0)}
+            </dd>
+          </div>
+        ) : null}
         <div className="dl-fact">
           <dt>{t("pages.downloads.kind")}</dt>
           <dd>{t(KIND_KEY[job.kind])}</dd>
@@ -210,6 +231,10 @@ export function DownloadsPage() {
           {list.map((job) => {
             const meta = STATUS_META[job.status];
             const percent = clampProgress(job.progress);
+            // 缺字段时保持 null：不显示，而不是显示 0 B / NaN
+            const speed = job.status === "running" ? positiveBytes(job.bytesPerSecond) : null;
+            const totalBytes = positiveBytes(job.totalBytes);
+            const doneBytes = totalBytes === null ? null : Math.min(positiveBytes(job.downloadedBytes) ?? 0, totalBytes);
             return (
               <li key={job.id} className={`dl-row dl-row-${job.status}`} data-dl-row={job.id}>
                 <div className="dl-main">
@@ -237,10 +262,23 @@ export function DownloadsPage() {
                   </div>
                   <div className="dl-meta">
                     <span>{t(KIND_KEY[job.kind])}</span>
+                    {speed !== null ? (
+                      <span className="dl-speed" data-dl-speed>{formatSpeed(speed)}</span>
+                    ) : null}
+                    {totalBytes !== null ? (
+                      <span className="dl-bytes" data-dl-bytes>
+                        {formatBytes(doneBytes ?? 0)} / {formatBytes(totalBytes)}
+                      </span>
+                    ) : null}
                     <span className="dl-time">
                       {t("pages.downloads.updatedAtShort", { time: formatDateTime(job.updatedAt) })}
                     </span>
                   </div>
+                  {job.status === "failed" && job.message ? (
+                    <p className="dl-error" data-dl-error role="alert">
+                      {t("pages.downloads.failedReason", { error: job.message })}
+                    </p>
+                  ) : null}
                 </div>
                 {renderActions(job)}
               </li>

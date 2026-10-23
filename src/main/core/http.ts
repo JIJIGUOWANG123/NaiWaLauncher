@@ -38,6 +38,9 @@ const DEFAULT_RETRIES = 3;
 /** 只约束"拿到响应头"这一段，正文不受它限制。 */
 // 冷连接（cdn.modrinth.com 的 TLS 握手）实测可达 7.6s，6s 会误判超时
 const HEADER_TIMEOUT_MS = 15_000;
+/** 续传记录的落盘节奏：250ms 或每 2MB 一次（硬退出时最多丢这么多）。 */
+const META_SAVE_INTERVAL_MS = 250;
+const META_SAVE_BYTES = 2 * 1024 * 1024;
 /** 单个分片两次收到数据之间的最大容忍时间。 */
 // 60s 太长：一条卡死的连接会占住一个 worker 槽位整整一分钟（分片还会再重试一次），
 // 并行下载时这条代价被放大；30s 足够覆盖正常的慢响应，又能把槽位尽快还给池子。
@@ -480,8 +483,20 @@ async function discardPartial(dest: string): Promise<void> {
   await rm(metaPath(dest), { force: true }).catch(() => undefined);
 }
 
+/**
+ * 落续传记录：写临时文件再 rename。
+ * 直接 writeFile 的话，进程在写一半时被杀会留下半截 JSON —— 下次启动读不出来，
+ * 等于把已有进度全丢了（这正是「重启后从头下」的另一半原因）。
+ */
 async function saveMeta(dest: string, meta: PartMeta): Promise<void> {
-  await writeFile(metaPath(dest), JSON.stringify(meta), "utf8").catch(() => undefined);
+  const file = metaPath(dest);
+  const tmp = `${file}.${process.pid}.${Date.now().toString(36)}.tmp`;
+  try {
+    await writeFile(tmp, JSON.stringify(meta), "utf8");
+    await rename(tmp, file);
+  } catch {
+    await rm(tmp, { force: true }).catch(() => undefined);
+  }
 }
 
 async function readMeta(dest: string): Promise<PartMeta | null> {
@@ -681,9 +696,20 @@ async function transferChunked(
   const size = info.size;
   const chunkCount = Math.max(1, Math.min(connections, Math.floor(size / MIN_CHUNK_BYTES)));
   const meta = await prepareMeta(dest, url, info, chunkCount);
-  const metaTimer = setInterval(() => {
-    void saveMeta(dest, meta);
-  }, 1000);
+  // 续传记录要落得比人想象中更勤：快网络下 1 秒能跑几十 MB，
+  // 硬退出时那 1 秒就是「丢掉的进度」。改成 250ms 一次，并且累积到一定字节也立刻落一次。
+  let saving: Promise<void> | null = null;
+  let dirtySinceSave = 0;
+  const flushMeta = (): void => {
+    if (saving) return;
+    dirtySinceSave = 0;
+    // 深拷贝一份再写：写盘期间 continue 会继续改 meta，序列化到一半的数组不能写出去
+    const snapshot: PartMeta = { url: meta.url, size: meta.size, etag: meta.etag, chunks: meta.chunks.map((c) => ({ ...c })) };
+    saving = saveMeta(dest, snapshot).finally(() => {
+      saving = null;
+    });
+  };
+  const metaTimer = setInterval(flushMeta, META_SAVE_INTERVAL_MS);
   metaTimer.unref?.();
 
   let handle: FileHandle | null = null;
@@ -695,7 +721,11 @@ async function transferChunked(
     // 用 allSettled 而不是 all：取消时其余分片也要各自收尾，别在句柄关闭后才去写盘。
     const settled = await Promise.allSettled(
       meta.chunks.map((chunk) =>
-        runChunk(fileHandle, url, chunk, headers, (delta) => onBytes(delta, meta.chunks.length), signal),
+        runChunk(fileHandle, url, chunk, headers, (delta) => {
+          onBytes(delta, meta.chunks.length);
+          dirtySinceSave += delta;
+          if (dirtySinceSave >= META_SAVE_BYTES) flushMeta();
+        }, signal),
       ),
     );
     // 取消也要落一次续传记录：已到手的字节就是下次 resume 的起点
@@ -827,7 +857,9 @@ export async function downloadFile(
         if (hasPartial) await rm(metaPath(dest), { force: true }).catch(() => undefined);
         return { bytes: existingSize, reused: true };
       }
-      await discardPartial(dest);
+      // 有续传记录说明这是「没下完的半成品」：哈希当然对不上，绝不能当成坏文件丢掉，
+      // 否则断点续传全废（重启后从 0 重下）。只有「没有续传记录的完整文件」才需要丢弃重下。
+      if (!hasPartial) await discardPartial(dest);
     } else if (!hasPartial && existingSize > 0) {
       return { bytes: existingSize, reused: true };
     }

@@ -580,6 +580,11 @@ export const DICT: Record<string, Entry> = {
   "dl.messageIncomplete": D("启动器关闭时任务未完成", "The task was unfinished when the launcher closed", "ランチャー終了時にタスクは未完了でした"),
   "dl.messageFailed": D("下载失败", "Download failed", "ダウンロードに失敗しました"),
   "dl.messageCancelled": D("已取消", "Cancelled", "キャンセル済み"),
+  "dl.messageQueued": D(
+    "排队中：等待空闲的安装槽位（同时下载数见设置）",
+    "Queued: waiting for a free install slot (see the concurrent downloads setting)",
+    "順番待ち：空いているインストール枠を待っています（同時ダウンロード数は設定で変更できます）",
+  ),
   "dl.param.mcVersion": D("mcVersion（游戏版本）", "mcVersion (game version)", "mcVersion（ゲームバージョン）"),
   "dl.param.version": D("version（JDK 版本）", "version (JDK version)", "version（JDK バージョン）"),
   "dl.param.projectId": D("projectId（模组项目 id）", "projectId (mod project id)", "projectId（MOD プロジェクト ID）"),

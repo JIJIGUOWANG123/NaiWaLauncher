@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -7,6 +8,7 @@ import type { DownloadJob, LoaderKind, TaskKind, TaskProgress, TaskResult } from
 import { cancelledMessage, isCancelledError } from "../core/http";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
+import { getSettings } from "../core/settings";
 import { installJava } from "../java/index";
 import { installLoader } from "../loaders/index";
 import { installVersion } from "../minecraft/install";
@@ -38,12 +40,30 @@ export interface JobHint {
   resume?: string;
 }
 
+/**
+ * 一次安装的上下文。
+ * 并发安装下「这条进度帧 / 这条新记录属于谁」不能靠全局变量判断，否则多个安装同时跑时
+ * 进度会记到别人头上。每个安装都在自己的异步上下文里执行：重放归属、新建记录、取消句柄、
+ * 重试参数全部从上下文取（AsyncLocalStorage 随 await 与定时器一路传递，节流补发的那一帧
+ * 也留在原上下文里），所以天然不会串线。
+ */
+interface InstallScope {
+  /** 重放中的记录 id：本次安装产生的子任务进度归到它名下，结局由 resume() 统一收尾。 */
+  ownerId: string | null;
+  /** 本次安装共用的取消句柄：cancel(任一记录) 只停这一条安装。 */
+  controller: AbortController;
+  /** 本次安装自己创建的记录：按 label 归并时只认这些，避免并到别的安装的记录上。 */
+  jobIds: Set<string>;
+  /** 本次安装的重试参数；下一个新建记录会采用它。 */
+  hint: JobHint | null;
+}
+
+const installScope = new AsyncLocalStorage<InstallScope>();
+
 let jobs: DownloadJob[] = [];
 let loaded = false;
 /** 任务 id → job id：同一个任务后续的进度帧都落到同一条记录上。 */
 let taskToJob = new Map<string, string>();
-/** 正在重放的 job：期间产生的进度帧/子任务结果全部归到它名下，结局由 resume() 统一收尾。 */
-let resumeOwnerId: string | null = null;
 let pendingHint: (JobHint & { expiresAt: number }) | null = null;
 let sequence = 0;
 
@@ -53,8 +73,14 @@ let sequence = 0;
  * 否则取消只会停掉其中一段，其余分片照样把流量跑完。
  */
 const controllers = new Map<string, AbortController>();
-/** IPC 直接发起的前台安装共用的句柄；安装期间新建的记录都会挂到它下面。 */
-let foregroundController: AbortController | null = null;
+/** 正在跑的安装数：安装级并发，上限取设置里的 concurrentDownloads（不是文件级并发）。 */
+let activeInstalls = 0;
+interface SlotWaiter {
+  grant(): void;
+}
+/** 等槽位的安装，FIFO：先点的先跑。 */
+const slotWaiters: SlotWaiter[] = [];
+let slotPumpTimer: ReturnType<typeof setInterval> | null = null;
 
 let writeQueue: Promise<void> = Promise.resolve();
 let lastPersistAt = 0;
@@ -73,9 +99,89 @@ function now(): number {
   return Date.now();
 }
 
+/** 安装级并发上限：每次现读设置里的「同时下载数」，运行中改设置立刻生效（1..32）。 */
+function installLimit(): number {
+  const raw = Number(getSettings().concurrentDownloads);
+  if (!Number.isFinite(raw)) return 12;
+  return Math.min(32, Math.max(1, Math.trunc(raw)));
+}
+
+function stopSlotPump(): void {
+  if (!slotPumpTimer) return;
+  clearInterval(slotPumpTimer);
+  slotPumpTimer = null;
+}
+
+function pumpInstallSlots(): void {
+  const limit = installLimit();
+  while (activeInstalls < limit && slotWaiters.length > 0) {
+    activeInstalls += 1;
+    (slotWaiters.shift() as SlotWaiter).grant();
+  }
+  if (slotWaiters.length === 0) stopSlotPump();
+}
+
+/**
+ * 排队期间定时重读设置：把「同时下载数」调大时排队的安装立刻放行，
+ * 不必等到某条装完才腾出槽位。队列空了就停表。
+ */
+function startSlotPump(): void {
+  if (slotPumpTimer) return;
+  slotPumpTimer = setInterval(pumpInstallSlots, 150);
+  slotPumpTimer.unref?.();
+}
+
+/**
+ * 取一个安装槽位（FIFO）。满额时一直等；signal 中止则立刻从队列移除并抛「下载已取消」。
+ * 返回的释放函数必须调用，否则后面的安装永远等不到槽位。
+ */
+export function acquireInstallSlot(signal?: AbortSignal): Promise<() => void> {
+  return new Promise<() => void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error(cancelledMessage()));
+      return;
+    }
+    let released = false;
+    const waiter: SlotWaiter = {
+      grant: () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve(() => {
+          if (released) return;
+          released = true;
+          activeInstalls = Math.max(0, activeInstalls - 1);
+          pumpInstallSlots();
+        });
+      },
+    };
+    const onAbort = (): void => {
+      const index = slotWaiters.indexOf(waiter);
+      // 已经拿到槽位：交给 work 自己感知 abort（句柄是同一个）
+      if (index < 0) return;
+      slotWaiters.splice(index, 1);
+      reject(new Error(cancelledMessage()));
+    };
+    slotWaiters.push(waiter);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    startSlotPump();
+    pumpInstallSlots();
+  });
+}
+
+/** 闸门快照（自检与日志用）：active = 正在跑的安装数，queued = 排队数，limit = 当前设置的上限。 */
+export function installGateState(): { active: number; queued: number; limit: number } {
+  return { active: activeInstalls, queued: slotWaiters.length, limit: installLimit() };
+}
+
 function newId(): string {
   sequence += 1;
   return `job-${now().toString(36)}-${sequence.toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** 字节类字段的收敛：负数/NaN/非数字一律当作「没有这个数」，不要污染记录。 */
+function byteCount(value: unknown): number | undefined {
+  const num = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(num) || num < 0) return undefined;
+  return Math.round(num);
 }
 
 function clampProgress(value: unknown, fallback: number): number {
@@ -109,6 +215,13 @@ function normalizeJob(raw: unknown): DownloadJob | null {
   };
   if (typeof src.message === "string" && src.message) job.message = src.message;
   if (typeof src.resume === "string" && src.resume.trim()) job.resume = src.resume;
+  // 速度与「已下载/总大小」也要读回来：重启后管理页还要显示上次的字节数
+  const downloadedBytes = byteCount(src.downloadedBytes);
+  const totalBytes = byteCount(src.totalBytes);
+  const bytesPerSecond = byteCount(src.bytesPerSecond);
+  if (downloadedBytes !== undefined) job.downloadedBytes = downloadedBytes;
+  if (totalBytes !== undefined && totalBytes > 0) job.totalBytes = totalBytes;
+  if (bytesPerSecond !== undefined) job.bytesPerSecond = bytesPerSecond;
   return job;
 }
 
@@ -295,10 +408,20 @@ export function hintNextJob(hint: JobHint): void {
   pendingHint = { ...hint, expiresAt: now() + HINT_TTL_MS };
 }
 
-function takeHint(): JobHint | null {
+/** 摘走全局那条一次性提示（IPC 在发起安装前声明，进入安装上下文时被摘走）。 */
+function takePendingHint(): JobHint | null {
   const hint = pendingHint;
   pendingHint = null;
   if (!hint || hint.expiresAt < now()) return null;
+  return hint;
+}
+
+/** 本次安装新建记录要用的重试参数：上下文里的优先（并发安装各拿各的，不会互相顶掉）。 */
+function takeHint(): JobHint | null {
+  const scope = installScope.getStore();
+  if (!scope) return takePendingHint();
+  const hint = scope.hint;
+  scope.hint = null;
   return hint;
 }
 
@@ -329,7 +452,12 @@ function createJob(input: { id?: string; kind: DownloadJob["kind"]; title: strin
     updatedAt: stamp,
   };
   if (input.resume) job.resume = input.resume;
-  if (foregroundController) controllers.set(job.id, foregroundController);
+  // 记录挂到「产生它的那次安装」的句柄上：并发安装互不影响各自的取消
+  const scope = installScope.getStore();
+  if (scope) {
+    controllers.set(job.id, scope.controller);
+    scope.jobIds.add(job.id);
+  }
   jobs.unshift(job);
   if (jobs.length > MAX_JOBS) jobs.length = MAX_JOBS;
   return job;
@@ -342,17 +470,24 @@ function releaseController(controller: AbortController): void {
 }
 
 /**
- * 前台安装（IPC 直接发起）的统一入口：给这次安装绑定一个可取消的句柄。
- * 安装期间产生的所有下载记录都绑到同一个句柄上，所以 cancel(任一记录) 能真正停下传输。
+ * 前台安装（IPC 直接发起）的统一入口：给这次安装绑定自己的异步上下文与可取消句柄，
+ * 再向安装闸门要一个槽位（满额则 FIFO 排队）。
+ * 安装期间产生的所有下载记录都绑到同一个句柄上，所以 cancel(任一记录) 能真正停下这次传输。
  */
 export async function runCancellable<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controller = new AbortController();
-  const previous = foregroundController;
-  foregroundController = controller;
+  // 重试参数在等槽位之前就摘走：留着会被排在后面的安装抢走
+  const scope: InstallScope = { ownerId: null, controller, jobIds: new Set<string>(), hint: takePendingHint() };
   try {
-    return await work(controller.signal);
+    return await installScope.run(scope, async () => {
+      const release = await acquireInstallSlot(controller.signal);
+      try {
+        return await work(controller.signal);
+      } finally {
+        release();
+      }
+    });
   } finally {
-    if (foregroundController === controller) foregroundController = previous;
     releaseController(controller);
   }
 }
@@ -373,8 +508,10 @@ function acquireJob(event: ProgressEvent): DownloadJob {
     }
   }
 
-  if (resumeOwnerId) {
-    const owner = jobs.find((job) => job.id === resumeOwnerId);
+  const scope = installScope.getStore();
+  const ownerId = scope?.ownerId ?? null;
+  if (ownerId) {
+    const owner = jobs.find((job) => job.id === ownerId);
     if (owner) {
       taskToJob.set(event.taskId, owner.id);
       return owner;
@@ -382,8 +519,13 @@ function acquireJob(event: ProgressEvent): DownloadJob {
   }
 
   const kind = kindForTask(event.kind);
-  // 事件里没有 jobId：按 label 归并到正在跑的同名记录，否则新建一条
-  const merged = jobs.find((job) => job.title === event.label && job.status === "running" && (job.kind === kind || job.kind === pendingHint?.kind));
+  const hintKind = scope ? scope.hint?.kind : pendingHint?.kind;
+  // 事件里没有 jobId：按 label 归并到「本次安装」正在跑的同名记录，否则新建一条。
+  // 归并只认本次安装自己建的记录，否则两个安装撞了同名 label 会互相改写进度。
+  const merged = jobs.find((job) =>
+    job.title === event.label && job.status === "running" && (job.kind === kind || job.kind === hintKind)
+    && (scope === undefined || scope.jobIds.has(job.id)),
+  );
   if (merged) {
     taskToJob.set(event.taskId, merged.id);
     return merged;
@@ -405,7 +547,7 @@ function acquireJob(event: ProgressEvent): DownloadJob {
 export function trackProgress(event: ProgressEvent): void {
   if (!event || typeof event.taskId !== "string" || !event.taskId) return;
   const job = acquireJob(event);
-  const resumeOwned = job.id === resumeOwnerId;
+  const resumeOwned = job.id === installScope.getStore()?.ownerId;
   // 已完成/已取消的记录不再被后续进度帧改写（重放期间由 resume() 统一收尾）
   if (!resumeOwned && (job.status === "done" || job.status === "cancelled")) return;
 
@@ -414,6 +556,13 @@ export function trackProgress(event: ProgressEvent): void {
     : null;
 
   const patch: Partial<DownloadJob> = { progress: percent === null ? job.progress : percent };
+  // 管理页要显示「已下载 / 总大小」与速度：进度帧里本来就有，直接落到 job 上，不另开通道
+  const downloadedBytes = byteCount(event.downloadedBytes);
+  const totalBytes = byteCount(event.totalBytes);
+  const bytesPerSecond = byteCount(event.bytesPerSecond);
+  if (downloadedBytes !== undefined) patch.downloadedBytes = downloadedBytes;
+  if (totalBytes !== undefined && totalBytes > 0) patch.totalBytes = totalBytes;
+  if (bytesPerSecond !== undefined) patch.bytesPerSecond = bytesPerSecond;
   // 只有独立任务在 percent 到 100 时才直接算完成；重放看整次重放的结果
   patch.status = !resumeOwned && percent !== null && percent >= 100 ? "done" : "running";
   if (job.message !== undefined) patch.message = undefined;
@@ -423,17 +572,22 @@ export function trackProgress(event: ProgressEvent): void {
 /** 任务结束事件（IPC task:done）。 */
 export function trackResult(result: TaskResult): void {
   if (!result || typeof result.taskId !== "string") return;
+  const scope = installScope.getStore();
+  const ownJob = (item: DownloadJob): boolean => scope === undefined || scope.jobIds.has(item.id);
   const job =
     jobs.find((item) => item.id === taskToJob.get(result.taskId)) ??
-    jobs.find((item) => item.title === result.label && item.status === "running");
+    jobs.find((item) => item.title === result.label && item.status === "running" && ownJob(item));
   taskToJob.delete(result.taskId);
   if (!job) return;
   // 重放期间子任务的结果不代表整条记录的结局
-  if (job.id === resumeOwnerId) return;
+  if (scope?.ownerId === job.id) return;
   // 取消后的收尾帧（下载已取消 / 任务中止）不能把记录改成 failed
   if (job.status === "cancelled") return;
   if (result.ok) {
-    touch(job, { status: "done", progress: 100, message: undefined });
+    // 完成时保留 totalBytes（管理页要显示「12 MB / 12 MB」），已下载字节对齐到总大小
+    const patch: Partial<DownloadJob> = { status: "done", progress: 100, message: undefined, bytesPerSecond: 0 };
+    if (typeof job.totalBytes === "number" && job.totalBytes > 0) patch.downloadedBytes = job.totalBytes;
+    touch(job, patch);
     return;
   }
   const message = result.error && result.error.trim() ? result.error : mt("dl.messageFailed");
@@ -570,11 +724,25 @@ export async function resume(id: string): Promise<void> {
   // 每次继续都换一个新句柄：上一轮那个多半已经在 cancel 里 abort 过了
   const controller = new AbortController();
   controllers.set(job.id, controller);
-  touch(job, { status: "running", progress: 0, message: undefined });
-  const previousOwner = resumeOwnerId;
-  resumeOwnerId = job.id;
+  // 不要清零进度：卡片上的百分比是「已落盘的进度」，清零会让用户以为要从头下。
+  // 真正的断点续传由下载器的 .part/.part.json 完成，进度会随子任务继续往上走。
+  touch(job, { status: "running", message: undefined });
+  // 这次重放有自己的上下文：子任务进度归到这条记录，取消只 abort 它自己的句柄
+  const scope: InstallScope = { ownerId: job.id, controller, jobIds: new Set<string>([job.id]), hint: null };
+  // 要等槽位时先把「排队中」写进记录，免得用户以为任务卡住了
+  const gate = installGateState();
+  if (gate.queued > 0 || gate.active >= gate.limit) touch(job, { status: "running", message: mt("dl.messageQueued") });
   try {
-    await replay(job, params, controller.signal);
+    await installScope.run(scope, async () => {
+      // 继续下载同样受安装闸门约束：排队中被取消会立刻移出队列
+      const release = await acquireInstallSlot(controller.signal);
+      try {
+        touch(job, { message: undefined });
+        await replay(job, params, controller.signal);
+      } finally {
+        release();
+      }
+    });
     // 传输中途被取消：状态由 cancel() 写成 cancelled，这里不能再改回 done
     if (controller.signal.aborted) return;
     touch(job, { status: "done", progress: 100, message: undefined });
@@ -588,7 +756,6 @@ export async function resume(id: string): Promise<void> {
     log.warn(`继续下载失败：${job.title} · ${message}`);
     throw err instanceof Error ? err : new Error(message);
   } finally {
-    resumeOwnerId = previousOwner;
     if (controllers.get(job.id) === controller) controllers.delete(job.id);
     await flushPersist();
   }

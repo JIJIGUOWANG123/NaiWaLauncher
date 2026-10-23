@@ -699,7 +699,7 @@ export const pagesDict: Record<string, { "zh-CN": string; "en-US": string; "ja-J
   "pages.download.clearSearch": { "zh-CN": "清空搜索", "en-US": "Clear search", "ja-JP": "検索をクリア" },
   "pages.download.hintTitle": { "zh-CN": "安装过程会做什么？", "en-US": "What does installing do?", "ja-JP": "インストールでは何が行われますか？" },
   "pages.download.hintBefore": {
-    "zh-CN": "自动下载游戏本体 jar、libraries 依赖与 assets 资源文件，进度显示在右下角任务面板。安装源可在",
+    "zh-CN": "自动下载游戏本体 jar、libraries 依赖与 assets 资源文件，进度显示在「管理」页。安装源可在",
     "en-US": "The launcher downloads the game jar, the libraries and the assets, with progress in the task panel at the bottom right. The install source can be changed in ",
     "ja-JP": "ゲーム本体の jar、libraries、assets を自動でダウンロードし、進捗は右下のタスクパネルに表示されます。インストール元は",
   },

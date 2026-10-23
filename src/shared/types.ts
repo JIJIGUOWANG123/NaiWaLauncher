@@ -463,6 +463,14 @@ export interface DownloadJob {
   updatedAt: number;
   /** 恢复该任务所需的参数（内部使用，UI 不必展示）。 */
   resume?: string;
+  /**
+   * 实时字节信息（可选）：原来的右下角任务面板靠 TaskProgress 事件显示速度，
+   * 面板移除后「管理」页需要这些字段才能显示速度与「已下载 / 总大小」。
+   * 由主进程在进度帧里顺手写进 job 并持久化，重启后也能显示上次的字节数。
+   */
+  downloadedBytes?: number;
+  totalBytes?: number;
+  bytesPerSecond?: number;
 }
 
 /** 内容类型：模组 / 光影 / 资源包 / 整合包 / 地图。 */

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  InstanceMeta, InstalledContentRef, LoaderKind, MapEntry, ModCategory, ModContentKind, ModDependency, ModFileInfo,
-  ModFilterOptions, ModProviderId, ModSearchResult,
+  DownloadJob, InstanceMeta, InstalledContentRef, LoaderKind, MapEntry, ModCategory, ModContentKind, ModDependency,
+  ModFileInfo, ModFilterOptions, ModProviderId, ModSearchResult,
 } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatAgo, formatCount, formatDate, loaderLabel } from "../lib/format";
@@ -29,6 +29,64 @@ import { IconChevronDown, IconClose, IconDownload, IconRefresh, IconSearch } fro
 
 /** 详情面板底部按钮没有具体文件 id，用它作为「正在安装」的占位标记。 */
 const INSTALL_PANEL_KEY = "__panel__";
+
+/** 整合包新建实例，没有目标实例：key 里用这个固定后缀占位。 */
+const PACK_SCOPE = "__pack__";
+
+/** 取消/失败/完成这些状态没有顺序意义，比较时只用来挑选「最该显示的那一条」。 */
+const PHASE_RANK: Record<string, number> = { running: 4, queued: 3, failed: 2, cancelled: 1, done: 0 };
+
+/**
+ * 安装条目 key：一次安装 = 来源 × 项目 × 文件 × 目标实例。
+ * 文件与实例都参与，所以同一项目分别装到两个实例、或同一项目装两个不同文件，互不遮挡。
+ */
+function installKeyOf(
+  provider: ModProviderId, projectId: string, fileId: string | null | undefined, instanceId: string,
+): string {
+  return `${provider}:${projectId}:${fileId ?? ""}:${instanceId || PACK_SCOPE}`;
+}
+
+/**
+ * 安装级并发上限＝设置里的「同时下载数」（与主进程闸门读同一个值）。
+ * 在这里也按它排一次队，界面才知道哪几条还在「排队中」——主进程那边的闸门是兜底。
+ */
+function installLimitOf(settings: { concurrentDownloads?: number } | null | undefined): number {
+  const raw = Number(settings?.concurrentDownloads ?? 12);
+  if (!Number.isFinite(raw)) return 12;
+  return Math.min(32, Math.max(1, Math.trunc(raw)));
+}
+
+/** 下载记录的重试参数：主进程用它重放安装，这里反向认出这条记录属于哪条安装。 */
+function jobParamsOf(job: DownloadJob): Record<string, unknown> | null {
+  if (!job.resume) return null;
+  try {
+    const parsed: unknown = JSON.parse(job.resume);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/** 安装条目：一条安装排队、跑、结束的完整状态，界面上每一条都各自显示自己的进度。 */
+type InstallPhase = "queued" | "running" | "done" | "failed" | "cancelled";
+
+interface InstallEntry {
+  key: string;
+  /** 卡片用的「项目」key（provider:projectId），用来把进度挂回卡片。 */
+  projectKey: string;
+  provider: ModProviderId;
+  projectId: string;
+  fileId: string | null;
+  instanceId: string;
+  instanceName: string;
+  kind: ModContentKind;
+  title: string;
+  fileName: string;
+  installDependencies: boolean;
+  phase: InstallPhase;
+  error?: string;
+}
 
 /** 筛选记忆：版本/加载器/分辨率/分类按内容类型分别记在本地，不新增设置字段。 */
 const FILTERS_KEY = "naiwa.res.filters";
@@ -299,14 +357,24 @@ export function ModsPage() {
   const [submitted, setSubmitted] = useState("");
   const [tick, setTick] = useState(0);
   const [selected, setSelected] = useState<ModSearchResult | null>(null);
-  const [installing, setInstalling] = useState<{ projectId: string; fileId: string | null } | null>(null);
+  /**
+   * 安装队列：一条安装一个条目，各自排队、各自显示进度，互不禁用。
+   * 用 ref 镜像当前值，调度器（effect）与事件回调都读 ref，避免闭包读到旧队列。
+   */
+  const [installs, setInstalls] = useState<InstallEntry[]>([]);
+  const installsRef = useRef<InstallEntry[]>([]);
+  /** 已经启动过的条目：effect 重入时不会把同一条安装启动两遍。 */
+  const startedInstalls = useRef(new Set<string>());
+  /** 用户主动取消过的条目：取消后的失败帧要显示成「已取消」而不是「失败」。 */
+  const cancelledInstalls = useRef(new Set<string>());
   /** 展开中的实例浮层：记下是哪张卡片 + 锚点按钮，浮层自己在 body 上定位。 */
   const [picker, setPicker] = useState<{ mod: ModSearchResult; anchor: HTMLElement } | null>(null);
   /** 卡片上的实例按钮，详情面板里点安装时按 key 取回锚点，把浮层开在对应卡片上。 */
   const pickerAnchors = useRef(new Map<string, HTMLButtonElement>());
-  /** 整合包「安装并创建实例」：确认弹窗 + 进行中的卡片。 */
+  /** 整合包「安装并创建实例」的确认弹窗（进行中的条目在 installs 队列里）。 */
   const [packConfirm, setPackConfirm] = useState<ModSearchResult | null>(null);
-  const [packBusy, setPackBusy] = useState<{ key: string; fileId: string | null } | null>(null);
+  /** 下载记录快照：进度按记录自己的重试参数对回条目，谁的进度显示在谁身上。 */
+  const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([]);
   const [favorites, setFavorites] = useState<string[]>(() => readFavorites());
   const [depsPrompt, setDepsPrompt] = useState<{ deps: ModDependency[]; title: string } | null>(null);
   const depsResolver = useRef<((choice: DepsChoice) => void) | null>(null);
@@ -817,6 +885,191 @@ export function ModsPage() {
     return choice === "with";
   };
 
+  // ---------- 安装队列（多条并发，各自的进度/状态互不影响） ----------
+
+  /** 安装级并发上限：与主进程闸门读同一个设置，改设置立刻生效。 */
+  const installLimit = installLimitOf(settings);
+  const queuedCount = installs.filter((item) => item.phase === "queued").length;
+
+  /** 队列状态的唯一写入口：先更新 ref 再进 state，调度器与回调永远看到最新的队列。 */
+  const commitInstalls = (next: InstallEntry[]) => {
+    installsRef.current = next;
+    setInstalls(next);
+  };
+
+  const patchInstall = (key: string, patch: Partial<InstallEntry>) => {
+    commitInstalls(installsRef.current.map((item) => (item.key === key ? { ...item, ...patch } : item)));
+  };
+
+  const entryOf = (provider: ModProviderId, projectId: string, fileId: string | null, instanceId: string) => {
+    const key = installKeyOf(provider, projectId, fileId, instanceId);
+    return installs.find((item) => item.key === key);
+  };
+
+  /** 这条安装是不是正占着「它自己」：排队与进行中才算忙，完成后按钮立即恢复可用。 */
+  const isEntryBusy = (entry: InstallEntry | undefined): boolean =>
+    entry?.phase === "queued" || entry?.phase === "running";
+
+  /** 这个实例里该项目的任何一条安装是否还在跑（选择实例的下拉按它禁用，避免写同一个文件）。 */
+  const busyInInstance = (provider: ModProviderId, projectId: string, instanceId: string): boolean =>
+    installs.some((item) =>
+      item.provider === provider
+      && item.projectId === projectId
+      && item.instanceId === instanceId
+      && isEntryBusy(item),
+    );
+
+  /** 某条安装当前的百分比：取主进程那条下载记录的进度；没有记录（或在排队）就是 null。 */
+  const progressOf = (entry: InstallEntry): number | null => {
+    if (entry.phase === "done") return 100;
+    if (entry.phase !== "running") return null;
+    const job = jobOfEntry(entry);
+    return job ? job.progress : null;
+  };
+
+  /** 下载记录里属于这条安装的那一条：按重试参数（来源/项目/文件/实例）反查，主进程保证归属正确。 */
+  const jobOfEntry = (entry: InstallEntry): DownloadJob | undefined => {
+    if (entry.kind === "modpack") return undefined;
+    const matches = downloadJobs.filter((job) => {
+      if (job.kind !== "content") return false;
+      const params = jobParamsOf(job);
+      if (!params) return false;
+      return params.provider === entry.provider
+        && params.projectId === entry.projectId
+        && params.instanceId === entry.instanceId
+        && (typeof params.fileId === "string" ? params.fileId : null) === entry.fileId;
+    });
+    // 列表按创建时间倒序：优先取正在跑的那条，否则取最新一条（重试过会留下多条同参记录）
+    return matches.find((job) => job.status === "running") ?? matches[0];
+  };
+
+  /** 一条安装真正的执行体：只负责跑 + 收尾，队列调度与状态流转在外面。 */
+  const startInstall = async (entry: InstallEntry) => {
+    if (startedInstalls.current.has(entry.key)) return;
+    startedInstalls.current.add(entry.key);
+    patchInstall(entry.key, { phase: "running", error: undefined });
+    try {
+      if (entry.kind === "modpack") {
+        const created = await api.mods.installModpack(entry.provider, entry.projectId, entry.fileId ?? undefined);
+        patchInstall(entry.key, { phase: "done", title: created.name });
+        push(tr("pages.mods.modpackCreated", { name: created.name }), "success");
+        await reloadInstances();
+        return;
+      }
+      const request: KindInstallRequest = {
+        provider: entry.provider,
+        projectId: entry.projectId,
+        fileId: entry.fileId ?? undefined,
+        instanceId: entry.instanceId,
+        kind: entry.kind,
+        installDependencies: entry.installDependencies,
+      };
+      const result = await api.mods.install(request);
+      patchInstall(entry.key, { phase: "done", fileName: result.fileName });
+      push(
+        tr(
+          result.installedDependencies.length > 0 ? "pages.mods.installedWithDeps" : "pages.mods.installedNoDeps",
+          {
+            name: result.fileName,
+            instance: entry.instanceName,
+            dir: KIND_DIR[entry.kind],
+            deps: result.installedDependencies.join(", "),
+          },
+        ),
+        "success",
+      );
+      // 先标记缓存失效（下一次点安装不会用旧快照判定），再重查一次让角标跟着变。
+      setInstalledStale(true);
+      installedRefs.reload();
+    } catch (error: unknown) {
+      if (cancelledInstalls.current.has(entry.key)) {
+        patchInstall(entry.key, { phase: "cancelled" });
+        return;
+      }
+      patchInstall(entry.key, { phase: "failed", error: errorMessage(error) });
+      push(errorMessage(error), "error");
+    } finally {
+      startedInstalls.current.delete(entry.key);
+    }
+  };
+
+  /**
+   * 入队：目标已经在排队/进行中就不重复入队，直接返回那一条。
+   * 「同一实例里同一个项目」算同一个目标：说明里挑出来的文件未必等于最佳版本，
+   * 两条一起跑会同时写同一个目标文件，所以 fileId 未知（null）时按冲突处理。
+   */
+  const enqueueInstall = (entry: Omit<InstallEntry, "phase">): InstallEntry => {
+    const current = installsRef.current;
+    const existing = current.find((item) =>
+      (item.phase === "queued" || item.phase === "running")
+      && item.provider === entry.provider
+      && item.projectId === entry.projectId
+      && item.instanceId === entry.instanceId
+      && (item.fileId === null || entry.fileId === null || item.fileId === entry.fileId),
+    );
+    if (existing) return existing;
+    const next: InstallEntry = { ...entry, phase: "queued" };
+    cancelledInstalls.current.delete(entry.key);
+    commitInstalls([...current.filter((item) => item.key !== entry.key), next]);
+    return next;
+  };
+
+  /** 取消：排队中的立刻出队；正在跑的走主进程记录终止（只停这一条安装）。 */
+  const cancelInstall = async (entry: InstallEntry) => {
+    if (entry.phase === "queued") {
+      commitInstalls(installsRef.current.filter((item) => item.key !== entry.key));
+      return;
+    }
+    if (entry.phase !== "running") return;
+    cancelledInstalls.current.add(entry.key);
+    patchInstall(entry.key, { phase: "cancelled" });
+    const job = jobOfEntry(entry);
+    if (!job) return;
+    try {
+      await api.downloads.cancel(job.id);
+    } catch {
+      // 记录可能已被清掉：安装本身仍会按 abort 收尾，这里不必再打扰用户
+    }
+  };
+
+  const retryInstall = (entry: InstallEntry) => {
+    cancelledInstalls.current.delete(entry.key);
+    patchInstall(entry.key, { phase: "queued", error: undefined });
+  };
+
+  const dismissInstall = (key: string) => {
+    cancelledInstalls.current.delete(key);
+    commitInstalls(installsRef.current.filter((item) => item.key !== key));
+  };
+
+  /**
+   * 调度器：每次队列或「同时下载数」变化都重新算一遍空槽位，按入队顺序启动。
+   * 上限调小时不会打断正在跑的安装，只是不再放新的；调大时排队中的立刻补上。
+   */
+  useEffect(() => {
+    const running = installs.filter((item) => item.phase === "running").length;
+    const slots = Math.max(0, installLimit - running);
+    if (slots === 0) return;
+    const queued = installs.filter((item) => item.phase === "queued").slice(0, slots);
+    for (const entry of queued) void startInstall(entry);
+    // startInstall 只读 ref 里的最新队列，不必进依赖
+  }, [installs, installLimit]);
+
+  /** 下载记录订阅：进度帧的归属由主进程判定，界面只把记录对回条目。 */
+  useEffect(() => {
+    let alive = true;
+    const off = api.downloads.onChanged((list) => {
+      if (alive) setDownloadJobs(list);
+    });
+    void api.downloads.list().then((list) => {
+      if (alive) setDownloadJobs(list);
+    }).catch(() => undefined);
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
+
   /** 安装单个内容；file 为空时交给主进程挑该实例的最佳版本（卡片下拉走这条）。 */
   const installContent = async (mod: ModSearchResult, instance: InstanceMeta, file: ModFileInfo | null) => {
     if (!isBackendKind(kind)) return;
@@ -827,44 +1080,59 @@ export function ModsPage() {
       const overwrite = await askDuplicate(mod, dupes, file?.fileName ?? tr("pages.mods.bestPick"));
       if (!overwrite) return;
     }
-    setInstalling({ projectId: mod.projectId, fileId: file?.fileId ?? null });
-    try {
-      // 模组/光影/资源包都可能带必需前置；整合包与存档不查，由主进程按各自目录处理。
-      const needsDeps = kind === "mod" || kind === "shader" || kind === "resourcepack";
-      const installDependencies = needsDeps ? await confirmDependencies(mod, instance, file, kind) : false;
-      if (installDependencies === null) return;
-      const request: KindInstallRequest = {
-        provider: mod.provider,
-        projectId: mod.projectId,
-        fileId: file?.fileId,
-        instanceId: instance.id,
-        kind,
-        installDependencies,
-      };
-      const result = await api.mods.install(request);
-      push(
-        tr(
-          result.installedDependencies.length > 0 ? "pages.mods.installedWithDeps" : "pages.mods.installedNoDeps",
-          {
-            name: result.fileName,
-            instance: instance.name,
-            dir: KIND_DIR[kind],
-            deps: result.installedDependencies.join(", "),
-          },
-        ),
-        "success",
-      );
-      // 先标记缓存失效（下一次点安装不会用旧快照判定），再重查一次让角标跟着变。
-      setInstalledStale(true);
-      installedRefs.reload();
-    } catch (error: unknown) {
-      push(errorMessage(error), "error");
-    } finally {
-      setInstalling(null);
+    // 模组/光影/资源包都可能带必需前置；整合包与存档不查，由主进程按各自目录处理。
+    const needsDeps = kind === "mod" || kind === "shader" || kind === "resourcepack";
+    const installDependencies = needsDeps ? await confirmDependencies(mod, instance, file, kind) : false;
+    // 用户取消前置 → 整单不入队
+    if (installDependencies === null) return;
+    enqueueInstall({
+      key: installKeyOf(mod.provider, mod.projectId, file?.fileId ?? null, instance.id),
+      projectKey: keyOf(mod),
+      provider: mod.provider,
+      projectId: mod.projectId,
+      fileId: file?.fileId ?? null,
+      instanceId: instance.id,
+      instanceName: instance.name,
+      kind,
+      title: titleOf(mod),
+      fileName: file?.fileName ?? "",
+      installDependencies,
+    });
+  };
+
+  /** 队列里最该在卡片上露面的那一条（正在跑优先，其次排队，再次失败）。 */
+  const entryForProject = (projectKey: string): InstallEntry | undefined => {
+    const list = installs.filter((item) => item.projectKey === projectKey);
+    if (list.length === 0) return undefined;
+    return list.slice().sort((a, b) => (PHASE_RANK[b.phase] ?? 1) - (PHASE_RANK[a.phase] ?? 1))[0];
+  };
+  /** 条目的状态文案：进度只显示它自己那条记录的百分比。 */
+  const phaseText = (entry: InstallEntry): string => {
+    switch (entry.phase) {
+      case "queued":
+        return tr("pages.mods.installQueued");
+      case "running": {
+        const percent = progressOf(entry);
+        return percent === null
+          ? (entry.kind === "modpack" ? tr("pages.mods.creatingInstance") : tr("pages.mods.installing"))
+          : tr("pages.mods.installPercent", { percent });
+      }
+      case "done":
+        return tr("pages.mods.installDone");
+      case "cancelled":
+        return tr("pages.mods.installCancelled");
+      default:
+        return tr("pages.mods.installFailed");
     }
   };
 
-  const panelInstalling = installing !== null && installing.projectId === (selected?.projectId ?? "");
+  /** 文件行的目标实例：整合包新建实例，没有目标实例，用固定后缀占位。 */
+  const fileInstanceId = detailKind === "modpack" ? "" : (currentInstance?.id ?? "");
+  /** 详情面板底部按钮对应的那条安装（装的是列表里第一个、也就是最匹配的那个文件）。 */
+  const panelEntry = selected
+    ? entryOf(selected.provider, selected.projectId, sortedFiles[0]?.fileId ?? null, fileInstanceId)
+    : undefined;
+  const panelInstalling = isEntryBusy(panelEntry);
   /** 详情面板当前项目在该实例的已装记录：整合包走「新建实例」，不参与判定。 */
   const selectedMatch = selected && detailKind !== "modpack"
     ? matchInstalled(detailKind, { projectId: selected.projectId, slug: selected.slug, title: selected.title })
@@ -914,20 +1182,26 @@ export function ModsPage() {
     setPicker({ mod, anchor });
   };
 
-  /** 整合包：不需要选实例，直接新建一个（名字取整合包名）再安装。 */
-  const installModpackAndCreate = async (mod: ModSearchResult, fileId?: string) => {
+  /**
+   * 整合包：不需要选实例，入队后由主进程新建实例（名字取整合包名）。
+   * 每个整合包是独立条目，互不阻塞；新建实例本身不写别人正在写的目录。
+   */
+  const installModpackAndCreate = (mod: ModSearchResult, fileId?: string) => {
     setPackConfirm(null);
     setPicker(null);
-    setPackBusy({ key: keyOf(mod), fileId: fileId ?? null });
-    try {
-      const result = await api.mods.installModpack(mod.provider, mod.projectId, fileId);
-      push(tr("pages.mods.modpackCreated", { name: result.name }), "success");
-      await reloadInstances();
-    } catch (error: unknown) {
-      push(errorMessage(error), "error");
-    } finally {
-      setPackBusy(null);
-    }
+    enqueueInstall({
+      key: installKeyOf(mod.provider, mod.projectId, fileId ?? null, ""),
+      projectKey: keyOf(mod),
+      provider: mod.provider,
+      projectId: mod.projectId,
+      fileId: fileId ?? null,
+      instanceId: "",
+      instanceName: "",
+      kind: "modpack",
+      title: titleOf(mod),
+      fileName: "",
+      installDependencies: false,
+    });
   };
 
   /** 列表换了一批（搜索 / 刷新）时卡片会被重建，锚点可能已经不在，浮层跟着收起。 */
@@ -1032,6 +1306,86 @@ export function ModsPage() {
           </button>
         </div>
       </header>
+
+      {/* 安装队列：每条安装自己的状态与进度，互不影响；排队中的条目可以直接取消。 */}
+      {installs.length > 0 ? (
+        <section
+          className="res-queue"
+          data-install-queue
+          data-install-queued={queuedCount}
+          style={{ display: "grid", gap: 8 }}
+        >
+          <div className="drawer-section-head">
+            <span className="field-label" title={tr("pages.mods.installQueueTip")}>
+              {tr("pages.mods.installQueueTitle")}
+            </span>
+            <span className="muted-text" data-install-limit={installLimit}>
+              {tr("pages.mods.installQueueLimit", { limit: installLimit })}
+              {queuedCount > 0 ? ` · ${tr("pages.mods.installQueuedCount", { count: queuedCount })}` : ""}
+            </span>
+          </div>
+          <ul className="file-list">
+            {installs.map((entry) => {
+              const percent = progressOf(entry);
+              return (
+                <li
+                  key={entry.key}
+                  className="file-row"
+                  data-install-row={entry.key}
+                  data-install-phase={entry.phase}
+                >
+                  <div className="file-main">
+                    <div className="file-title">
+                      <span className="file-name" title={entry.title}>{entry.title}</span>
+                      <span className="badge" data-install-state={entry.phase}>{phaseText(entry)}</span>
+                      {entry.fileName ? <span className="muted-text">{entry.fileName}</span> : null}
+                    </div>
+                    <div className="file-meta">
+                      <span>{entry.instanceName || tr("pages.mods.creatingInstance")}</span>
+                      {percent !== null && entry.phase === "running" ? (
+                        <span data-install-percent={percent}>{percent}%</span>
+                      ) : null}
+                      {entry.phase === "failed" && entry.error ? <span>{entry.error}</span> : null}
+                    </div>
+                  </div>
+                  <div className="res-card-side">
+                    {entry.phase === "queued" || entry.phase === "running" ? (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        data-install-cancel={entry.key}
+                        onClick={() => void cancelInstall(entry)}
+                      >
+                        {tr("pages.common.cancel")}
+                      </button>
+                    ) : null}
+                    {entry.phase === "failed" || entry.phase === "cancelled" ? (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        data-install-retry={entry.key}
+                        onClick={() => retryInstall(entry)}
+                      >
+                        {tr("pages.mods.installRetry")}
+                      </button>
+                    ) : null}
+                    {entry.phase === "done" || entry.phase === "failed" || entry.phase === "cancelled" ? (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        data-install-dismiss={entry.key}
+                        onClick={() => dismissInstall(entry.key)}
+                      >
+                        {tr("pages.mods.installDismiss")}
+                      </button>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       <div className="res-switcher">
         {/* 一级：来源单选。没配 Key 的 CurseForge 直接禁用，并在 title 里说明原因。 */}
@@ -1347,7 +1701,8 @@ export function ModsPage() {
                 const summaryZh = translateMods ? mod.summaryZh : undefined;
                 const favorite = favorites.includes(key);
                 const open = picker !== null && keyOf(picker.mod) === key;
-                const creating = packBusy?.key === key;
+                const cardEntry = entryForProject(key);
+                const creating = cardEntry?.phase === "queued" || cardEntry?.phase === "running";
                 const updatedAt = updatedAtOf(mod);
                 const badgeKey = isBackendKind(kind) ? KIND_BADGE_KEY[kind] : null;
                 // 项目级判定：索引命中=已安装，扫描兜底命中=疑似已安装（可能只是同名）。
@@ -1374,6 +1729,15 @@ export function ModsPage() {
                           <span className={`badge res-source res-source-${mod.provider}`} data-res-source={mod.provider}>
                             {sourceBadge(mod.provider, tr)}
                           </span>
+                          {cardEntry ? (
+                            <span
+                              className="badge"
+                              data-res-install={cardEntry.phase}
+                              title={tr("pages.mods.installQueueTitle")}
+                            >
+                              {phaseText(cardEntry)}
+                            </span>
+                          ) : null}
                           {installedGrade ? (
                             <span
                               className={`badge res-installed ${installedGrade === "scan" ? "is-scan" : ""}`.trim()}
@@ -1427,10 +1791,10 @@ export function ModsPage() {
                           type="button"
                           className="btn btn-sm btn-primary"
                           data-modpack-install={key}
-                          disabled={packBusy !== null}
+                          disabled={creating}
                           onClick={() => setPackConfirm(mod)}
                         >
-                          {creating ? tr("pages.mods.creatingInstance") : tr("pages.mods.installAndCreate")}
+                          {creating ? phaseText(cardEntry as InstallEntry) : tr("pages.mods.installAndCreate")}
                         </button>
                       ) : (
                         <button
@@ -1505,7 +1869,7 @@ export function ModsPage() {
               role="menuitem"
               className="res-menu-item"
               data-menu-instance={instance.id}
-              disabled={installing !== null}
+              disabled={busyInInstance(picker.mod.provider, picker.mod.projectId, instance.id)}
               onClick={() => void installInto(picker.mod, instance)}
             >
               <span className="res-menu-name">{instance.name}</span>
@@ -1562,8 +1926,8 @@ export function ModsPage() {
             }
             void installContent(selected, currentInstance, sortedFiles[0] ?? null);
           }}
-          installing={panelInstalling || (detailKind === "modpack" && packBusy?.key === keyOf(selected) && packBusy.fileId === null)}
-          installingLabel={detailKind === "modpack" ? tr("pages.mods.creatingInstance") : undefined}
+          installing={panelInstalling}
+          installingLabel={panelEntry ? phaseText(panelEntry) : undefined}
           instanceName={currentInstance?.name}
           installHint={detailKind === "modpack"
             ? tr("pages.mods.modpackInstallHint", { name: titleOf(selected) })
@@ -1597,9 +1961,9 @@ export function ModsPage() {
               {!files.loading && !files.error ? (
                 <ul className="file-list">
                   {sortedFiles.map((file) => {
-                    const busy = detailKind === "modpack"
-                      ? packBusy !== null && packBusy.key === keyOf(selected) && packBusy.fileId === file.fileId
-                      : installing !== null && installing.projectId === selected.projectId && installing.fileId === file.fileId;
+                    // 每个文件只关心自己那条安装：别的文件在装不会禁用这一行
+                    const fileEntry = entryOf(selected.provider, selected.projectId, file.fileId, fileInstanceId);
+                    const busy = isEntryBusy(fileEntry);
                     return (
                       <li key={file.fileId} className={`file-row ${file.exactMatch ? "is-match" : ""}`.trim()}>
                         <div className="file-main">
@@ -1643,10 +2007,10 @@ export function ModsPage() {
                             }
                             void installContent(selected, currentInstance, file);
                           }}
-                          disabled={installing !== null || packBusy !== null}
+                          disabled={busy}
                         >
                           <IconDownload size={15} />
-                          {busy ? tr("pages.mods.installing") : tr(KIND_FILE_ACTION_KEY[detailKind])}
+                          {busy ? phaseText(fileEntry as InstallEntry) : tr(KIND_FILE_ACTION_KEY[detailKind])}
                         </button>
                       </li>
                     );
@@ -1717,7 +2081,7 @@ export function ModsPage() {
         open={packConfirm !== null}
         title={tr("pages.mods.modpackConfirmTitle")}
         confirmText={tr("pages.mods.installAndCreate")}
-        busy={packBusy !== null}
+        busy={false}
         message={packConfirm ? tr("pages.mods.modpackInstallHint", { name: titleOf(packConfirm) }) : ""}
         onCancel={() => setPackConfirm(null)}
         onConfirm={() => {

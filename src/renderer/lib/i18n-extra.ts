@@ -132,7 +132,7 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
   "pages.download.clearSearch": D("清空搜索", "Clear search", "検索をクリア"),
   "pages.download.hintTitle": D("安装过程会做什么？", "What does installing do?", "インストールでは何が行われますか？"),
   "pages.download.hintBefore": D(
-    "自动下载游戏本体 jar、libraries 依赖与 assets 资源文件，进度显示在右下角任务面板。安装源可在",
+    "自动下载游戏本体 jar、libraries 依赖与 assets 资源文件，进度显示在「管理」页。安装源可在",
     "The launcher downloads the game jar, the libraries and the assets, with progress in the task panel at the bottom right. The install source can be changed in ",
     "ゲーム本体の jar、libraries、assets を自動でダウンロードし、進捗は右下のタスクパネルに表示されます。インストール元は",
   ),
@@ -177,11 +177,14 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
   "pages.downloads.cancel": D("终止", "Cancel", "中止"),
   "pages.downloads.remove": D("移除", "Remove", "削除"),
   "pages.downloads.status": D("状态", "Status", "状態"),
+  "pages.downloads.speed": D("速度", "Speed", "速度"),
+  "pages.downloads.size": D("已下载 / 总大小", "Downloaded / total", "ダウンロード済み / 合計"),
   "pages.downloads.progress": D("进度", "Progress", "進捗"),
   "pages.downloads.kind": D("类型", "Type", "種類"),
   "pages.downloads.createdAt": D("创建时间", "Created", "作成日時"),
   "pages.downloads.updatedAt": D("最近更新", "Last updated", "最終更新"),
   "pages.downloads.taskId": D("任务 id", "Task id", "タスク ID"),
+  "pages.downloads.failedReason": D("失败原因：{error}", "Failed: {error}", "失敗理由：{error}"),
   "pages.downloads.detailTitle": D("详细信息", "Details", "詳細情報"),
   "pages.downloads.detailEmpty": D(
     "这次任务没有留下额外信息。",
@@ -606,6 +609,27 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
     "コア・ゲームバージョン・ビルドを先に選択してください",
   ),
   "pages.serverCreate.created": D("已创建服务端「{name}」", "Created server {name}", "サーバー「{name}」を作成しました"),
+
+  // ---- 资源页安装队列（多条并发安装，各自的排队/进度/重试） ----
+  "pages.mods.installQueueTitle": D("安装队列", "Install queue", "インストール待ち"),
+  "pages.mods.installQueueLimit": D(
+    "同时下载 {limit} 个（可在设置里调整）",
+    "{limit} downloads at a time (adjustable in Settings)",
+    "同時ダウンロード数 {limit}（設定で変更できます）",
+  ),
+  "pages.mods.installQueuedCount": D("已排队 {count} 个", "{count} queued", "{count} 件が順番待ち"),
+  "pages.mods.installQueueTip": D(
+    "可以同时点多个安装，超出的会排队等待",
+    "You can start several installs at once — the rest wait in the queue",
+    "複数のインストールを同時に開始できます。あふれた分は順番待ちになります",
+  ),
+  "pages.mods.installQueued": D("排队中", "Queued", "順番待ち"),
+  "pages.mods.installPercent": D("安装中 {percent}%", "Installing {percent}%", "インストール中 {percent}%"),
+  "pages.mods.installDone": D("已完成", "Done", "完了"),
+  "pages.mods.installCancelled": D("已取消", "Cancelled", "中止しました"),
+  "pages.mods.installFailed": D("失败", "Failed", "失敗"),
+  "pages.mods.installRetry": D("重试", "Retry", "再試行"),
+  "pages.mods.installDismiss": D("移除", "Remove", "削除"),
 
   // ---- 通用状态组件 ----
   "pages.state.loading": D("加载中…", "Loading…", "読み込み中…"),

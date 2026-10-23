@@ -4,7 +4,6 @@ import { TaskProvider } from "./lib/tasks";
 import { ToastProvider } from "./components/Toast";
 import { Sidebar } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
-import { TaskPanel } from "./components/TaskPanel";
 import { InstancesPage } from "./pages/InstancesPage";
 import { AccountsPage } from "./pages/AccountsPage";
 import { SkinPage } from "./pages/SkinPage";
@@ -292,7 +291,6 @@ function Shell() {
           {page === "about" ? <AboutPage /> : null}
           {page === "settings" ? <SettingsPage /> : null}
         </main>
-        <TaskPanel />
       </div>
 
       <audio ref={audioRef} className="bg-audio" src={musicSource || undefined} loop preload="auto" />

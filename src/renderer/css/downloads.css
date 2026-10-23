@@ -218,3 +218,13 @@
 .dl-message {
   color: var(--text-dim);
 }
+
+/* 列表行里的实时速度与「已下载 / 总大小」 */
+.dl-speed {
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-bytes {
+  font-variant-numeric: tabular-nums;
+}
