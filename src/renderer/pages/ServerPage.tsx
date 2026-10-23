@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ServerCoreId, ServerEntry, ServerStatus } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatRelative } from "../lib/format";
+import { useT } from "../lib/i18n";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
 import { ConfirmDialog, Modal } from "../components/Modal";
@@ -11,24 +12,24 @@ import { ServerConsole } from "../components/ServerConsole";
 import { ServerCreateModal } from "../components/ServerCreateModal";
 import { IconList, IconPause, IconPlay, IconPlus, IconRefresh, IconSettings } from "../components/icons";
 
-const STATUS_LABEL: Record<ServerStatus, string> = {
-  stopped: "已停止",
-  starting: "启动中",
-  running: "运行中",
-  stopping: "停止中",
-  crashed: "已崩溃",
+const STATUS_KEY: Record<ServerStatus, string> = {
+  stopped: "pages.server.statusStopped",
+  starting: "pages.server.statusStarting",
+  running: "pages.server.statusRunning",
+  stopping: "pages.server.statusStopping",
+  crashed: "pages.server.statusCrashed",
 };
 
-/** 卡片上的中文分类：与 cores() 的 tag 同义，只是 ServerEntry 里没有 tag 字段，按核心名映射。 */
-const CORE_TAG: Record<ServerCoreId, string> = {
-  Vanilla: "原版",
-  Paper: "插件服",
-  Purpur: "插件服",
-  Folia: "插件服",
-  Fabric: "模组服",
-  Forge: "模组服",
-  NeoForge: "模组服",
-  Arclight: "模组服",
+/** 卡片上的分类：与 cores() 的 tag 同义，只是 ServerEntry 里没有 tag 字段，按核心名映射到 i18n key。 */
+const CORE_TAG_KEY: Record<ServerCoreId, string> = {
+  Vanilla: "pages.server.tagVanilla",
+  Paper: "pages.server.tagPlugin",
+  Purpur: "pages.server.tagPlugin",
+  Folia: "pages.server.tagPlugin",
+  Fabric: "pages.server.tagModded",
+  Forge: "pages.server.tagModded",
+  NeoForge: "pages.server.tagModded",
+  Arclight: "pages.server.tagModded",
 };
 
 /** 设置弹窗：改名称/端口/内存/人数/正版验证，删除入口也在这里（删除由外层二次确认）。 */
@@ -42,6 +43,7 @@ function ServerSettingsModal({
   onDelete: (entry: ServerEntry) => void;
 }) {
   const { push } = useToast();
+  const t = useT();
   const [name, setName] = useState("");
   const [port, setPort] = useState("");
   const [memoryMb, setMemoryMb] = useState(2048);
@@ -66,15 +68,15 @@ function ServerSettingsModal({
     const portNum = Number(port);
     const maxNum = Number(maxPlayers);
     if (!name.trim()) {
-      setError("名称不能为空");
+      setError(t("pages.server.nameRequired"));
       return;
     }
     if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-      setError("端口需要是 1-65535 的整数");
+      setError(t("pages.server.portInvalid"));
       return;
     }
     if (!Number.isInteger(maxNum) || maxNum < 1 || maxNum > 1000) {
-      setError("最大人数需要是 1-1000 的整数");
+      setError(t("pages.server.maxPlayersInvalid"));
       return;
     }
     setSaving(true);
@@ -87,7 +89,7 @@ function ServerSettingsModal({
         maxPlayers: maxNum,
         onlineMode,
       });
-      push("设置已保存", "success");
+      push(t("pages.server.saved"), "success");
       onSaved(next);
     } catch (err: unknown) {
       setError(errorMessage(err));
@@ -99,7 +101,7 @@ function ServerSettingsModal({
   return (
     <Modal
       open={open && entry !== null}
-      title="服务端设置"
+      title={t("pages.server.settingsTitle")}
       subtitle={entry ? `${entry.meta.core} ${entry.meta.coreVersion} · Minecraft ${entry.meta.mcVersion}` : undefined}
       width={520}
       onClose={() => {
@@ -116,49 +118,56 @@ function ServerSettingsModal({
             }}
             disabled={saving}
           >
-            删除
+            {t("pages.server.delete")}
           </button>
           <span className="modal-spacer" />
-          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>取消</button>
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
+            {t("pages.server.cancel")}
+          </button>
           <button type="button" className="btn btn-primary" data-action="server-save" onClick={() => void save()} disabled={saving}>
-            {saving ? "保存中…" : "保存"}
+            {saving ? t("pages.server.saving") : t("pages.server.save")}
           </button>
         </>
       )}
     >
       <div className="form-grid">
-      <Field label="名称">
-        <TextInput value={name} maxLength={40} aria-label="服务端名称" onChange={(event) => setName(event.target.value)} disabled={saving} />
+      <Field label={t("pages.server.name")}>
+        <TextInput value={name} maxLength={40} aria-label={t("pages.server.nameAria")} onChange={(event) => setName(event.target.value)} disabled={saving} />
       </Field>
       <div className="server-form-row">
-        <Field label="端口" hint="改完要重启服务端才生效">
+        <Field label={t("pages.server.port")} hint={t("pages.server.portHint")}>
           <TextInput
             type="number"
             min={1}
             max={65535}
             value={port}
-            aria-label="端口"
+            aria-label={t("pages.server.port")}
             onChange={(event) => setPort(event.target.value)}
             disabled={saving}
           />
         </Field>
-        <Field label="最大人数">
+        <Field label={t("pages.server.maxPlayers")}>
           <TextInput
             type="number"
             min={1}
             max={1000}
             value={maxPlayers}
-            aria-label="最大人数"
+            aria-label={t("pages.server.maxPlayers")}
             onChange={(event) => setMaxPlayers(event.target.value)}
             disabled={saving}
           />
         </Field>
       </div>
-      <Field label="内存" hint="写进启动参数 -Xmx">
+      <Field label={t("pages.server.memory")} hint={t("pages.server.memoryHint")}>
         <Slider value={memoryMb} min={512} max={16384} step={512} onChange={setMemoryMb} format={(value) => `${value} MB`} disabled={saving} />
       </Field>
-      <Toggle checked={onlineMode} onChange={setOnlineMode} label="正版验证" hint="关掉后离线客户端也能进（online-mode=false）" />
-      <p className="server-form-note">删除会连同 servers 下这个目录一起移除，存档也在里面。</p>
+      <Toggle
+        checked={onlineMode}
+        onChange={setOnlineMode}
+        label={t("pages.server.onlineMode")}
+        hint={t("pages.server.onlineModeHint")}
+      />
+      <p className="server-form-note">{t("pages.server.deleteNote")}</p>
       {error ? <p className="server-form-error" data-server-settings-error>{error}</p> : null}
       </div>
     </Modal>
@@ -171,6 +180,7 @@ function ServerSettingsModal({
  */
 export function ServerPage() {
   const { push } = useToast();
+  const t = useT();
   const [servers, setServers] = useState<ServerEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -215,7 +225,7 @@ export function ServerPage() {
     setBusyId(entry.meta.id);
     try {
       replaceEntry(await api.servers.start(entry.meta.id));
-      push(`正在启动「${entry.meta.name}」`, "success");
+      push(t("pages.server.started", { name: entry.meta.name }), "success");
     } catch (err: unknown) {
       push(errorMessage(err), "error");
     } finally {
@@ -227,7 +237,7 @@ export function ServerPage() {
     setBusyId(entry.meta.id);
     try {
       replaceEntry(await api.servers.stop(entry.meta.id));
-      push(`正在停止「${entry.meta.name}」`, "info");
+      push(t("pages.server.stopped", { name: entry.meta.name }), "info");
     } catch (err: unknown) {
       push(errorMessage(err), "error");
     } finally {
@@ -240,7 +250,7 @@ export function ServerPage() {
     setDeleting(true);
     try {
       await api.servers.remove(deleteTarget.meta.id);
-      push(`已删除服务端「${deleteTarget.meta.name}」`, "success");
+      push(t("pages.server.deleted", { name: deleteTarget.meta.name }), "success");
       setServers((prev) => prev?.filter((item) => item.meta.id !== deleteTarget.meta.id) ?? prev);
       setDeleteTarget(null);
       setSettingsId(null);
@@ -256,17 +266,17 @@ export function ServerPage() {
     <section className="page server-page" data-server-page>
       <header className="page-head">
         <div>
-          <h1 className="page-title">开服</h1>
-          <p className="page-sub">每个服务端单独管理：核心与构建来自 FastMirror，数据放在启动器目录的 servers 下。</p>
+          <h1 className="page-title">{t("pages.server.title")}</h1>
+          <p className="page-sub">{t("pages.server.sub")}</p>
         </div>
         <div className="page-actions">
           <button type="button" className="btn btn-ghost" onClick={() => void load()} disabled={loading}>
             <IconRefresh size={16} />
-            刷新
+            {t("pages.server.refresh")}
           </button>
           <button type="button" className="btn btn-primary" data-action="server-create" onClick={() => setCreateOpen(true)}>
             <IconPlus size={16} />
-            新建服务端
+            {t("pages.server.create")}
           </button>
         </div>
       </header>
@@ -276,12 +286,12 @@ export function ServerPage() {
 
       {!error && servers !== null && servers.length === 0 ? (
         <EmptyState
-          title="还没有服务端，新建一个"
-          hint="服务端从 FastMirror 下载，数据存在启动器目录的 servers 下；每个服务端有独立的端口、内存与控制台。"
+          title={t("pages.server.emptyTitle")}
+          hint={t("pages.server.emptyHint")}
           action={(
             <button type="button" className="btn btn-primary" data-action="server-create" onClick={() => setCreateOpen(true)}>
               <IconPlus size={16} />
-              新建服务端
+              {t("pages.server.create")}
             </button>
           )}
         />
@@ -307,30 +317,30 @@ export function ServerPage() {
                     <h2 className="server-card-name" title={meta.name}>{meta.name}</h2>
                     <p className="server-card-meta">
                       <span className={`server-status is-${entry.status}`} data-server-status={entry.status}>
-                        {STATUS_LABEL[entry.status]}
+                        {t(STATUS_KEY[entry.status])}
                       </span>
                       <span className="server-card-meta-item">Minecraft {meta.mcVersion}</span>
-                      <span className="server-card-meta-item">{CORE_TAG[meta.core]}</span>
+                      <span className="server-card-meta-item">{t(CORE_TAG_KEY[meta.core])}</span>
                     </p>
                   </div>
                 </div>
 
                 <dl className="server-facts">
                   <div>
-                    <dt>构建</dt>
+                    <dt>{t("pages.server.build")}</dt>
                     <dd title={meta.coreVersion}>{meta.coreVersion}</dd>
                   </div>
                   <div>
-                    <dt>端口</dt>
+                    <dt>{t("pages.server.port")}</dt>
                     <dd>{meta.port}</dd>
                   </div>
                   <div>
-                    <dt>内存</dt>
+                    <dt>{t("pages.server.memory")}</dt>
                     <dd>{meta.memoryMb} MB</dd>
                   </div>
                   <div>
-                    <dt>最后启动</dt>
-                    <dd>{meta.lastStartedAt ? formatRelative(meta.lastStartedAt) : "从未启动"}</dd>
+                    <dt>{t("pages.server.lastStarted")}</dt>
+                    <dd>{meta.lastStartedAt ? formatRelative(meta.lastStartedAt, t) : t("pages.server.neverStarted")}</dd>
                   </div>
                 </dl>
 
@@ -343,7 +353,7 @@ export function ServerPage() {
                     disabled={busy || !stopped}
                   >
                     <IconPlay size={15} />
-                    {busy && stopped ? "启动中…" : "启动"}
+                    {busy && stopped ? t("pages.server.starting") : t("pages.server.start")}
                   </button>
                   <button
                     type="button"
@@ -353,15 +363,15 @@ export function ServerPage() {
                     disabled={busy || !running}
                   >
                     <IconPause size={15} />
-                    {busy && running ? "停止中…" : "停止"}
+                    {busy && running ? t("pages.server.stopping") : t("pages.server.stop")}
                   </button>
                   <button type="button" className="btn btn-ghost" data-action="server-console" onClick={() => setConsoleId(meta.id)}>
                     <IconList size={15} />
-                    控制台
+                    {t("pages.server.console")}
                   </button>
                   <button type="button" className="btn btn-ghost" data-action="server-settings" onClick={() => setSettingsId(meta.id)}>
                     <IconSettings size={15} />
-                    设置
+                    {t("pages.server.settings")}
                   </button>
                 </div>
               </article>
@@ -401,11 +411,9 @@ export function ServerPage() {
 
       <ConfirmDialog
         open={deleteTarget !== null}
-        title="删除服务端"
-        message={deleteTarget
-          ? `确定删除「${deleteTarget.meta.name}」吗？servers 下这个目录（含存档、插件与配置）会一起删除。`
-          : ""}
-        confirmText="删除"
+        title={t("pages.server.deleteTitle")}
+        message={deleteTarget ? t("pages.server.deleteMessage", { name: deleteTarget.meta.name }) : ""}
+        confirmText={t("pages.server.delete")}
         danger
         busy={deleting}
         onCancel={() => setDeleteTarget(null)}

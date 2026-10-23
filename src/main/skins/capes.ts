@@ -9,13 +9,16 @@ import { getAccount } from "../auth/accounts";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { decodePng, encodePng, readPngSize, scaleNearest } from "./png";
+import { mt } from "../core/i18n";
 
 const log = logger("skins");
 
 /** 落盘只允许这两种尺寸（64x32 现代 / 22x17 老格式）。 */
 const CAPE_SIZES = new Set(["64x32", "22x17"]);
 /** 尺寸不合规时的统一文案（导入失败原因要给用户看得懂）。 */
-const CAPE_SIZE_HINT = "披风尺寸需为 64×32、22×17，或 64×32 的整数倍放大图（如 1024×512）";
+function capeSizeHint(): string {
+  return mt("skin.capeSizeHint");
+}
 
 /** 归一化后的披风：放大图会缩成 64×32，字节也是新的 PNG。 */
 interface PreparedCape {
@@ -30,22 +33,22 @@ interface PreparedCape {
  * 校验并归一化披风图片：
  * · 64×32 / 22×17 原样保留；
  * · 64×32 的整数倍放大图（w=64k、h=32k，k≥2）用最近邻缩回 64×32 并重新编码成 PNG；
- * · 其它尺寸抛错（文案见 CAPE_SIZE_HINT），不是 PNG 的也抛错。
+ * · 其它尺寸抛错（文案见 capeSizeHint()），不是 PNG 的也抛错。
  */
 export function prepareCape(bytes: Buffer): PreparedCape {
   const size = readPngSize(bytes);
-  if (!size) throw new Error("不是有效的 PNG（文件头不是 PNG）");
+  if (!size) throw new Error(mt("cape.notPngHeader"));
   const width = size.width;
   const height = size.height;
   if (CAPE_SIZES.has(width + "x" + height)) return { bytes, width, height, scaled: false };
   const factor = width % 64 === 0 && height % 32 === 0 ? width / 64 : 0;
   if (factor >= 2 && height / 32 === factor) {
     const image = decodePng(bytes);
-    if (!image) throw new Error("不是有效的 PNG（像素无法解码）");
+    if (!image) throw new Error(mt("cape.notPngPixels"));
     const scaled = scaleNearest(image.data, width, height, 64, 32);
     return { bytes: encodePng(scaled, 64, 32), width: 64, height: 32, scaled: true };
   }
-  throw new Error(CAPE_SIZE_HINT);
+  throw new Error(capeSizeHint());
 }
 /** 导入上限 1MB：正常披风几 KB。 */
 const MAX_IMPORT_BYTES = 1024 * 1024;
@@ -98,8 +101,8 @@ const BAD_NAME_CHARS = /[\\/:*?"<>|\u0000-\u001f\u007f]/g;
 /** 只接受单级文件名：内置披风里有空格与中文，这里只掐路径成分，不改动其它字符。 */
 function safeCapeName(raw: string): string {
   const name = basename(String(raw ?? "").trim().replace(/\\/g, "/"));
-  if (!name || name === "." || name === ".." || name.includes("\u0000")) throw new Error("披风文件名无效：" + String(raw));
-  if (!/\.png$/i.test(name)) throw new Error("只能处理 .png 披风文件：" + name);
+  if (!name || name === "." || name === ".." || name.includes("\u0000")) throw new Error(mt("cape.invalidName", { name: String(raw) }));
+  if (!/\.png$/i.test(name)) throw new Error(mt("cape.pngOnly", { name }));
   return name;
 }
 
@@ -193,7 +196,7 @@ async function locateCape(
     const found = await readCapeFile(candidate, name);
     if (found) return found;
   }
-  throw new Error(source === "official" ? "内置披风不存在：" + name : "披风不存在：" + name);
+  throw new Error(source === "official" ? mt("cape.builtinNotFound", { name }) : mt("cape.notFound", { name }));
 }
 
 /** 列出一个目录里的披风（按文件名排序）。 */
@@ -311,10 +314,10 @@ export async function importCapes(paths: string[]): Promise<{ imported: string[]
 /** 删除用户披风；内置披风直接报错（只读）。 */
 export async function removeCape(fileName: string): Promise<LocalCape[]> {
   const name = safeCapeName(fileName);
-  if (await readCapeFile("official", name)) throw new Error("内置披风不能删除：" + name);
+  if (await readCapeFile("official", name)) throw new Error(mt("cape.builtinNotDeletable", { name }));
   const target = join(userDir(), name);
   const info = await stat(target).catch(() => undefined);
-  if (!info || !info.isFile()) throw new Error("披风不存在：" + name);
+  if (!info || !info.isFile()) throw new Error(mt("cape.notFound", { name }));
   await unlink(target);
   const selections = await readSelections();
   let changed = false;
@@ -335,10 +338,10 @@ export async function removeCape(fileName: string): Promise<LocalCape[]> {
  */
 export async function selectCape(accountId: string, fileName: string | null): Promise<LocalCape[]> {
   const account = String(accountId ?? "").trim();
-  if (!account) throw new Error("账号 id 不能为空");
+  if (!account) throw new Error(mt("skin.accountRequired"));
   const record = await getAccount(account);
-  if (!record) throw new Error("账号不存在：" + account);
-  if (record.type !== "offline") throw new Error("第三方与正版账号不能使用本地/内置披风");
+  if (!record) throw new Error(mt("auth.account.notFound", { id: account }));
+  if (record.type !== "offline") throw new Error(mt("cape.offlineOnly"));
 
   const selections = await readSelections();
   const name = fileName === null || fileName === undefined ? "" : safeCapeName(fileName);

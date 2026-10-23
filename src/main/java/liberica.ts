@@ -8,6 +8,7 @@ import { downloadFile, fetchJson } from "../core/http";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { installDirName, writeSourceRecord } from "./vendor";
+import { mt } from "../core/i18n";
 
 const log = logger("java/liberica");
 
@@ -199,27 +200,27 @@ async function installRelease(major: number, release: BellSwRelease, signal?: Ab
 
   await mkdir(paths.java, { recursive: true });
   const zipPath = join(paths.downloads, safeSegment(release.filename));
-  const task = createTask("java", `安装 JDK ${major} (${release.version})`);
+  const task = createTask("java", mt("java.installTitle", { major, version: release.version }));
   try {
-    task.update({ stage: "下载 JDK", percent: 0 });
+    task.update({ stage: mt("java.stage.download"), percent: 0 });
     await downloadZip(release, zipPath, task, signal);
 
-    task.update({ stage: "解压 JDK" });
+    task.update({ stage: mt("java.stage.extract") });
     const tmp = join(paths.downloads, "unpack", `${segment}-${Date.now()}`);
     await rm(tmp, { recursive: true, force: true });
     await mkdir(tmp, { recursive: true });
     new AdmZip(zipPath).extractAllTo(tmp, true);
     const root = await findJdkRoot(tmp);
-    if (!root) throw new Error(`JDK 压缩包结构异常，未找到 bin/javaw.exe：${release.filename}`);
+    if (!root) throw new Error(mt("java.adoptium.badArchive", { file: release.filename }));
 
     await rm(home, { recursive: true, force: true });
     await mkdir(join(home, ".."), { recursive: true });
     await rename(root, home);
     await rm(tmp, { recursive: true, force: true });
 
-    if (!existsSync(javawExe)) throw new Error(`解压后缺少 javaw.exe：${home}`);
+    if (!existsSync(javawExe)) throw new Error(mt("java.adoptium.noJavaw", { dir: home }));
     const st = await stat(javawExe);
-    if (st.size === 0) throw new Error(`javaw.exe 为空文件：${home}`);
+    if (st.size === 0) throw new Error(mt("java.liberica.emptyJavaw", { dir: home }));
 
     const meta: JavaMetaFile = {
       major,
@@ -252,14 +253,14 @@ async function installRelease(major: number, release: BellSwRelease, signal?: Ab
 /** version 精确匹配优先，其次前缀匹配，最后退到该主版本最新版。 */
 export async function install(major: number, version?: string, signal?: AbortSignal): Promise<InstalledJava> {
   const releases = await fetchReleases(major, signal);
-  if (releases.length === 0) throw new Error(`BellSoft 没有 JDK ${major} 的 Windows 64 位 zip 包（列表里可能只有 msi）`);
+  if (releases.length === 0) throw new Error(mt("java.liberica.noZip", { major }));
   const want = (version ?? "").trim();
   let hit: BellSwRelease | undefined;
   if (want) {
     hit = releases.find((r) => r.version === want)
       ?? releases.find((r) => r.version.startsWith(`${want}+`) || r.version === `${want}.0`)
       ?? releases.find((r) => r.version.startsWith(want));
-    if (!hit) throw new Error(`JDK ${major} 没有版本 ${want}，可用：${releases.slice(0, 5).map((r) => r.version).join(", ")}`);
+    if (!hit) throw new Error(mt("java.liberica.noVersion", { major, want, available: releases.slice(0, 5).map((r) => r.version).join(", ") }));
   } else {
     hit = releases.find((r) => r.latestInFeatureVersion) ?? releases[0];
   }
@@ -270,7 +271,7 @@ export async function install(major: number, version?: string, signal?: AbortSig
 export async function latestReleaseOf(major: number): Promise<JavaRelease> {
   const releases = await fetchReleases(major);
   const hit = releases.find((r) => r.latestInFeatureVersion) ?? releases[0];
-  if (!hit) throw new Error(`BellSoft 没有 JDK ${major} 的 Windows 64 位 zip 包（列表里可能只有 msi）`);
+  if (!hit) throw new Error(mt("java.liberica.noZip", { major }));
   return {
     version: hit.version,
     major,

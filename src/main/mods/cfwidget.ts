@@ -7,6 +7,7 @@ import {
   canonicalLoader, httpStatusOf, jsonArray, jsonIdString, jsonNumber, jsonObject, jsonString, jsonStringArray,
   loaderTags, messageOf, sameSeries,
 } from "./provider";
+import { mt } from "../core/i18n";
 
 const log = logger("mods");
 
@@ -15,8 +16,9 @@ const CDN_BASE = "https://mediafilez.forgecdn.net/files";
 const CACHE_TTL_MS = 5 * 60_000;
 const CACHE_MAX_ENTRIES = 64;
 
-export const NO_KEY_SEARCH_MESSAGE =
-  "无 Key 模式下 CurseForge 不支持关键词搜索，请粘贴模组链接（curseforge.com/minecraft/mc-mods/xxx）或到设置填写 API Key";
+export function noKeySearchMessage(): string {
+  return mt("mods.cfNoKeySearch");
+}
 
 const LOADER_TAGS = new Set(["fabric", "forge", "neoforge", "quilt", "liteloader", "rift"]);
 
@@ -116,7 +118,7 @@ function remember(key: string, value: CfWidgetProject): void {
 /** 按 id 或 slug 取项目（5 分钟缓存）：项目元数据、文件列表、下载地址都从这里出。 */
 export async function fetchCfWidgetProject(idOrSlug: string): Promise<CfWidgetProject> {
   const key = String(idOrSlug ?? "").trim().toLowerCase();
-  if (!key) throw new Error("缺少 CurseForge 项目 id 或 slug");
+  if (!key) throw new Error(mt("mods.missingCfKey"));
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
 
@@ -126,8 +128,8 @@ export async function fetchCfWidgetProject(idOrSlug: string): Promise<CfWidgetPr
   } catch (err) {
     // 404 说明 cfwidget 没收录；错误文案里只留状态码与 slug，不把 HTML 抛给用户
     const status = httpStatusOf(err);
-    if (status === 404) throw new Error(`CurseForge 没有找到模组「${key}」（cfwidget 未收录），请检查链接或 slug`);
-    throw new Error(`cfwidget 查询失败（${key}）：${messageOf(err)}`);
+    if (status === 404) throw new Error(mt("mods.cfwidgetNotFound", { key }));
+    throw new Error(mt("mods.cfwidgetFailed", { key, error: messageOf(err) }));
   }
 
   const project = toProject(body, key);
@@ -211,10 +213,10 @@ export function projectKeyFromQuery(query: string | undefined): string {
   const raw = String(query ?? "").trim();
   const fromUrl = /curseforge\.com\/minecraft\/mc-mods\/([^/?#\s]+)/i.exec(raw)?.[1];
   const candidate = (fromUrl ?? raw).trim();
-  if (!candidate) throw new Error(NO_KEY_SEARCH_MESSAGE);
+  if (!candidate) throw new Error(noKeySearchMessage());
   if (/^\d+$/.test(candidate)) return candidate;
   if (/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(candidate)) return candidate.toLowerCase();
-  throw new Error(NO_KEY_SEARCH_MESSAGE);
+  throw new Error(noKeySearchMessage());
 }
 
 function publishedMs(file: ModFileInfo): number {

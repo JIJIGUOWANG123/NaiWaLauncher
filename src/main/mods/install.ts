@@ -8,6 +8,7 @@ import { invalidateInstanceDiskUsage } from "../minecraft/instances";
 import { getSettings } from "../core/settings";
 import { contentDirOf, modsDirForInstance, sha1OfFile } from "./installed";
 import type { ResolvedFile } from "./provider";
+import { mt } from "../core/i18n";
 
 const log = logger("mods");
 
@@ -26,7 +27,9 @@ const CONTENT_SUBDIRS: Record<"shader" | "resourcepack" | "modpack", string> = {
 };
 
 /** 地图下载要登录麦块社区（mapFileUrl 全为 null），启动器暂不支持：整句文案直接抛给界面。 */
-export const MAP_DOWNLOAD_HINT = "该地图需要登录麦块社区后下载（启动器暂不支持），已为你复制网页地址";
+export function mapDownloadHint(): string {
+  return mt("mods.mapDownloadHint");
+}
 
 /**
  * 内容类型 → 落盘目录：mod → mods；shader → shaderpacks；resourcepack → resourcepacks；modpack → modpacks。
@@ -34,7 +37,7 @@ export const MAP_DOWNLOAD_HINT = "该地图需要登录麦块社区后下载（�
  */
 export function contentDirForInstance(instance: { id: string }, kind: ModContentKind): string {
   if (kind === "mod") return modsDirForInstance(instance);
-  if (kind === "map") throw new Error(MAP_DOWNLOAD_HINT);
+  if (kind === "map") throw new Error(mapDownloadHint());
   return contentDirOf(instance, CONTENT_SUBDIRS[kind]);
 }
 
@@ -46,6 +49,11 @@ export const KIND_NOUN: Record<ModContentKind, string> = {
   modpack: "整合包",
   map: "地图",
 };
+
+/** 界面用名词（任务标题与报错），随界面语言变化；KIND_NOUN 仍供日志使用。 */
+export function kindNoun(kind: ModContentKind): string {
+  return mt(`mods.noun.${kind}`);
+}
 
 /** 文件名模板的占位符取值，缺字段按空串处理。 */
 export interface ModNameVars {
@@ -76,7 +84,7 @@ export interface ModFileName {
 export function safeFileName(raw: string): string {
   const name = basename(raw.trim().replace(/\\/g, "/"));
   if (!name || name === "." || name === ".." || name.includes("\u0000")) {
-    throw new Error(`模组文件名无效：${raw}`);
+    throw new Error(mt("mods.badModFileName", { file: raw }));
   }
   return name;
 }
@@ -224,18 +232,18 @@ export async function downloadModFile(
   signal?: AbortSignal,
 ): Promise<{ fileName: string; path: string }> {
   // 地图没有公开直链：到这里只能说清楚去哪儿下，不能装出一个空文件
-  if (kind === "map") throw new Error(MAP_DOWNLOAD_HINT);
+  if (kind === "map") throw new Error(mapDownloadHint());
   const noun = KIND_NOUN[kind];
   const fileName = resolveFileName(instance, resolved, context, kind);
   // 模板与远端名都过一遍检查：目标目录下只能是单级文件名
-  if (!fileName || basename(fileName) !== fileName) throw new Error(`${noun}文件名无效：${fileName}`);
+  if (!fileName || basename(fileName) !== fileName) throw new Error(mt("mods.badFileName", { noun: kindNoun(kind), file: fileName }));
   const dir = contentDirForInstance(instance, kind);
   await mkdir(dir, { recursive: true });
   const dest = join(dir, fileName);
 
   // 来源可能只给文件大小（CurseForge 无 Key 模式），据此兜住完整性
   const expectedSize = resolved.size && resolved.size > 0 ? resolved.size : undefined;
-  const task = createTask("mod", `安装${noun} ${fileName}`);
+  const task = createTask("mod", mt("mods.installTitle", { noun: kindNoun(kind), file: fileName }));
   try {
     const existing = await stat(dest).catch(() => undefined);
     if (existing && existing.size > 0) {
@@ -266,18 +274,18 @@ export async function downloadModFile(
     });
 
     const size = (await stat(dest)).size;
-    if (size <= 0) throw new Error(`下载的${noun}文件为空：${fileName}`);
+    if (size <= 0) throw new Error(mt("mods.emptyDownload", { noun: kindNoun(kind), file: fileName }));
 
     if (resolved.sha1) {
       const actual = await sha1OfFile(dest);
       if (actual.toLowerCase() !== resolved.sha1.toLowerCase()) {
         await unlink(dest).catch(() => undefined);
-        throw new Error(`${noun} ${fileName} 校验失败：期望 sha1 ${resolved.sha1}，实际 ${actual}`);
+        throw new Error(mt("mods.checksumFailed", { noun: kindNoun(kind), file: fileName, expected: resolved.sha1, actual }));
       }
     } else if (expectedSize !== undefined && size !== expectedSize) {
       await unlink(dest).catch(() => undefined);
       throw new Error(
-        `${noun} ${fileName} 大小校验失败：期望 ${expectedSize} 字节，实际 ${size} 字节（无哈希可校验，可能下载被截断或文件已变更）`,
+        mt("mods.sizeFailed", { noun: kindNoun(kind), file: fileName, expected: expectedSize, actual: size }),
       );
     } else {
       log.info(`${noun} ${fileName} 未做哈希校验（无 Key 模式或来源无哈希），已按大小 ${size} 字节确认`);
@@ -312,11 +320,11 @@ export async function removeContentFile(
 ): Promise<void> {
   const noun = KIND_NOUN[kind];
   const rule = REMOVABLE[kind];
-  if (!rule) throw new Error(`不支持删除${noun}文件：${noun}没有可管理的内容目录`);
+  if (!rule) throw new Error(mt("mods.deleteUnsupported", { noun: kindNoun(kind) }));
   const name = safeFileName(fileName);
-  if (!rule.pattern.test(name)) throw new Error(`只能删除 ${rule.suffix} ${noun}文件：${name}`);
+  if (!rule.pattern.test(name)) throw new Error(mt("mods.deleteWrongType", { suffix: rule.suffix, noun: kindNoun(kind), name }));
   const target = join(contentDirForInstance({ id: instanceId }, kind), name);
-  if (!(await exists(target))) throw new Error(`${noun}文件不存在：${name}`);
+  if (!(await exists(target))) throw new Error(mt("mods.contentFileMissing", { noun: kindNoun(kind), name }));
   await unlink(target);
   await unlink(`${target}.bak`).catch(() => undefined);
   log.info(`已删除${noun} ${name}`);

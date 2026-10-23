@@ -2,6 +2,7 @@ import { lstat, mkdir, readdir, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import { logger } from "./logger";
+import { mt } from "./i18n";
 
 export interface LauncherPaths {
   root: string;
@@ -58,7 +59,7 @@ function build(rootDir: string): LauncherPaths {
 }
 
 export function initPaths(rootDir: string): LauncherPaths {
-  if (!rootDir || !rootDir.trim()) throw new Error("启动器根目录不能为空");
+  if (!rootDir || !rootDir.trim()) throw new Error(mt("core.rootRequired"));
   current = build(rootDir);
   // 换了根目录要允许重新迁移（正常启动只会 init 一次）
   migrationDone = false;
@@ -132,7 +133,7 @@ async function moveEntry(from: string, to: string, notes: Note[]): Promise<"rena
       const alt = await freeName(dst);
       await rename(src, alt);
       moved = true;
-      notes.push({ level: "warn", text: `布局迁移：${dst} 已存在，旧文件保留为 ${alt}` });
+      notes.push({ level: "warn", text: mt("core.migrationExisting", { dst, alt }) });
       continue;
     }
     await rename(src, dst);
@@ -161,15 +162,15 @@ export async function migrateLegacyLayout(): Promise<void> {
     try {
       const action = await moveEntry(from, to, notes);
       if (action === "skipped") {
-        notes.push({ level: "warn", text: `布局迁移跳过：${from} 与 ${to} 同时存在且无法合并，请手动整理后删除旧路径` });
+        notes.push({ level: "warn", text: mt("core.migrationSkipped", { from, to }) });
       } else if (action === "partial") {
-        notes.push({ level: "warn", text: `布局迁移不完整：${from} 仍留有同名目录，请手动确认后删除旧路径` });
+        notes.push({ level: "warn", text: mt("core.migrationIncomplete", { from, to }) });
       } else {
-        notes.push({ level: "info", text: `布局迁移：${from} → ${to}（${action === "merged" ? "合并" : "整体移动"}）` });
+        notes.push({ level: "info", text: mt("core.migrationDone", { from, to, action: action === "merged" ? mt("core.migrationMerge") : mt("core.migrationMove") }) });
       }
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      notes.push({ level: "warn", text: `布局迁移失败：${from} → ${to} · ${reason}；请手动把 ${from} 移动到 ${to}` });
+      notes.push({ level: "warn", text: mt("core.migrationFailed", { from, to, reason }) });
     }
   }
 

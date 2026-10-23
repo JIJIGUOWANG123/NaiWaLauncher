@@ -2,6 +2,7 @@ import type { LoaderVersionInfo } from "../../shared/types";
 import { fetchJson, fetchText } from "../core/http";
 import { logger } from "../core/logger";
 import { installFromInstaller } from "./installer-runner";
+import { mt } from "../core/i18n";
 
 const log = logger("loaders/forge");
 
@@ -85,7 +86,7 @@ export async function installForgeLoader(
     const all = await listForgeLoaders(mcVersion);
     wanted = all[0]?.version;
   }
-  if (!wanted) throw new Error("Forge 没有 Minecraft " + mcVersion + " 的可用版本");
+  if (!wanted) throw new Error(mt("loader.noVersion", { loader: "Forge", mc: mcVersion }));
 
   const fullVersion = mcVersion + "-" + wanted;
   const installerUrl = MAVEN + "/net/minecraftforge/forge/" + fullVersion + "/forge-" + fullVersion + "-installer.jar";

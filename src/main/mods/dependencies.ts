@@ -16,6 +16,7 @@ import {
   bestFile, loaderAppliesTo, mapLimit, matchTier, messageOf, versionOnlyTier, type MatchTier,
   type ModProvider, type RawDependency,
 } from "./provider";
+import { mt } from "../core/i18n";
 
 const log = logger("mods");
 
@@ -404,7 +405,7 @@ async function dependencyFileId(
       const pinned = await provider.getFile(dep.projectId, dep.versionId);
       if (pinnedAcceptable(pinned.info, instance, kind)) return pinned.info.fileId;
       log.warn(
-        `前置 ${dep.name ?? dep.projectId} 指定的版本 ${dep.versionId} 不匹配 ${instance.mcVersion} / ${instance.loader}，改按最优文件安装`,
+        mt("mods.depVersionMismatch", { dep: dep.name ?? dep.projectId, version: dep.versionId, mc: instance.mcVersion, loader: instance.loader }),
       );
     } catch (err) {
       log.warn(`前置 ${dep.name ?? dep.projectId} 指定版本取不到，改按最优文件安装：${messageOf(err)}`);
@@ -421,7 +422,7 @@ async function dependencyFileId(
   });
   const best = bestFile(files, instance.mcVersion, loader);
   if (!best) {
-    throw new Error(`项目 ${dep.projectId} 没有适用于 ${instance.mcVersion} / ${instance.loader} 的文件`);
+    throw new Error(mt("mods.noCompatibleFile", { project: dep.projectId, mc: instance.mcVersion, loader: instance.loader }));
   }
   return best.fileId;
 }

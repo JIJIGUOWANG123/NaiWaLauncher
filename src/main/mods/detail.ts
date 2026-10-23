@@ -10,6 +10,7 @@ import {
   apiJson, canonicalLoader, httpStatusOf, jsonArray, jsonNumber, jsonObject, jsonString, jsonStringArray, messageOf,
 } from "./provider";
 import { translateText } from "./translate";
+import { mt } from "../core/i18n";
 
 const log = logger("mods");
 
@@ -43,7 +44,7 @@ function remember(key: string, value: ModDetail): void {
  */
 export async function getModDetail(provider: ModProviderId, projectId: string): Promise<ModDetail> {
   const id = String(projectId ?? "").trim();
-  if (!id) throw new Error("缺少模组项目 id");
+  if (!id) throw new Error(mt("mods.missingProjectId"));
   const key = `${provider}:${id.toLowerCase()}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
@@ -62,7 +63,7 @@ export async function getModDetail(provider: ModProviderId, projectId: string): 
       value = await curseforgeDetail(id);
       break;
     default:
-      throw new Error(`未知的模组来源：${String(provider)}`);
+      throw new Error(mt("mods.unknownProvider", { provider: String(provider) }));
   }
   value = await withChineseSummary(value);
   remember(key, value);
@@ -94,7 +95,7 @@ async function modrinthProject(projectId: string): Promise<Record<string, unknow
   try {
     return jsonObject(await apiJson<unknown>(`${MODRINTH_BASE}/project/${encodeURIComponent(projectId)}`));
   } catch (err) {
-    if (httpStatusOf(err) === 404) throw new Error(`Modrinth 没有找到模组「${projectId}」`);
+    if (httpStatusOf(err) === 404) throw new Error(mt("mods.modrinthNotFound", { project: projectId }));
     throw err;
   }
 }
@@ -122,7 +123,7 @@ function modrinthLicense(project: Record<string, unknown>): string | undefined {
 async function modrinthDetail(projectId: string): Promise<ModDetail> {
   const project = await modrinthProject(projectId);
   const title = jsonString(project.title);
-  if (!title) throw new Error(`Modrinth 项目 ${projectId} 返回的内容缺少标题`);
+  if (!title) throw new Error(mt("mods.modrinthNoTitle", { project: projectId }));
   const author = await modrinthAuthor(projectId);
   return {
     provider: "modrinth",
@@ -236,14 +237,14 @@ async function curseforgeDetail(projectId: string): Promise<ModDetail> {
   } catch (err) {
     const status = httpStatusOf(err);
     if (status === 401 || status === 403) {
-      throw new Error(`CurseForge 拒绝了该 API Key，请到设置里检查或重新填写（HTTP ${status}）`);
+      throw new Error(mt("mods.cfApiKeyRejected", { status }));
     }
-    if (status === 404) throw new Error(`CurseForge 没有找到模组「${projectId}」`);
+    if (status === 404) throw new Error(mt("mods.cfNotFound", { project: projectId }));
     throw err;
   }
 
   const title = jsonString(mod.name);
-  if (!title) throw new Error(`CurseForge 项目 ${projectId} 返回的内容缺少名称`);
+  if (!title) throw new Error(mt("mods.cfNoName", { project: projectId }));
   // 描述是独立接口，失败不该让详情整体挂掉
   const description = await apiJson<unknown>(`${url}/description`, { headers }).catch((err: unknown) => {
     log.warn(`读取 CurseForge 描述失败（正文留空）：${projectId} · ${messageOf(err)}`);

@@ -3,6 +3,7 @@ import type { InstanceMeta, ModContentKind } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatRelative, instanceDiskUsage, instanceMemory, loaderLabel } from "../lib/format";
 import { iconSrc } from "../lib/appIcon";
+import { useT } from "../lib/i18n";
 import { useApp } from "../lib/store";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
@@ -18,16 +19,17 @@ import {
   IconBook, IconDownload, IconFolder, IconList, IconMods, IconPackage, IconPlay, IconPlus, IconRefresh, IconSettings, IconTrash,
 } from "../components/icons";
 
-/** 「资源目录」下拉里的三项：目录名同时用于提示文案。 */
-const CONTENT_DIRS: Array<{ kind: ModContentKind; label: string; short: string }> = [
-  { kind: "mod", label: "模组目录", short: "mods" },
-  { kind: "shader", label: "光影目录", short: "shaderpacks" },
-  { kind: "resourcepack", label: "材质目录", short: "resourcepacks" },
+/** 「资源目录」下拉里的三项：label 存 i18n key，目录名原样保留。 */
+const CONTENT_DIRS: Array<{ kind: ModContentKind; labelKey: string; short: string }> = [
+  { kind: "mod", labelKey: "pages.instances.dirMods", short: "mods" },
+  { kind: "shader", labelKey: "pages.instances.dirShaders", short: "shaderpacks" },
+  { kind: "resourcepack", labelKey: "pages.instances.dirResourcepacks", short: "resourcepacks" },
 ];
 
 export function InstancesPage() {
   const { info, instances, instancesLoading, instancesError, reloadInstances, iconUrl } = useApp();
   const { push } = useToast();
+  const t = useT();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<InstanceMeta | null>(null);
   const [deleting, setDeleting] = useState<InstanceMeta | null>(null);
@@ -62,8 +64,8 @@ export function InstancesPage() {
     setLaunchingId(instance.id);
     try {
       await api.instances.launch(instance.id);
-      push(`「${instance.name}」已启动`, "success");
-      push("若没有出现游戏窗口，点实例上的「日志」查看原因（NaiWa/logs 与实例 logs 目录）", "info");
+      push(t("pages.instances.launched", { name: instance.name }), "success");
+      push(t("pages.instances.launchHint"), "info");
       await reloadInstances();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -77,7 +79,7 @@ export function InstancesPage() {
     try {
       const rootDir = (info ?? (await api.app.info())).rootDir.replace(/[\\/]+$/, "");
       await api.app.openPath(rootDir + "/NaiWa/logs");
-      push("已打开启动器日志目录", "success");
+      push(t("pages.instances.logsOpened"), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -87,10 +89,10 @@ export function InstancesPage() {
    * 实例里的三类内容目录都在游戏目录下，主进程负责 resolve 与越界拒绝。
    * 按钮统一叫「资源目录」，点开后再选具体是哪一类。
    */
-  const openContentDir = async (instance: InstanceMeta, kind: ModContentKind, label: string) => {
+  const openContentDir = async (instance: InstanceMeta, kind: ModContentKind, label: string, folder: string) => {
     try {
       await api.app.openInstanceContent(instance.id, kind);
-      push(`已打开${label}`, "success");
+      push(t("pages.instances.contentDirOpened", { label, folder }), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -114,8 +116,8 @@ export function InstancesPage() {
       const filePath = result.path;
       // 用户取消保存对话框时 path 为 null：按约定不打扰。
       if (!filePath) return;
-      push(`已导出到 ${filePath}`, "success", {
-        label: "打开所在文件夹",
+      push(t("pages.instances.exported", { path: filePath }), "success", {
+        label: t("pages.instances.showInFolder"),
         onClick: () => void revealExport(filePath),
       });
     } catch (error: unknown) {
@@ -134,8 +136,8 @@ export function InstancesPage() {
       const result = await api.instances.importArchive();
       // 用户取消（instanceId 为 null）同样不提示。
       if (!result.instanceId) return;
-      push(`已导入实例「${result.name}」`, "success");
-      if (result.installedMissing) push("已自动补装原版/加载器", "info");
+      push(t("pages.instances.imported", { name: result.name }), "success");
+      if (result.installedMissing) push(t("pages.instances.bootstrapInstalled"), "info");
       await reloadInstances();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -149,7 +151,7 @@ export function InstancesPage() {
     setBusyDelete(true);
     try {
       await api.instances.remove(deleting.id);
-      push(`实例「${deleting.name}」已删除`, "success");
+      push(t("pages.instances.deleted", { name: deleting.name }), "success");
       setDeleting(null);
       await reloadInstances();
     } catch (error: unknown) {
@@ -163,21 +165,21 @@ export function InstancesPage() {
     <section className="page">
       <header className="page-head">
         <div>
-          <h1 className="page-title">实例</h1>
-          <p className="page-sub">每个实例都有独立的模组目录、内存与启动参数</p>
+          <h1 className="page-title">{t("pages.instances.title")}</h1>
+          <p className="page-sub">{t("pages.instances.sub")}</p>
         </div>
         <div className="page-actions">
           <button type="button" className="btn btn-ghost" onClick={() => void reloadInstances()} disabled={instancesLoading}>
             <IconRefresh size={16} />
-            刷新
+            {t("pages.instances.refresh")}
           </button>
           <button type="button" className="btn btn-ghost" onClick={() => void importArchive()} disabled={importing}>
             <IconDownload size={16} />
-            {importing ? "导入中…" : "导入实例"}
+            {importing ? t("pages.instances.importing") : t("pages.instances.import")}
           </button>
           <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
             <IconPlus size={16} />
-            新建实例
+            {t("pages.instances.create")}
           </button>
         </div>
       </header>
@@ -188,12 +190,12 @@ export function InstancesPage() {
 
       {!instancesLoading && !instancesError && instances.length === 0 ? (
         <EmptyState
-          title="还没有实例"
-          hint="新建一个实例，启动器会自动下载游戏本体、加载器与资源文件。"
+          title={t("pages.instances.emptyTitle")}
+          hint={t("pages.instances.emptyHint")}
           action={
             <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
               <IconPlus size={16} />
-              新建实例
+              {t("pages.instances.create")}
             </button>
           }
         />
@@ -219,7 +221,9 @@ export function InstancesPage() {
                   {/* 运存 / 本地占用分两段：窄卡片放不下时整段换行，不挤压标题。 */}
                   <p className="instance-meta" data-instance-meta>
                     <span className="instance-meta-item">Minecraft {instance.mcVersion}</span>
-                    <span className="instance-meta-item">运存：{instanceMemory(instance)}</span>
+                    <span className="instance-meta-item">
+                      {t("pages.instances.memory", { value: instanceMemory(instance) })}
+                    </span>
                     <span
                       className="instance-meta-item instance-disk"
                       data-disk-state={
@@ -227,9 +231,9 @@ export function InstancesPage() {
                           ? "pending"
                           : instance.diskUsageBytes === 0 ? "zero" : "known"
                       }
-                      title="实例目录占用的本地空间"
+                      title={t("pages.instances.diskTitle")}
                     >
-                      占用：{instanceDiskUsage(instance)}
+                      {t("pages.instances.diskUsage", { value: instanceDiskUsage(instance, t) })}
                     </span>
                   </p>
                 </div>
@@ -238,16 +242,16 @@ export function InstancesPage() {
 
               <dl className="instance-facts">
                 <div>
-                  <dt>启动版本</dt>
+                  <dt>{t("pages.instances.launchVersion")}</dt>
                   <dd>{instance.versionId}</dd>
                 </div>
                 <div>
-                  <dt>最后启动</dt>
-                  <dd>{formatRelative(instance.lastPlayedAt)}</dd>
+                  <dt>{t("pages.instances.lastPlayed")}</dt>
+                  <dd>{formatRelative(instance.lastPlayedAt, t)}</dd>
                 </div>
                 {instance.loaderVersion ? (
                   <div>
-                    <dt>{loaderLabel(instance.loader)} 版本</dt>
+                    <dt>{t("pages.instances.loaderVersion", { loader: loaderLabel(instance.loader, t) })}</dt>
                     <dd>{instance.loaderVersion}</dd>
                   </div>
                 ) : null}
@@ -261,29 +265,29 @@ export function InstancesPage() {
                   disabled={launchingId === instance.id}
                 >
                   <IconPlay size={15} />
-                  {launchingId === instance.id ? "启动中…" : "启动"}
+                  {launchingId === instance.id ? t("pages.instances.launching") : t("pages.instances.launch")}
                 </button>
-                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setEditing(instance)} title="实例设置">
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setEditing(instance)} title={t("pages.instances.settingsTitle")}>
                   <IconSettings size={16} />
-                  <span>设置</span>
+                  <span>{t("pages.instances.settings")}</span>
                 </button>
-                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setManagingId(instance.id)} title="管理加载器、Java 与启动窗口">
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setManagingId(instance.id)} title={t("pages.instances.manageTitle")}>
                   <IconMods size={16} />
-                  <span>管理</span>
+                  <span>{t("pages.instances.manage")}</span>
                 </button>
                 <button
                   type="button"
                   className="btn btn-ghost btn-icon"
                   data-action="open-content"
                   onClick={() => setContentId(instance.id)}
-                  title="管理已安装的模组、光影包与资源包"
+                  title={t("pages.instances.contentTitle")}
                 >
                   <IconList size={16} />
-                  <span>资源</span>
+                  <span>{t("pages.instances.content")}</span>
                 </button>
-                <button type="button" className="btn btn-ghost btn-icon" onClick={() => void openLogsDir(instance)} title="打开启动器日志目录（排查启动失败）">
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => void openLogsDir(instance)} title={t("pages.instances.logsTitle")}>
                   <IconFolder size={16} />
-                  <span>日志</span>
+                  <span>{t("pages.instances.logs")}</span>
                 </button>
                 <button
                   type="button"
@@ -292,22 +296,22 @@ export function InstancesPage() {
                   aria-expanded={dirMenu?.instance.id === instance.id}
                   data-action="open-content-dir"
                   onClick={(event) => setDirMenu({ instance, anchor: event.currentTarget, name: instance.name })}
-                  title="打开资源目录（模组 / 光影 / 材质）"
+                  title={t("pages.instances.contentDirTitle")}
                 >
                   <IconFolder size={16} />
-                  <span>资源目录</span>
+                  <span>{t("pages.instances.contentDir")}</span>
                 </button>
-                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setSavesId(instance.id)} title="查看存档并直接进入">
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setSavesId(instance.id)} title={t("pages.instances.savesTitle")}>
                   <IconBook size={16} />
-                  <span>存档</span>
+                  <span>{t("pages.instances.saves")}</span>
                 </button>
-                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setExporting(instance)} title="打包成 zip 分享给他人导入">
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setExporting(instance)} title={t("pages.instances.exportTitle")}>
                   <IconPackage size={16} />
-                  <span>导出</span>
+                  <span>{t("pages.instances.export")}</span>
                 </button>
-                <button type="button" className="btn btn-ghost btn-icon btn-danger-ghost" onClick={() => setDeleting(instance)} title="删除实例">
+                <button type="button" className="btn btn-ghost btn-icon btn-danger-ghost" onClick={() => setDeleting(instance)} title={t("pages.instances.deleteTitle")}>
                   <IconTrash size={16} />
-                  <span>删除</span>
+                  <span>{t("pages.instances.delete")}</span>
                 </button>
               </div>
             </article>
@@ -345,10 +349,10 @@ export function InstancesPage() {
       />
       <ConfirmDialog
         open={exporting !== null}
-        title="导出实例"
-        message="将把该实例的模组、配置与存档打包为 zip，可分享给他人导入。日志与截图不会包含。"
-        confirmText="导出"
-        busyText="导出中…"
+        title={t("pages.instances.exportDialogTitle")}
+        message={t("pages.instances.exportDialogMessage")}
+        confirmText={t("pages.instances.export")}
+        busyText={t("pages.instances.exporting")}
         busy={busyExport}
         onCancel={() => setExporting(null)}
         onConfirm={() => void confirmExport()}
@@ -357,11 +361,11 @@ export function InstancesPage() {
         <AnchoredMenu
           anchor={dirMenu.anchor}
           onClose={() => setDirMenu(null)}
-          ariaLabel="打开资源目录"
+          ariaLabel={t("pages.instances.contentMenuLabel")}
           menuKey={dirMenu.instance.id}
           width={208}
         >
-          <span className="res-menu-title">{dirMenu.name} · 资源目录</span>
+          <span className="res-menu-title">{t("pages.instances.contentMenuTitle", { name: dirMenu.name })}</span>
           {CONTENT_DIRS.map((item) => (
             <button
               key={item.kind}
@@ -372,10 +376,10 @@ export function InstancesPage() {
               onClick={() => {
                 const target = dirMenu.instance;
                 setDirMenu(null);
-                void openContentDir(target, item.kind, item.label + "：" + item.short);
+                void openContentDir(target, item.kind, t(item.labelKey), item.short);
               }}
             >
-              <span className="res-menu-name">{item.label}</span>
+              <span className="res-menu-name">{t(item.labelKey)}</span>
               <span className="res-menu-meta">{item.short}</span>
             </button>
           ))}
@@ -384,9 +388,9 @@ export function InstancesPage() {
 
       <ConfirmDialog
         open={deleting !== null}
-        title="删除实例"
-        message={deleting ? `确定删除「${deleting.name}」吗？实例配置与该实例模组目录会被移除，已下载的游戏本体会保留。` : ""}
-        confirmText="删除"
+        title={t("pages.instances.deleteTitle")}
+        message={deleting ? t("pages.instances.deleteMessage", { name: deleting.name }) : ""}
+        confirmText={t("pages.instances.delete")}
         danger
         busy={busyDelete}
         onCancel={() => setDeleting(null)}

@@ -12,6 +12,7 @@ import {
   createServer as createInStore, listServers, readMeta, removeServer as removeInStore,
   updateServer as updateInStore, type CreateDeps,
 } from "./store";
+import { mt } from "../core/i18n";
 
 const log = logger("servers");
 
@@ -53,7 +54,7 @@ export async function updateServer(
 
 /** 删服务端：正在跑的不给删（先停），避免删掉正在被 java 打开的目录。 */
 export async function removeServer(id: string): Promise<void> {
-  if (isRunning(id)) throw new Error("服务端正在运行，请先停止再删除");
+  if (isRunning(id)) throw new Error(mt("srv.runningCannotDelete"));
   await removeInStore(id);
 }
 

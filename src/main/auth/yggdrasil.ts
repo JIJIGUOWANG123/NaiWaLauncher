@@ -7,6 +7,7 @@ import { downloadFile } from "../core/http";
 import { logger, registerSecret } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { getAccount, updateYggdrasilTokens, upsertYggdrasilAccount } from "./accounts";
+import { mt } from "../core/i18n";
 
 const log = logger("yggdrasil");
 
@@ -84,14 +85,14 @@ async function request(url: string, init: RequestInit = {}, timeoutMs = TIMEOUT_
       }
       return { status: res.status, json, text };
     } catch (err) {
-      last = err instanceof Error && err.name === "AbortError" ? new Error("请求超时（" + timeoutMs + "ms）") : err;
+      last = err instanceof Error && err.name === "AbortError" ? new Error(mt("core.requestTimeout", { ms: timeoutMs })) : err;
       // 只重试幂等的 GET：登录/续期重复发送会触发服务端的频率限制
       if (attempt < attempts) await sleep(400 * attempt);
     } finally {
       clearTimeout(timer);
     }
   }
-  throw new Error("网络请求失败：" + describe(last) + " · " + url);
+  throw new Error(mt("auth.ygg.requestFailed", { error: describe(last), url }));
 }
 
 function postJson(url: string, body: unknown): Promise<Reply> {
@@ -110,16 +111,16 @@ function postJson(url: string, body: unknown): Promise<Reply> {
  */
 export function normalizeApiUrl(raw: string): string {
   const input = (raw ?? "").trim();
-  if (input.length === 0) throw new Error("请填写第三方登录 API 地址（例如 https://littleskin.cn/api/yggdrasil）");
+  if (input.length === 0) throw new Error(mt("auth.ygg.apiUrlRequired"));
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : "https://" + input;
   let url: URL;
   try {
     url = new URL(withScheme);
   } catch {
-    throw new Error("API 地址格式不正确：" + input);
+    throw new Error(mt("auth.ygg.apiUrlInvalid", { url: input }));
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error("API 地址必须使用 http(s)：" + input);
+    throw new Error(mt("auth.ygg.apiUrlScheme", { url: input }));
   }
   const path = url.pathname.replace(/\/+$/, "");
   // 空路径（站点根）与常见的 /api/yggdrasil 都归一到标准端点
@@ -161,15 +162,15 @@ async function resolveEndpoint(raw: string): Promise<{ apiUrl: string; meta: End
 }
 
 /** 常见 Yggdrasil 错误码 → 用户看得懂的中文（原始 errorMessage 仍保留在文案里）。 */
-const ERROR_HINTS: Record<string, string> = {
+const ERROR_HINT_KEYS: Record<string, string> = {
   // 规范里的拼写就是 InvaildCredentialsException（历史拼写错误），两种都收
-  InvaildCredentialsException: "账号或密码错误",
-  InvalidCredentialsException: "账号或密码错误",
-  ForbiddenOperationException: "登录过于频繁或该账号被限制",
-  IllegalUserNameException: "用户名不合法：请确认使用的是皮肤站的邮箱/玩家名",
-  IllegalArgumentException: "服务端拒绝了这个请求，请确认填的是 Yggdrasil API 地址",
-  ContactAdminException: "该操作被服务器禁止，请联系皮肤站管理员",
-  UnsupportedMediaTypeException: "服务端不接受 JSON 请求体，这个地址可能不是 Yggdrasil API",
+  InvaildCredentialsException: "auth.ygg.badCredentials",
+  InvalidCredentialsException: "auth.ygg.badCredentials",
+  ForbiddenOperationException: "auth.ygg.tooFrequent",
+  IllegalUserNameException: "auth.ygg.illegalUserName",
+  IllegalArgumentException: "auth.ygg.badRequest",
+  ContactAdminException: "auth.ygg.contactAdmin",
+  UnsupportedMediaTypeException: "auth.ygg.unsupportedMedia",
 };
 
 /** 令牌类接口（validate / refresh）的失败文案：这些不是「登录」失败，别套登录提示。 */
@@ -177,8 +178,8 @@ function tokenFailure(reply: Reply, endpoint: string): string {
   const body: Json = reply.json ?? {};
   const error = str(body.error);
   const message = str(body.errorMessage) || str(body.message) || reply.text.slice(0, 200).trim();
-  if (!error && !message) return "校验请求失败：HTTP " + reply.status + " · " + endpoint;
-  return "令牌无效或已过期" + (message ? "（" + message + "）" : "") + (error ? " · " + error : "");
+  if (!error && !message) return mt("auth.ygg.validateFailed", { status: reply.status, endpoint });
+  return mt("auth.ygg.tokenInvalid") + (message ? "（" + message + "）" : "") + (error ? " · " + error : "");
 }
 
 /** 把「非 2xx + errorMessage」压成一句可读中文，原文一律保留便于排查。 */
@@ -186,16 +187,13 @@ function authFailure(reply: Reply, endpoint: string): string {
   const body: Json = reply.json ?? {};
   const error = str(body.error);
   const message = str(body.errorMessage) || str(body.message) || reply.text.slice(0, 200).trim();
-  const hint = ERROR_HINTS[error];
-  if (hint) return hint + (message ? "（" + message + "）" : "") + (error ? " · " + error : "");
+  const hintKey = ERROR_HINT_KEYS[error];
+  if (hintKey) return mt(hintKey) + (message ? "（" + message + "）" : "") + (error ? " · " + error : "");
   if (error || message) {
-    return "第三方登录失败：HTTP " + reply.status + (error ? " · " + error : "") + (message ? " · " + message : "");
+    return mt("auth.ygg.loginFailed", { status: reply.status, rest: (error ? " · " + error : "") + (message ? " · " + message : "") });
   }
   // 不是 JSON：地址填错了（常见是填成皮肤站首页，返回一坨 HTML）
-  return (
-    "该地址不是可用的 Yggdrasil 服务端（HTTP " + reply.status + "）：" + endpoint +
-    "；请确认填的是 API 根地址，例如 https://littleskin.cn/api/yggdrasil"
-  );
+  return mt("auth.ygg.notYggdrasil", { status: reply.status, endpoint });
 }
 
 /** clientToken 持久化：authlib-injector 规范要求同一启动器复用同一个 clientToken。 */
@@ -225,7 +223,7 @@ async function ensureClientToken(): Promise<string> {
 
 function normalizeProfileUuid(raw: string): string {
   const hex = String(raw ?? "").replace(/[^0-9a-fA-F]/g, "").toLowerCase();
-  if (hex.length !== 32) throw new Error("服务端返回的角色 UUID 不合法：" + raw);
+  if (hex.length !== 32) throw new Error(mt("auth.ygg.badUuid", { uuid: raw }));
   return hex;
 }
 
@@ -253,8 +251,8 @@ function collectProfiles(body: Json, selected: { id: string; name: string }): { 
  */
 export async function loginYggdrasil(apiUrl: string, username: string, password: string): Promise<Account> {
   const user = (username ?? "").trim();
-  if (user.length === 0) throw new Error("请填写第三方账号的用户名（邮箱或玩家名）");
-  if ((password ?? "").length === 0) throw new Error("请填写第三方账号的密码");
+  if (user.length === 0) throw new Error(mt("auth.ygg.usernameRequired"));
+  if ((password ?? "").length === 0) throw new Error(mt("auth.ygg.passwordRequired"));
 
   const endpoint = await resolveEndpoint(apiUrl);
   const clientToken = await ensureClientToken();
@@ -269,11 +267,11 @@ export async function loginYggdrasil(apiUrl: string, username: string, password:
 
   const body: Json = reply.json ?? {};
   const accessToken = str(body.accessToken);
-  if (accessToken.length === 0) throw new Error("登录响应缺少 accessToken · " + endpoint.apiUrl);
+  if (accessToken.length === 0) throw new Error(mt("auth.ygg.noAccessToken", { url: endpoint.apiUrl }));
   const profile: Json = body.selectedProfile && typeof body.selectedProfile === "object" ? (body.selectedProfile as Json) : {};
   const profileName = str(profile.name);
   if (str(profile.id).length === 0 || profileName.length === 0) {
-    throw new Error("该账号还没有游戏角色（selectedProfile 为空），请先到皮肤站创建角色再登录");
+    throw new Error(mt("auth.ygg.noProfile"));
   }
   registerSecret(accessToken);
 
@@ -305,7 +303,7 @@ interface TokenCheck {
 /** validate → 401 时 refresh 一次。返回可用于启动的最新 accessToken。 */
 async function checkToken(account: Account): Promise<TokenCheck> {
   const ygg = account.yggdrasil;
-  if (!ygg) return { ok: false, accessToken: "", error: "该账号没有第三方登录令牌，请重新登录" };
+  if (!ygg) return { ok: false, accessToken: "", error: mt("auth.ygg.noToken") };
   const validate = await postJson(ygg.apiUrl + "/authserver/validate", {
     accessToken: ygg.accessToken,
     clientToken: ygg.clientToken,
@@ -317,7 +315,7 @@ async function checkToken(account: Account): Promise<TokenCheck> {
     return {
       ok: false,
       accessToken: ygg.accessToken,
-      error: "校验请求被服务端拒绝：HTTP " + validate.status + " · " + ygg.apiUrl,
+      error: mt("auth.ygg.validateRejected", { status: validate.status, url: ygg.apiUrl }),
     };
   }
 
@@ -330,13 +328,13 @@ async function checkToken(account: Account): Promise<TokenCheck> {
     return {
       ok: false,
       accessToken: ygg.accessToken,
-      error: tokenFailure(refresh, ygg.apiUrl) + "；请重新登录该账号",
+      error: tokenFailure(refresh, ygg.apiUrl) + mt("auth.ms.signInAgainSuffix"),
     };
   }
   const body: Json = refresh.json ?? {};
   const accessToken = str(body.accessToken);
   if (accessToken.length === 0) {
-    return { ok: false, accessToken: ygg.accessToken, error: "续期响应缺少 accessToken · " + ygg.apiUrl };
+    return { ok: false, accessToken: ygg.accessToken, error: mt("auth.ygg.refreshNoToken", { url: ygg.apiUrl }) };
   }
   registerSecret(accessToken);
   await updateYggdrasilTokens(account.id, {
@@ -352,12 +350,12 @@ async function checkToken(account: Account): Promise<TokenCheck> {
 /** IPC：校验第三方账号的令牌，401 时自动续期一次。 */
 export async function validateYggdrasilAccount(id: string): Promise<YggdrasilValidation> {
   const account = await getAccount(id);
-  if (!account) return { ok: false, error: "账号不存在：" + id };
-  if (account.type !== "yggdrasil" || !account.yggdrasil) return { ok: false, error: "该账号不是第三方（Yggdrasil）账号" };
+  if (!account) return { ok: false, error: mt("auth.account.notFound", { id }) };
+  if (account.type !== "yggdrasil" || !account.yggdrasil) return { ok: false, error: mt("auth.ygg.notYggdrasilAccount") };
   try {
     const fresh = account.yggdrasil.accessToken;
     const check = await checkToken(account);
-    if (!check.ok) return { ok: false, error: check.error ?? "令牌校验失败" };
+    if (!check.ok) return { ok: false, error: check.error ?? mt("auth.ygg.tokenCheckFailed") };
     return {
       ok: true,
       name: account.name,
@@ -377,7 +375,7 @@ export async function resolveYggdrasilSession(
   account: Account,
 ): Promise<{ accessToken: string; clientToken: string; uuid: string; name: string }> {
   const ygg = account.yggdrasil;
-  if (account.type !== "yggdrasil" || !ygg?.accessToken) throw new Error("该账号没有第三方登录令牌，请重新登录");
+  if (account.type !== "yggdrasil" || !ygg?.accessToken) throw new Error(mt("auth.ygg.noToken"));
   try {
     const check = await checkToken(account);
     if (!check.ok) {
@@ -455,7 +453,7 @@ async function fetchLatestInjector(): Promise<InjectorLatest | null> {
   if (downloadUrl.length === 0) return null;
   const checksums: Json = body.checksums && typeof body.checksums === "object" ? (body.checksums as Json) : {};
   return {
-    version: str(body.version) || "未知",
+    version: str(body.version) || mt("core.unknownShort"),
     downloadUrl,
     sha256: str(checksums.sha256).toLowerCase(),
   };
@@ -476,7 +474,7 @@ export async function ensureAuthlibInjector(): Promise<{ path: string; version: 
 
   const local = await stat(jar).catch(() => null);
   if (local && local.size > 0) {
-    if (!latest) return { path: jar, version: sidecar?.version ?? "未知" };
+    if (!latest) return { path: jar, version: sidecar?.version ?? mt("core.unknownShort") };
     const sizeMatch = sidecar !== null && sidecar.size === local.size;
     if (latest.sha256.length > 0) {
       if (sidecar && sizeMatch && sidecar.sha256 === latest.sha256) {
@@ -493,7 +491,7 @@ export async function ensureAuthlibInjector(): Promise<{ path: string; version: 
     }
   }
 
-  if (!latest) throw new Error("无法获取 authlib-injector 下载地址，请检查网络后重试");
+  if (!latest) throw new Error(mt("auth.ygg.authlibUnavailable"));
   await mkdir(dirname(jar), { recursive: true });
   // downloadFile 在目标已存在且无 sha1 时会直接复用旧文件，这里必须先删掉才能真的换新
   await rm(jar, { force: true });
@@ -502,7 +500,7 @@ export async function ensureAuthlibInjector(): Promise<{ path: string; version: 
     const actual = await sha256Of(jar);
     if (actual !== latest.sha256) {
       await rm(jar, { force: true });
-      throw new Error("authlib-injector 校验失败：期望 sha256 " + latest.sha256 + "，实际 " + actual);
+      throw new Error(mt("auth.ygg.authlibChecksum", { expected: latest.sha256, actual }));
     }
   }
   await writeSidecar({ version: latest.version, sha256: latest.sha256, size: bytes });

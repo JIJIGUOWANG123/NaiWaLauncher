@@ -1,4 +1,5 @@
 import type { InputHTMLAttributes, ReactNode } from "react";
+import { useT } from "../lib/i18n";
 import { IconChevronDown } from "./icons";
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -35,6 +36,7 @@ export function Select({
   /** 空串本身是一个有效选项（例如「默认」）时置 true：保留 value="" 的选项，不渲染 placeholder。 */
   keepEmpty?: boolean;
 }) {
+  const t = useT();
   const items = keepEmpty ? options : options.filter((option) => option.value !== "");
   const missing = value !== "" && !items.some((option) => option.value === value);
   return (
@@ -46,7 +48,7 @@ export function Select({
         aria-label={ariaLabel}
         onChange={(event) => onChange(event.target.value)}
       >
-        {!keepEmpty && value === "" ? <option value="">{placeholder ?? "请选择"}</option> : null}
+        {!keepEmpty && value === "" ? <option value="">{placeholder ?? t("pages.common.selectPlaceholder")}</option> : null}
         {missing ? <option value={value}>{value}</option> : null}
         {items.map((option) => (
           <option key={option.value} value={option.value} disabled={option.disabled} title={option.title}>

@@ -8,6 +8,7 @@ import { checkAppUpdates } from "./updates";
 import { downloadFile } from "./http";
 import { getPaths } from "./paths";
 import { logger } from "./logger";
+import { mt } from "./i18n";
 
 const log = logger("updater");
 
@@ -72,16 +73,16 @@ async function downloadToStaging(url: string): Promise<string> {
     await rm(dest, { force: true });
     try {
       log.info(`[updater] 下载更新包：${candidate}`);
-      await downloadFile(candidate, dest, { label: "更新启动器", connections: 4 });
+      await downloadFile(candidate, dest, { label: mt("upd.downloadLabel"), connections: 4 });
       const size = (await readFile(dest)).byteLength;
-      if (size < 20 * 1024 * 1024) throw new Error(`更新包大小异常（${size} 字节）`);
+      if (size < 20 * 1024 * 1024) throw new Error(mt("upd.badSize", { size }));
       return dest;
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       log.warn(`[updater] 该地址下载失败（${candidate}）：${lastError}`);
     }
   }
-  throw new Error(`更新包下载失败：${lastError || "网络不可用"}。若一直失败，请点「前往下载」用浏览器手动下载。`);
+  throw new Error(mt("upd.packageDownloadFailed", { error: lastError || mt("upd.networkUnavailable") }));
 }
 
 
@@ -154,16 +155,16 @@ async function downloadSetup(url: string): Promise<string> {
     await rm(dest, { force: true });
     try {
       log.info("[updater] 下载安装包：" + candidate);
-      await downloadFile(candidate, dest, { label: "更新启动器（安装版）", connections: 4 });
+      await downloadFile(candidate, dest, { label: mt("upd.downloadLabelSetup"), connections: 4 });
       const size = (await readFile(dest)).byteLength;
-      if (size < 20 * 1024 * 1024) throw new Error("安装包大小异常（" + size + " 字节）");
+      if (size < 20 * 1024 * 1024) throw new Error(mt("upd.badSize", { size }));
       return dest;
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       log.warn("[updater] 该地址下载失败（" + candidate + "）：" + lastError);
     }
   }
-  throw new Error("安装包下载失败：" + (lastError || "网络不可用") + "。可到 Release 页面手动下载安装包。");
+  throw new Error(mt("upd.downloadFailed", { error: lastError || mt("upd.networkUnavailable") }));
 }
 
 /** 安装版：下载 Setup 并静默装回当前目录，然后重启。 */
@@ -173,7 +174,7 @@ async function installViaSetup(url: string): Promise<void> {
   const mainExe = join(root, "main", "NaiWa Launcher.exe");
   const currentExe = existsSync(mainExe) ? mainExe : join(root, "NaiWa Launcher.exe");
   if (!existsSync(currentExe)) {
-    throw new Error("没找到当前的启动器程序：" + mainExe + "（安装版把程序放在 main 子目录、数据放在根目录，请重新运行安装包）");
+    throw new Error(mt("upd.mainExeMissing", { path: mainExe }));
   }
   const installer = await downloadSetup(url);
   const script = join(tmpdir(), "naiwa-setup-update-" + Date.now() + ".cmd");
@@ -189,13 +190,13 @@ async function installViaSetup(url: string): Promise<void> {
 export async function installUpdate(url?: string): Promise<void> {
   const mode = updateMode();
   if (mode === "none") {
-    throw new Error("当前是从临时目录运行的副本，无法自动更新；请下载安装包或便携版");
+    throw new Error(mt("upd.tempCopy"));
   }
   if (mode === "setup") {
     // 安装版要的是「安装包」，用 Release 里固定名的 Setup；调用方给的 url 可能是免安装版，忽略它
     const check = await checkAppUpdates();
     const setupUrl = check.setupUrl ?? url;
-    if (!setupUrl) throw new Error("Release 里没有找到 NaiWaLauncher-Setup.exe，请到下载页手动更新");
+    if (!setupUrl) throw new Error(mt("upd.noSetup"));
     log.info("[updater] 安装版更新：当前 " + check.current + " → " + check.latest);
     await installViaSetup(setupUrl);
     return;
@@ -203,12 +204,12 @@ export async function installUpdate(url?: string): Promise<void> {
   const target = updateTarget();
   log.info("[updater] 开始更新：目标 " + target + "（运行中：" + app.getPath("exe") + "）");
   const source = url ?? (await checkAppUpdates()).assetUrl;
-  if (!source) throw new Error("Release 里没有找到免安装版更新包，请到下载页手动更新");
+  if (!source) throw new Error(mt("upd.noPortable"));
   let staged = "";
   try {
     staged = await downloadToStaging(source);
   } catch (err) {
-    throw new Error(err instanceof Error ? err.message : "更新失败：" + String(err));
+    throw new Error(err instanceof Error ? err.message : mt("upd.failed", { error: String(err) }));
   }
   log.info("[updater] 下载完成，准备替换");
   const script = await writeSwapScript(staged, target);

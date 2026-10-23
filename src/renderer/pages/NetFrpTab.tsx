@@ -3,6 +3,7 @@ import type { NatfrpStatus, NatfrpTunnel, NatfrpUser } from "../../shared/types"
 import { api } from "../lib/api";
 import { copyText } from "../lib/clipboard";
 import { formatBytes } from "../lib/format";
+import { useT } from "../lib/i18n";
 import { usePersist } from "../lib/persist";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
@@ -41,6 +42,7 @@ export function NetFrpTab() {
   const { settings } = useApp();
   const persist = usePersist();
   const { push } = useToast();
+  const tr = useT();
 
   const savedToken = (settings?.natfrpToken ?? "").trim();
 
@@ -109,8 +111,8 @@ export function NetFrpTab() {
 
   const copy = async (text: string) => {
     const ok = await copyToClipboard(text);
-    if (ok) push(`已复制 ${text}`, "success");
-    else push("复制失败，请手动选中地址复制", "error");
+    if (ok) push(tr("pages.netLan.copied", { target: text }), "success");
+    else push(tr("pages.netLan.copyFailed"), "error");
   };
 
   const focusTokenInput = () => {
@@ -122,7 +124,7 @@ export function NetFrpTab() {
   const saveToken = async (): Promise<boolean> => {
     const next = tokenDraft.trim();
     setSavingToken(true);
-    const ok = await persist({ natfrpToken: next }, "访问密钥");
+    const ok = await persist({ natfrpToken: next }, tr("pages.netFrp.persistToken"));
     setSavingToken(false);
     if (ok && next !== savedToken) {
       // 换了 key，之前验证出来的账号信息就作废了。
@@ -136,8 +138,8 @@ export function NetFrpTab() {
   const verify = async () => {
     const next = tokenDraft.trim();
     if (!next) {
-      setVerifyError("请先填写访问密钥");
-      push("请先填写访问密钥再验证", "error");
+      setVerifyError(tr("pages.netFrp.errTokenRequired"));
+      push(tr("pages.netFrp.errTokenRequiredVerify"), "error");
       focusTokenInput();
       return;
     }
@@ -145,19 +147,19 @@ export function NetFrpTab() {
     setVerifyError(null);
     try {
       if (next !== savedToken) {
-        const saved = await persist({ natfrpToken: next }, "访问密钥");
-        if (!saved) throw new Error("访问密钥保存失败，验证已取消");
+        const saved = await persist({ natfrpToken: next }, tr("pages.netFrp.persistToken"));
+        if (!saved) throw new Error(tr("pages.netFrp.errTokenSaveFailed"));
       }
       const info = await api.net.natfrpUser();
       setUser(info);
-      push(`验证成功：已登录 ${info.name}`, "success");
+      push(tr("pages.netFrp.verifyOk", { name: info.name }), "success");
       tunnelList.reload();
       nodeList.reload();
     } catch (error: unknown) {
       const message = errorMessage(error);
       setUser(null);
       setVerifyError(message);
-      push(`验证失败：${message}`, "error");
+      push(tr("pages.netFrp.verifyFailed", { error: message }), "error");
     } finally {
       setVerifying(false);
     }
@@ -167,7 +169,7 @@ export function NetFrpTab() {
   const openSite = async () => {
     try {
       await api.app.openExternal(NATFRP_HOME);
-      push("已在浏览器打开 natfrp.com，登录后即可签到", "success");
+      push(tr("pages.netFrp.openedSite"), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -179,7 +181,12 @@ export function NetFrpTab() {
       const next = await api.net.natfrpStart(tunnel.id);
       setStatus(next);
       tunnelList.reload();
-      push(next.address ? `已启动 ${tunnel.name}：${next.address}` : `已启动 ${tunnel.name}，等待分配公网地址…`, "success");
+      push(
+        next.address
+          ? tr("pages.netFrp.startedWithAddr", { name: tunnel.name, address: next.address })
+          : tr("pages.netFrp.startedWaiting", { name: tunnel.name }),
+        "success",
+      );
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     } finally {
@@ -193,7 +200,7 @@ export function NetFrpTab() {
       const next = await api.net.natfrpStop();
       setStatus(next);
       tunnelList.reload();
-      push("已停止穿透", "info");
+      push(tr("pages.netFrp.stopped"), "info");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     } finally {
@@ -209,7 +216,7 @@ export function NetFrpTab() {
 
   const nodeOptions = nodes.map((node) => ({
     value: String(node.id),
-    label: node.publicGameAllowed ? `${node.name}｜满足「公开游戏服务器」` : `${node.name}｜不满足「公开游戏服务器」`,
+    label: tr(node.publicGameAllowed ? "pages.netFrp.nodeOk" : "pages.netFrp.nodeBad", { name: node.name }),
   }));
   const selectedNode = nodes.find((node) => String(node.id) === createNode) ?? null;
 
@@ -224,11 +231,11 @@ export function NetFrpTab() {
   const submitCreate = async () => {
     const name = createName.trim();
     if (!name) {
-      push("请先填写隧道名", "error");
+push(tr("pages.netFrp.errNameRequired"), "error");
       return;
     }
     if (!createNode) {
-      push("请先选择节点", "error");
+push(tr("pages.netFrp.errNodeRequired"), "error");
       return;
     }
     setCreating(true);
@@ -236,7 +243,7 @@ export function NetFrpTab() {
       const created = await api.net.natfrpCreate(name, Number(createNode), readPort(createPort));
       setCreateOpen(false);
       tunnelList.reload();
-      push(`已创建隧道 ${created.name}`, "success");
+      push(tr("pages.netFrp.created", { name: created.name }), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     } finally {
@@ -248,24 +255,32 @@ export function NetFrpTab() {
     <div className="net-frp" data-frp-tab>
       <p className="net-frp-notice" data-frp-notice>
         <IconInfo size={16} />
-        <span>樱花穿透由 natfrp.com 提供。<strong>公开游戏服务器</strong>只能使用标注「多线」的节点，否则账号可能被封禁；小群熟人联机可用任意节点。</span>
+        <span>
+          {tr("pages.netFrp.noticeBefore")}
+          <strong>{tr("pages.netFrp.noticeStrong")}</strong>
+          {tr("pages.netFrp.noticeAfter")}
+        </span>
       </p>
 
       <div className="panel" data-frp-card="account">
         <div className="panel-head">
-          <h2 className="panel-title">账号</h2>
+          <h2 className="panel-title">{tr("pages.netFrp.accountTitle")}</h2>
           <span className="panel-count">
-            {user ? "已验证" : savedToken ? "已保存访问密钥，点「验证」拉取账号" : "先填访问密钥"}
+            {user
+              ? tr("pages.netFrp.statusVerified")
+              : savedToken
+                ? tr("pages.netFrp.statusSaved")
+                : tr("pages.netFrp.statusEmpty")}
           </span>
         </div>
 
-        <Field label="访问密钥（Access Token）" hint="natfrp.com →「用户信息 → 访问密钥」里复制；只写进本机 config/settings.json。">
+        <Field label={tr("pages.netFrp.tokenLabel")} hint={tr("pages.netFrp.tokenHint")}>
           <div className="key-row" ref={tokenRowRef} data-frp-token-row>
             <TextInput
               type={showToken ? "text" : "password"}
               value={tokenDraft}
-              aria-label="樱花穿透访问密钥"
-              placeholder="粘贴 natfrp.com 的访问密钥"
+              aria-label={tr("pages.netFrp.tokenAria")}
+              placeholder={tr("pages.netFrp.tokenPlaceholder")}
               data-frp-token-input
               spellCheck={false}
               autoComplete="off"
@@ -281,16 +296,16 @@ export function NetFrpTab() {
               type="button"
               className="btn btn-ghost"
               onClick={() => setShowToken((value) => !value)}
-              aria-label={showToken ? "隐藏访问密钥" : "显示访问密钥"}
+              aria-label={showToken ? tr("pages.netFrp.hideToken") : tr("pages.netFrp.showToken")}
               data-frp-token-toggle
             >
               {showToken ? <IconEyeOff size={16} /> : <IconEye size={16} />}
             </button>
             <button type="button" className="btn btn-ghost" onClick={() => void saveToken()} disabled={savingToken} data-frp-token-save>
-              {savingToken ? "保存中…" : "保存"}
+              {savingToken ? tr("pages.common.saving") : tr("pages.common.save")}
             </button>
             <button type="button" className="btn btn-primary" onClick={() => void verify()} disabled={verifying} data-frp-verify>
-              {verifying ? "验证中…" : "验证"}
+              {verifying ? tr("pages.netFrp.verifying") : tr("pages.netFrp.verify")}
             </button>
           </div>
         </Field>
@@ -298,7 +313,7 @@ export function NetFrpTab() {
         {verifyError ? (
           <p className="net-result bad" role="alert" data-frp-verify-result="fail">
             <IconAlert size={15} />
-            验证失败：{verifyError}
+            {tr("pages.netFrp.verifyFailed", { error: verifyError ?? "" })}
           </p>
         ) : null}
 
@@ -306,19 +321,22 @@ export function NetFrpTab() {
           <div className="net-frp-account" data-frp-account>
             <p className="net-result ok" role="status" data-frp-verify-result="ok">
               <IconCheck size={15} />
-              已登录：{user.name}
+              {tr("pages.netFrp.loggedInAs", { name: user.name })}
             </p>
 
             <div className="net-frp-figures">
               <span className="net-frp-figure" data-frp-traffic-left>
-                剩余流量 <strong>{formatBytes(user.trafficLeft ?? 0)}</strong>
+                {tr("pages.netFrp.trafficLeft")}
+                <strong>{formatBytes(user.trafficLeft ?? 0)}</strong>
               </span>
               <span className="net-frp-figure" data-frp-traffic-today>
-                本日已用 <strong>{formatBytes(user.trafficToday ?? 0)}</strong>
+                {tr("pages.netFrp.trafficToday")}
+                <strong>{formatBytes(user.trafficToday ?? 0)}</strong>
               </span>
               {user.groupName ? (
                 <span className="net-frp-figure">
-                  用户组 <strong>{user.groupName}</strong>
+                  {tr("pages.netFrp.group")}
+                  <strong>{user.groupName}</strong>
                 </span>
               ) : null}
             </div>
@@ -329,12 +347,16 @@ export function NetFrpTab() {
                 data-frp-signed={user.signed ? "true" : "false"}
               >
                 {user.signed ? <IconCheck size={12} /> : null}
-                {user.signed ? `今日已签到${user.signDays !== undefined ? ` · 连续 ${user.signDays} 天` : ""}` : "今日未签到"}
+                {user.signed
+                  ? user.signDays !== undefined
+                    ? tr("pages.netFrp.signedStreak", { days: user.signDays })
+                    : tr("pages.netFrp.signedToday")
+                  : tr("pages.netFrp.notSigned")}
               </span>
-              <span className="net-frp-sign-note" data-frp-sign-hint>签到请在 natfrp.com 网页完成</span>
+              <span className="net-frp-sign-note" data-frp-sign-hint>{tr("pages.netFrp.signHint")}</span>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => void openSite()} data-frp-open-site>
                 <IconLink size={14} />
-                打开 natfrp.com
+                {tr("pages.netFrp.openSite")}
               </button>
             </div>
           </div>
@@ -345,16 +367,16 @@ export function NetFrpTab() {
       {savedToken ? (
         <div className="panel" data-frp-card="tunnels">
           <div className="panel-head">
-            <h2 className="panel-title">隧道</h2>
-            <span className="panel-count">{tunnels.length} 条</span>
+            <h2 className="panel-title">{tr("pages.netFrp.tunnelsTitle")}</h2>
+            <span className="panel-count">{tr("pages.netFrp.tunnelCount", { count: tunnels.length })}</span>
             <div className="net-frp-head-actions">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => tunnelList.reload()} disabled={tunnelList.loading} data-frp-tunnels-reload>
                 <IconRefresh size={15} />
-                刷新
+                {tr("pages.common.refresh")}
               </button>
               <button type="button" className="btn btn-primary btn-sm" onClick={openCreate} data-frp-create-open>
                 <IconPlus size={15} />
-                新建隧道
+                {tr("pages.netFrp.newTunnel")}
               </button>
             </div>
           </div>
@@ -362,7 +384,7 @@ export function NetFrpTab() {
           {tunnelList.loading && tunnels.length === 0 ? <SkeletonRows count={2} /> : null}
           {tunnelList.error ? <ErrorState message={tunnelList.error} onRetry={tunnelList.reload} /> : null}
           {!tunnelList.loading && !tunnelList.error && tunnels.length === 0 ? (
-            <EmptyState title="还没有隧道" hint="点「新建隧道」把本地 25565 映射到公网，好友用公网地址直连。" />
+            <EmptyState title={tr("pages.netFrp.tunnelsEmptyTitle")} hint={tr("pages.netFrp.tunnelsEmptyHint")} />
           ) : null}
 
           {tunnels.length > 0 ? (
@@ -378,19 +400,20 @@ export function NetFrpTab() {
                         className={`badge net-frp-state ${tunnel.online ? "is-online" : "is-offline"}`}
                         data-frp-online={tunnel.online ? "true" : "false"}
                       >
-                        {tunnel.online ? "在线" : "离线"}
+                        {tunnel.online ? tr("pages.netFrp.online") : tr("pages.netFrp.offline")}
                       </span>
                     </div>
                     <div className="net-frp-row-meta">
-                      <span data-frp-node>{tunnel.nodeName ?? `节点 #${tunnel.node}`}</span>
+                      <span data-frp-node>{tunnel.nodeName ?? tr("pages.netFrp.nodeFallback", { id: tunnel.node })}</span>
                       <span>
-                        本地端口 <code className="net-frp-port">{tunnel.localPort}</code>
+                        {tr("pages.netFrp.localPortBefore")}
+                        <code className="net-frp-port">{tunnel.localPort}</code>
                       </span>
                     </div>
                     <div className="net-frp-row-actions">
                       {isRunning ? (
                         <button type="button" className="btn btn-ghost btn-sm" onClick={() => void stopTunnel()} disabled={busy} data-frp-stop>
-                          停止
+                          {tr("pages.netFrp.stop")}
                         </button>
                       ) : (
                         <button
@@ -400,16 +423,16 @@ export function NetFrpTab() {
                           disabled={busy}
                           data-frp-start={tunnel.id}
                         >
-                          启动
+                          {tr("pages.netFrp.start")}
                         </button>
                       )}
                     </div>
                     {address ? (
                       <div className="net-frp-row-addr" data-frp-address={address}>
-                        <span className="net-frp-addr-label">公网地址</span>
+                        <span className="net-frp-addr-label">{tr("pages.netFrp.publicAddress")}</span>
                         <code className="net-addr-value">{address}</code>
                         <button type="button" className="btn btn-ghost btn-sm" onClick={() => void copy(address)} data-frp-copy>
-                          复制
+                          {tr("pages.netLan.copy")}
                         </button>
                       </div>
                     ) : null}
@@ -422,11 +445,11 @@ export function NetFrpTab() {
       ) : (
         <div className="panel" data-frp-card="guide">
           <EmptyState
-            title="还没有配置樱花穿透"
-            hint="填好并保存访问密钥后，这里会列出你的隧道和公网地址。"
+            title={tr("pages.netFrp.guideTitle")}
+            hint={tr("pages.netFrp.guideHint")}
             action={
               <button type="button" className="btn btn-primary" onClick={focusTokenInput} data-frp-guide-action>
-                去填写访问密钥
+                {tr("pages.netFrp.guideAction")}
               </button>
             }
           />
@@ -435,52 +458,52 @@ export function NetFrpTab() {
 
       <Modal
         open={createOpen}
-        title="新建隧道"
-        subtitle="把本机的 Minecraft 端口映射到公网"
+        title={tr("pages.netFrp.createTitle")}
+        subtitle={tr("pages.netFrp.createSubtitle")}
         onClose={() => setCreateOpen(false)}
         width={480}
         footer={
           <>
             <button type="button" className="btn btn-ghost" onClick={() => setCreateOpen(false)} disabled={creating}>
-              取消
+              {tr("pages.common.cancel")}
             </button>
             <button type="button" className="btn btn-primary" onClick={() => void submitCreate()} disabled={creating} data-frp-create-submit>
-              {creating ? "创建中…" : "创建"}
+              {creating ? tr("pages.netFrp.creating") : tr("pages.netFrp.create")}
             </button>
           </>
         }
       >
         <div className="net-frp-form">
-          <Field label="隧道名">
+          <Field label={tr("pages.netFrp.tunnelName")}>
             <TextInput
               value={createName}
-              aria-label="隧道名"
+              aria-label={tr("pages.netFrp.tunnelName")}
               data-frp-create-name
               spellCheck={false}
               onChange={(event) => setCreateName(event.target.value)}
             />
           </Field>
-          <Field label="本地端口" hint="游戏里「对局域网开放」的端口，默认 25565">
+          <Field label={tr("pages.netFrp.portLabel")} hint={tr("pages.netFrp.portHint")}>
             <TextInput
               value={createPort}
               inputMode="numeric"
-              aria-label="本地端口"
+              aria-label={tr("pages.netFrp.portLabel")}
               data-frp-create-port
               onChange={(event) => setCreatePort(event.target.value)}
             />
           </Field>
-          <Field label="节点" hint="公开宣传的房间必须选满足「公开游戏服务器」的节点">
+          <Field label={tr("pages.netFrp.nodeLabel")} hint={tr("pages.netFrp.nodeHint")}>
             <Select
               value={createNode}
               options={nodeOptions}
               onChange={setCreateNode}
-              ariaLabel="节点"
-              placeholder={nodeList.loading ? "节点加载中…" : "请选择节点"}
+              ariaLabel={tr("pages.netFrp.nodeLabel")}
+              placeholder={nodeList.loading ? tr("pages.netFrp.nodesLoading") : tr("pages.netFrp.selectNode")}
             />
           </Field>
           {selectedNode && !selectedNode.publicGameAllowed ? (
             <p className="net-frp-warn" data-frp-node-warn>
-              {selectedNode.name} 不满足「公开游戏服务器」要求：只适合小群熟人联机，公开宣传可能被封禁。
+              {tr("pages.netFrp.nodeWarn", { name: selectedNode.name })}
             </p>
           ) : null}
         </div>

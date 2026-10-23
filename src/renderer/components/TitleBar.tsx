@@ -4,10 +4,11 @@ import { api } from "../lib/api";
 import { iconSrc } from "../lib/appIcon";
 import { mediaUrl } from "../lib/media";
 import { useApp } from "../lib/store";
+import { useT } from "../lib/i18n";
 import { IconClose, IconMaximize, IconMinus } from "./icons";
 
-/** titleBarText 为空时展示的默认文字。 */
-export const DEFAULT_TITLE_TEXT = "奶娃启动器 NaiWa Launcher";
+/** titleBarText 为空时展示的默认文字（i18n key）。 */
+export const DEFAULT_TITLE_KEY = "titlebar.default";
 
 /**
  * 自绘标题栏：主进程窗口已无边框（系统标题栏移除），因此始终渲染。
@@ -23,6 +24,7 @@ export function TitleBar({
   backgroundName: string;
 }) {
   const { iconUrl } = useApp();
+  const tr = useT();
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -48,7 +50,7 @@ export function TitleBar({
     }
   };
 
-  const label = text.trim() || DEFAULT_TITLE_TEXT;
+  const label = text.trim() || tr(DEFAULT_TITLE_KEY);
   const imageUrl = style === "image" ? mediaUrl(backgroundDir, backgroundName) : "";
   const background = imageUrl ? { backgroundImage: `url("${imageUrl}")` } : undefined;
 
@@ -76,8 +78,8 @@ export function TitleBar({
         <button
           type="button"
           className="titlebar-btn"
-          aria-label="最小化"
-          title="最小化"
+          aria-label={tr("titlebar.minimize")}
+          title={tr("titlebar.minimize")}
           onClick={() => void api.window.minimize()}
         >
           <IconMinus size={15} />
@@ -85,8 +87,8 @@ export function TitleBar({
         <button
           type="button"
           className="titlebar-btn"
-          aria-label={maximized ? "还原" : "最大化"}
-          title={maximized ? "还原" : "最大化"}
+          aria-label={maximized ? tr("titlebar.restore") : tr("titlebar.maximize")}
+          title={maximized ? tr("titlebar.restore") : tr("titlebar.maximize")}
           onClick={() => void toggleMaximize()}
         >
           <IconMaximize size={14} />
@@ -94,8 +96,8 @@ export function TitleBar({
         <button
           type="button"
           className="titlebar-btn titlebar-close"
-          aria-label="关闭"
-          title="关闭"
+          aria-label={tr("titlebar.close")}
+          title={tr("titlebar.close")}
           onClick={() => void api.window.close()}
         >
           <IconClose size={15} />

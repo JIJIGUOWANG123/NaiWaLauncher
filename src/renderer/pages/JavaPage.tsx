@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { JavaSourceId, JavaVendorId } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatBytes } from "../lib/format";
+import { useT } from "../lib/i18n";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
@@ -11,31 +12,32 @@ import { EmptyState, ErrorState, SkeletonRows } from "../components/State";
 import { IconCheck, IconDownload, IconJava, IconRefresh } from "../components/icons";
 
 /** 四个下载源：auto 会先测速再挑最快的那个。 */
-const SOURCE_TABS: Array<{ value: JavaSourceId; label: string }> = [
-  { value: "auto", label: "自动（测速最快）" },
-  { value: "bellsoft", label: "BellSoft Liberica" },
-  { value: "adoptium", label: "Adoptium (Temurin)" },
-  { value: "tuna", label: "清华 TUNA 镜像" },
+const SOURCE_TABS: Array<{ value: JavaSourceId; labelKey: string }> = [
+  { value: "auto", labelKey: "pages.java.sourceAuto" },
+  { value: "bellsoft", labelKey: "pages.java.sourceBellsoft" },
+  { value: "adoptium", labelKey: "pages.java.sourceAdoptium" },
+  { value: "tuna", labelKey: "pages.java.sourceTuna" },
 ];
 
-const SOURCE_LABEL: Record<JavaSourceId, string> = {
-  auto: "自动（测速最快）",
-  bellsoft: "BellSoft Liberica",
-  adoptium: "Adoptium (Temurin)",
-  tuna: "清华 TUNA 镜像",
+const SOURCE_LABEL_KEY: Record<JavaSourceId, string> = {
+  auto: "pages.java.sourceAuto",
+  bellsoft: "pages.java.sourceBellsoft",
+  adoptium: "pages.java.sourceAdoptium",
+  tuna: "pages.java.sourceTuna",
 };
 
 /** 已装 JDK 的来源徽标：source 缺失（老记录）显示「未知」。 */
-const VENDOR_LABEL: Record<JavaVendorId | "unknown", string> = {
-  bellsoft: "BellSoft",
-  adoptium: "Adoptium",
-  tuna: "清华 TUNA",
-  system: "系统",
-  unknown: "未知",
+const VENDOR_KEY: Record<JavaVendorId | "unknown", string> = {
+  bellsoft: "pages.java.vendorBellsoft",
+  adoptium: "pages.java.vendorAdoptium",
+  tuna: "pages.java.vendorTuna",
+  system: "pages.java.vendorSystem",
+  unknown: "pages.java.vendorUnknown",
 };
 
 export function JavaPage() {
   const { push } = useToast();
+  const t = useT();
   const { settings, saveSettings } = useApp();
   // 下载源存在设置里：切一次全局生效，下次进页面还是它。
   const source: JavaSourceId = settings?.javaDownloadSource ?? "auto";
@@ -59,7 +61,7 @@ export function JavaPage() {
   }, [releases.data]);
 
   const majorOptions = useMemo(
-    () => [{ value: "all", label: "全部" }, ...majors.map((major) => ({ value: String(major), label: `Java ${major}` }))],
+    () => [{ value: "all", label: t("pages.java.allVersions") }, ...majors.map((major) => ({ value: String(major), label: `Java ${major}` }))],
     [majors],
   );
 
@@ -82,10 +84,13 @@ export function JavaPage() {
   const probeText = useMemo(() => {
     const list = probes.data ?? [];
     if (list.length === 0) return "";
-    const parts = list.map((item) => `${item.label} ${item.latencyMs === null ? "不可用" : `${item.latencyMs}ms`}`);
+    const parts = list.map(
+      (item) => `${item.label} ${item.latencyMs === null ? t("pages.java.probeUnavailable") : `${item.latencyMs}ms`}`,
+    );
+    const joined = parts.join(" · ");
     return bestProbe
-      ? `${parts.join(" · ")} → 选 ${bestProbe.label}`
-      : `${parts.join(" · ")} → 都不可用，回退 BellSoft`;
+      ? t("pages.java.probeChosen", { parts: joined, label: bestProbe.label })
+      : t("pages.java.probeFallback", { parts: joined });
   }, [bestProbe, probes.data]);
 
   const changeSource = async (next: JavaSourceId) => {
@@ -106,7 +111,7 @@ export function JavaPage() {
     try {
       // auto 由主进程按测速挑源，这里把当前选择原样传过去。
       const result = await api.java.install(major, version, source);
-      push(`Java ${result.version} 安装完成`, "success");
+      push(t("pages.java.installedToast", { version: result.version }), "success");
       installed.reload();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -119,8 +124,8 @@ export function JavaPage() {
     <section className="page" data-java-page>
       <header className="page-head">
         <div>
-          <h1 className="page-title">Java 运行时</h1>
-          <p className="page-sub">不同 Minecraft 版本需要不同 JDK；启动器会优先使用已安装的匹配版本</p>
+          <h1 className="page-title">{t("pages.java.title")}</h1>
+          <p className="page-sub">{t("pages.java.sub")}</p>
         </div>
         <div className="page-actions">
           <button
@@ -129,21 +134,21 @@ export function JavaPage() {
             onClick={() => { installed.reload(); releases.reload(); probes.reload(); }}
           >
             <IconRefresh size={16} />
-            刷新
+            {t("pages.java.refresh")}
           </button>
         </div>
       </header>
 
       <div className="panel">
         <div className="panel-head">
-          <h2 className="panel-title">已安装</h2>
-          <span className="panel-count">{installed.data?.length ?? 0} 个</span>
+          <h2 className="panel-title">{t("pages.java.installedTitle")}</h2>
+          <span className="panel-count">{t("pages.java.installedCount", { count: String(installed.data?.length ?? 0) })}</span>
         </div>
 
         {installed.loading ? <SkeletonRows count={2} /> : null}
         {installed.error ? <ErrorState message={installed.error} onRetry={installed.reload} /> : null}
         {!installed.loading && !installed.error && (installed.data ?? []).length === 0 ? (
-          <EmptyState title="还没有安装任何 JDK" hint="从下方列表挑一个 LTS 版本安装，或让启动器在启动时自动下载。" />
+          <EmptyState title={t("pages.java.noJdkTitle")} hint={t("pages.java.noJdkHint")} />
         ) : null}
 
         {(installed.data ?? []).length > 0 ? (
@@ -160,14 +165,14 @@ export function JavaPage() {
                     <span
                       className="chip java-source-chip"
                       data-java-installed-source={item.source ?? "unknown"}
-                      title="这个 JDK 来自哪个下载源"
+                      title={t("pages.java.sourceTitle")}
                     >
-                      {VENDOR_LABEL[item.source ?? "unknown"]}
+                      {t(VENDOR_KEY[item.source ?? "unknown"])}
                     </span>
                   </div>
                   <p className="java-path" title={item.path}>{item.path}</p>
                 </div>
-                <span className="pill pill-done"><IconCheck size={13} />可用</span>
+                <span className="pill pill-done"><IconCheck size={13} />{t("pages.java.ready")}</span>
               </li>
             ))}
           </ul>
@@ -176,16 +181,18 @@ export function JavaPage() {
 
       <div className="panel">
         <div className="panel-head">
-          <h2 className="panel-title">可下载版本</h2>
+          <h2 className="panel-title">{t("pages.java.availableTitle")}</h2>
           <span className="panel-count">
             {source === "auto"
-              ? (bestProbe ? `自动测速 · 当前 ${bestProbe.label}` : "自动测速挑选中")
-              : `来自 ${SOURCE_LABEL[source]}`}
+              ? (bestProbe
+                ? t("pages.java.autoPicked", { label: bestProbe.label })
+                : t("pages.java.autoPicking"))
+              : t("pages.java.fromSource", { label: t(SOURCE_LABEL_KEY[source]) })}
           </span>
         </div>
 
         <div className="java-source-row">
-          <div className="source-tabs" role="tablist" aria-label="JDK 下载源">
+          <div className="source-tabs" role="tablist" aria-label={t("pages.java.sourceAria")}>
             {SOURCE_TABS.map((tab) => (
               <button
                 key={tab.value}
@@ -197,16 +204,16 @@ export function JavaPage() {
                 disabled={switchingSource}
                 onClick={() => void changeSource(tab.value)}
               >
-                {tab.label}
+                {t(tab.labelKey)}
               </button>
             ))}
           </div>
           {source === "auto" ? (
             <p className="java-source-probe" data-java-source-probe>
-              {probes.loading ? "正在测速三个下载源…" : (probeText || "没有拿到探测结果")}
+              {probes.loading ? t("pages.java.probing") : (probeText || t("pages.java.noProbe"))}
             </p>
           ) : (
-            <p className="java-source-probe">已锁定 {SOURCE_LABEL[source]}；切回「自动」会重新测速。</p>
+            <p className="java-source-probe">{t("pages.java.locked", { label: t(SOURCE_LABEL_KEY[source]) })}</p>
           )}
         </div>
 
@@ -217,7 +224,7 @@ export function JavaPage() {
         {releases.loading ? <SkeletonRows count={5} /> : null}
         {releases.error ? <ErrorState message={releases.error} onRetry={releases.reload} /> : null}
         {!releases.loading && !releases.error && filtered.length === 0 ? (
-          <EmptyState title="没有可下载的版本" hint="换个主版本筛选试试，或切一个下载源再刷新。" />
+          <EmptyState title={t("pages.java.noVersionsTitle")} hint={t("pages.java.noVersionsHint")} />
         ) : null}
 
         {filtered.length > 0 ? (
@@ -234,11 +241,11 @@ export function JavaPage() {
                     {release.lts ? <LtsTag /> : null}
                     {release.sizeBytes ? <span className="version-date">{formatBytes(release.sizeBytes)}</span> : null}
                     {release.source
-                      ? <span className="chip" data-java-release-source={release.source}>{VENDOR_LABEL[release.source]}</span>
+                      ? <span className="chip" data-java-release-source={release.source}>{t(VENDOR_KEY[release.source])}</span>
                       : null}
                   </div>
                   <div className="version-action">
-                    {isInstalled ? <span className="pill pill-done">已安装</span> : null}
+                    {isInstalled ? <span className="pill pill-done">{t("pages.java.installed")}</span> : null}
                     <button
                       type="button"
                       className={`btn ${isInstalled ? "btn-ghost" : "btn-primary"} btn-sm`}
@@ -246,7 +253,9 @@ export function JavaPage() {
                       disabled={installingKey !== null}
                     >
                       <IconDownload size={15} />
-                      {isInstalling ? "安装中…" : isInstalled ? "重新安装" : "安装"}
+                      {isInstalling
+                        ? t("pages.java.installing")
+                        : isInstalled ? t("pages.java.reinstall") : t("pages.java.install")}
                     </button>
                   </div>
                 </li>

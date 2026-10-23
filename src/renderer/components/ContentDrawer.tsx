@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { InstalledModInfo, InstanceMeta } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatBytes } from "../lib/format";
+import { useT } from "../lib/i18n";
 import { perfNow, perfSince } from "../lib/perf";
 import { useApp } from "../lib/store";
 import { errorMessage } from "../lib/useAsync";
@@ -15,9 +16,9 @@ import { IconRefresh, IconTrash, IconZap } from "./icons";
 /** 光影/资源包分区：两种内容只有目录和文案不同，共用一套独立于模组分区的状态。 */
 type PackKind = "shader" | "resourcepack";
 
-const PACK_META: Record<PackKind, { label: string; dir: string; unit: string }> = {
-  shader: { label: "光影包", dir: "shaderpacks", unit: "光影包" },
-  resourcepack: { label: "资源包", dir: "resourcepacks", unit: "资源包" },
+const PACK_META: Record<PackKind, { dir: string; kindKey: string }> = {
+  shader: { dir: "shaderpacks", kindKey: "pages.content.shaderPack" },
+  resourcepack: { dir: "resourcepacks", kindKey: "pages.content.resourcePack" },
 };
 
 /** 搜索词归一化：小写并去掉所有空白，空串表示不过滤。 */
@@ -28,10 +29,10 @@ function normalizeSearch(value: string): string {
 /** 内容分区：模组 / 光影包 / 资源包共用一个分段控件与一个面板。 */
 type ContentTab = "mod" | PackKind;
 
-const CONTENT_TABS: Array<{ value: ContentTab; label: string }> = [
-  { value: "mod", label: "模组" },
-  { value: "shader", label: "光影包" },
-  { value: "resourcepack", label: "资源包" },
+const CONTENT_TABS: Array<{ value: ContentTab; labelKey: string }> = [
+  { value: "mod", labelKey: "pages.content.modUnit" },
+  { value: "shader", labelKey: "pages.content.shaderPack" },
+  { value: "resourcepack", labelKey: "pages.content.resourcePack" },
 ];
 
 /** name / fileName / description 任一命中即保留；description 只有光影与资源包才有。 */
@@ -58,6 +59,8 @@ function PackSection({
   onCount: (kind: PackKind, count: number | null) => void;
 }) {
   const meta = PACK_META[kind];
+  const tr = useT();
+  const unit = tr(meta.kindKey);
   const [items, setItems] = useState<InstalledModInfo[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -122,9 +125,14 @@ function PackSection({
       const next = await api.mods.checkUpdates(instanceId, kind);
       setItems(next);
       const found = next.filter((item) => item.update).length;
-      push(found > 0
-        ? `检查完成：共 ${next.length} 个${meta.unit}，${found} 个可更新`
-        : `检查完成：共 ${next.length} 个${meta.unit}，暂无更新`, "success");
+      push(
+        tr(found > 0 ? "pages.content.checkDoneUpdatable" : "pages.content.checkDoneNoUpdate", {
+          total: next.length,
+          unit,
+          found,
+        }),
+        "success",
+      );
     } catch (err: unknown) {
       push(errorMessage(err), "error");
     } finally {
@@ -137,7 +145,7 @@ function PackSection({
     setUpdating(item.fileName);
     try {
       const result = await api.mods.update(instanceId, item.fileName, kind);
-      push(`已更新为 ${result.fileName}`, "success");
+      push(tr("pages.content.updatedTo", { name: result.fileName }), "success");
       await load();
     } catch (err: unknown) {
       push(errorMessage(err), "error");
@@ -151,7 +159,7 @@ function PackSection({
     setBusyRemove(true);
     try {
       await api.mods.remove(instanceId, removing.fileName, kind);
-      push(`已删除 ${removing.name ?? removing.fileName}`, "success");
+      push(tr("pages.content.deleted", { name: removing.name ?? removing.fileName }), "success");
       setRemoving(null);
       await load();
     } catch (err: unknown) {
@@ -164,19 +172,19 @@ function PackSection({
   return (
     <div className="detail-content-panel" data-pack-section={kind} data-content-panel={kind} hidden={hidden}>
       <div className="drawer-section-head">
-        <span className="field-label">{meta.label}</span>
+        <span className="field-label">{unit}</span>
         <span className="muted-text" data-pack-stats>
           {items === null
-            ? `正在读取 ${meta.dir} 目录…`
+            ? tr("pages.content.readingDir", { dir: meta.dir })
             : query
               ? (
                 <>
-                  {`共 ${items.length} 个，`}
-                  <span className="detail-match-count">{`匹配 ${visible.length} 个`}</span>
-                  {`，可更新 ${updatable} 个`}
+                  {tr("pages.content.statTotal", { total: items.length })}
+                  <span className="detail-match-count">{tr("pages.content.statMatched", { count: visible.length })}</span>
+                  {tr("pages.content.statUpdatableTail", { count: updatable })}
                 </>
               )
-              : `共 ${items.length} 个，可更新 ${updatable} 个`}
+              : tr("pages.content.statPlain", { total: items.length, count: updatable })}
         </span>
       </div>
 
@@ -186,8 +194,8 @@ function PackSection({
           className="detail-search-input"
           data-pack-search={kind}
           value={search}
-          placeholder={`搜索已安装的${meta.unit}`}
-          aria-label={`搜索已安装的${meta.unit}`}
+          placeholder={tr("pages.content.searchInstalled", { unit })}
+          aria-label={tr("pages.content.searchInstalled", { unit })}
           onChange={(event) => setSearch(event.target.value)}
           disabled={items === null}
         />
@@ -202,7 +210,7 @@ function PackSection({
           disabled={checking || loading || items === null}
         >
           <IconZap size={15} />
-          {checking ? "检查中…" : "检查更新"}
+          {checking ? tr("pages.content.checking") : tr("pages.content.checkUpdates")}
         </button>
         <button
           type="button"
@@ -212,7 +220,7 @@ function PackSection({
           disabled={loading || checking}
         >
           <IconRefresh size={15} />
-          刷新
+          {tr("pages.common.refresh")}
         </button>
       </div>
 
@@ -221,15 +229,15 @@ function PackSection({
 
       {!error && items !== null && items.length === 0 ? (
         <EmptyState
-          title={`该实例还没有安装${meta.unit}`}
-          hint={`去「资源」页下载${meta.unit}，选这个实例安装后就能在这里统一管理与更新`}
+          title={tr("pages.content.emptyTitle", { unit })}
+          hint={tr("pages.content.emptyHint", { unit })}
         />
       ) : null}
 
       {!error && items !== null && items.length > 0 && visible.length === 0 ? (
         <EmptyState
-          title={`没有匹配的${meta.unit}`}
-          hint={`没有已安装的${meta.unit}命中「${search.trim()}」，换个关键词或清空搜索`}
+          title={tr("pages.content.noMatchTitle", { unit })}
+          hint={tr("pages.content.noMatchHint", { unit, query: search.trim() })}
           action={(
             <button
               type="button"
@@ -237,7 +245,7 @@ function PackSection({
               data-action="clear-pack-search"
               onClick={() => setSearch("")}
             >
-              清空搜索
+              {tr("pages.content.clearSearch")}
             </button>
           )}
         />
@@ -246,9 +254,9 @@ function PackSection({
       {!error && items !== null && items.length > 0 && visible.length > 0 ? (
         <ul className="detail-mods-table" data-pack-table={kind}>
           <li className="detail-mods-row is-head is-packs" aria-hidden="true">
-            <span>内容</span>
-            <span>大小</span>
-            <span className="detail-mods-ops">操作</span>
+            <span>{tr("pages.content.colContent")}</span>
+            <span>{tr("pages.content.colSize")}</span>
+            <span className="detail-mods-ops">{tr("pages.content.colOps")}</span>
           </li>
           {visible.map((item) => (
             <li
@@ -262,7 +270,9 @@ function PackSection({
                   ? <span className="detail-mod-desc">{item.description}</span>
                   : <span className="detail-mod-file">{item.fileName}</span>}
                 {item.update ? (
-                  <span className="badge detail-update-tag">可更新 → {item.update.versionLabel}</span>
+                  <span className="badge detail-update-tag">
+                    {tr("pages.content.updatableTag", { version: item.update.versionLabel })}
+                  </span>
                 ) : null}
               </div>
               <span className="detail-mod-size">{formatBytes(item.sizeBytes)}</span>
@@ -273,9 +283,9 @@ function PackSection({
                   data-action="update"
                   onClick={() => void applyUpdate(item)}
                   disabled={!item.update || updating !== null || removing !== null}
-                  title={item.update ? `更新到 ${item.update.versionLabel}` : "没有可用更新"}
+                  title={item.update ? tr("pages.content.updateTo", { version: item.update.versionLabel }) : tr("pages.content.noUpdate")}
                 >
-                  {updating === item.fileName ? "更新中…" : "更新"}
+                  {updating === item.fileName ? tr("pages.content.updating") : tr("pages.content.update")}
                 </button>
                 <button
                   type="button"
@@ -285,7 +295,7 @@ function PackSection({
                   disabled={busyRemove || updating !== null}
                 >
                   <IconTrash size={14} />
-                  删除
+                  {tr("pages.common.delete")}
                 </button>
               </div>
             </li>
@@ -295,11 +305,11 @@ function PackSection({
 
       <ConfirmDialog
         open={removing !== null}
-        title={`删除${meta.unit}`}
+        title={tr("pages.content.deleteTitle", { unit })}
         message={removing
-          ? `确定删除 ${removing.name ?? removing.fileName} 吗？文件会从该实例的 ${meta.dir} 目录移除。`
+          ? tr("pages.content.deleteMessage", { name: removing.name ?? removing.fileName, dir: meta.dir })
           : ""}
-        confirmText="删除"
+        confirmText={tr("pages.common.delete")}
         danger
         busy={busyRemove}
         onCancel={() => setRemoving(null)}
@@ -333,6 +343,7 @@ export function ContentDrawer({
   const [modSearch, setModSearch] = useState("");
   // 三个内容分区合并成一个面板，默认看模组。
   const [contentTab, setContentTab] = useState<ContentTab>("mod");
+  const tr = useT();
   const [packCounts, setPackCounts] = useState<Record<PackKind, number | null>>({ shader: null, resourcepack: null });
 
   // 光影 / 资源包分区各自上报已加载条数；值没变时返回同一个对象，避免多余渲染。
@@ -381,7 +392,14 @@ export function ContentDrawer({
       const next = await api.mods.checkUpdates(instanceId);
       setMods(next);
       const found = next.filter((item) => item.update).length;
-      push(found > 0 ? `检查完成：共 ${next.length} 个模组，${found} 个可更新` : `检查完成：共 ${next.length} 个模组，暂无更新`, "success");
+      push(
+        tr(found > 0 ? "pages.content.checkDoneUpdatable" : "pages.content.checkDoneNoUpdate", {
+          total: next.length,
+          unit: tr("pages.content.modUnit"),
+          found,
+        }),
+        "success",
+      );
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     } finally {
@@ -394,7 +412,7 @@ export function ContentDrawer({
     setUpdating(mod.fileName);
     try {
       const result = await api.mods.update(instanceId, mod.fileName);
-      push(`已更新为 ${result.fileName}`, "success");
+      push(tr("pages.content.updatedTo", { name: result.fileName }), "success");
       await loadMods();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -408,7 +426,7 @@ export function ContentDrawer({
     setBusyRemove(true);
     try {
       await api.mods.remove(instanceId, removing.fileName);
-      push(`已删除 ${removing.name ?? removing.fileName}`, "success");
+      push(tr("pages.content.deleted", { name: removing.name ?? removing.fileName }), "success");
       setRemoving(null);
       await loadMods();
     } catch (error: unknown) {
@@ -422,17 +440,17 @@ export function ContentDrawer({
     <Drawer
       open={open && instance !== null}
       title={instance?.name ?? ""}
-      subtitle={instance ? `已安装内容 · Minecraft ${instance.mcVersion}` : undefined}
+      subtitle={instance ? tr("pages.content.subtitle", { mc: instance.mcVersion }) : undefined}
       width={760}
       onClose={onClose}
     >
       <section className="detail-section content-drawer-panel" data-content-section>
         <div className="drawer-section-head">
-          <span className="field-label">内容</span>
-          <span className="muted-text">模组、光影包、资源包按类型分开显示，切换类型不会重新读取目录</span>
+          <span className="field-label">{tr("pages.content.sectionTitle")}</span>
+          <span className="muted-text">{tr("pages.content.sectionHint")}</span>
         </div>
 
-        <div className="content-tabs" role="radiogroup" aria-label="内容类型">
+        <div className="content-tabs" role="radiogroup" aria-label={tr("pages.content.tabsAria")}>
           {CONTENT_TABS.map((tab) => {
             const active = contentTab === tab.value;
             const count = tab.value === "mod" ? (mods === null ? null : mods.length) : packCounts[tab.value];
@@ -447,7 +465,9 @@ export function ContentDrawer({
                 onClick={() => switchTab(tab.value)}
               >
                 <span className={`radio-dot ${active ? "on" : ""}`} aria-hidden="true" />
-                <span className="source-name">{count === null ? tab.label : `${tab.label} ${count}`}</span>
+                <span className="source-name">
+                  {count === null ? tr(tab.labelKey) : `${tr(tab.labelKey)} ${count}`}
+                </span>
               </button>
             );
           })}
@@ -455,19 +475,18 @@ export function ContentDrawer({
 
         <div className="detail-content-panel" data-content-panel="mod" hidden={contentTab !== "mod"}>
           <div className="drawer-section-head">
-            <span className="field-label">模组列表</span>
+            <span className="field-label">{tr("pages.content.modListTitle")}</span>
             <span className="muted-text" data-mods-stats>
               {mods === null
-                ? "正在读取 mods 目录…"
+                ? tr("pages.content.modsReading")
                 : modQuery
                   ? (
                     <>
-                      {`共 ${mods.length} 个，`}
-                      <span className="detail-match-count">{`匹配 ${visibleMods.length} 个`}</span>
-                      {`，可更新 ${updatableCount} 个`}
+                      {tr("pages.content.statTotal", { total: mods.length })}
+                      <span className="detail-match-count">{tr("pages.content.statMatched", { count: visibleMods.length })}</span>
+                      {tr("pages.content.statUpdatableTail", { count: updatableCount })}
                     </>
-                  )
-                  : `共 ${mods.length} 个，可更新 ${updatableCount} 个`}
+                  ) : tr("pages.content.statPlain", { total: mods.length, count: updatableCount })}
             </span>
           </div>
 
@@ -477,8 +496,8 @@ export function ContentDrawer({
               className="detail-search-input"
               data-mod-search="mod"
               value={modSearch}
-              placeholder="搜索已安装的模组"
-              aria-label="搜索已安装的模组"
+              placeholder={tr("pages.content.searchInstalled", { unit: tr("pages.content.modUnit") })}
+              aria-label={tr("pages.content.searchInstalled", { unit: tr("pages.content.modUnit") })}
               onChange={(event) => setModSearch(event.target.value)}
               disabled={mods === null}
             />
@@ -492,7 +511,7 @@ export function ContentDrawer({
               disabled={checking || modsLoading || mods === null}
             >
               <IconZap size={15} />
-              {checking ? "检查中…" : "检查更新"}
+              {checking ? tr("pages.content.checking") : tr("pages.content.checkUpdates")}
             </button>
             <button
               type="button"
@@ -501,7 +520,7 @@ export function ContentDrawer({
               disabled={modsLoading || checking}
             >
               <IconRefresh size={15} />
-              刷新
+              {tr("pages.common.refresh")}
             </button>
           </div>
 
@@ -510,15 +529,18 @@ export function ContentDrawer({
 
           {!modsError && mods !== null && mods.length === 0 ? (
             <EmptyState
-              title="这个实例还没有模组"
-              hint="把模组装进这个实例后，这里可以统一管理与更新"
+              title={tr("pages.content.modsEmptyTitle")}
+              hint={tr("pages.content.modsEmptyHint")}
             />
           ) : null}
 
           {!modsError && mods !== null && mods.length > 0 && visibleMods.length === 0 ? (
             <EmptyState
-              title="没有匹配的模组"
-              hint={`没有已安装的模组命中「${modSearch.trim()}」，换个关键词或清空搜索`}
+              title={tr("pages.content.modsNoMatchTitle")}
+              hint={tr("pages.content.noMatchHint", {
+                unit: tr("pages.content.modUnit"),
+                query: modSearch.trim(),
+              })}
               action={(
                 <button
                   type="button"
@@ -526,7 +548,7 @@ export function ContentDrawer({
                   data-action="clear-mod-search"
                   onClick={() => setModSearch("")}
                 >
-                  清空搜索
+                  {tr("pages.content.clearSearch")}
                 </button>
               )}
             />
@@ -535,10 +557,10 @@ export function ContentDrawer({
           {!modsError && mods !== null && mods.length > 0 && visibleMods.length > 0 ? (
             <ul className="detail-mods-table">
               <li className="detail-mods-row is-head" aria-hidden="true">
-                <span>{display === "filename" ? "文件名" : "名称"}</span>
-                <span>版本</span>
-                <span>大小</span>
-                <span className="detail-mods-ops">操作</span>
+                <span>{display === "filename" ? tr("pages.content.colFileName") : tr("pages.content.colName")}</span>
+                <span>{tr("pages.content.colVersion")}</span>
+                <span>{tr("pages.content.colSize")}</span>
+                <span className="detail-mods-ops">{tr("pages.content.colOps")}</span>
               </li>
               {visibleMods.map((mod) => (
                 <li
@@ -554,7 +576,9 @@ export function ContentDrawer({
                       {display === "filename" ? (mod.name ?? mod.fileName) : mod.fileName}
                     </span>
                     {mod.update ? (
-                      <span className="badge detail-update-tag">可更新 → {mod.update.versionLabel}</span>
+                      <span className="badge detail-update-tag">
+                        {tr("pages.content.updatableTag", { version: mod.update.versionLabel })}
+                      </span>
                     ) : null}
                   </div>
                   <span className="detail-mod-version">{mod.version ?? "—"}</span>
@@ -566,9 +590,9 @@ export function ContentDrawer({
                       data-action="update"
                       onClick={() => void applyUpdate(mod)}
                       disabled={!mod.update || updating !== null || removing !== null}
-                      title={mod.update ? `更新到 ${mod.update.versionLabel}` : "没有可用更新"}
+                      title={mod.update ? tr("pages.content.updateTo", { version: mod.update.versionLabel }) : tr("pages.content.noUpdate")}
                     >
-                      {updating === mod.fileName ? "更新中…" : "更新"}
+                      {updating === mod.fileName ? tr("pages.content.updating") : tr("pages.content.update")}
                     </button>
                     <button
                       type="button"
@@ -578,7 +602,7 @@ export function ContentDrawer({
                       disabled={busyRemove || updating !== null}
                     >
                       <IconTrash size={14} />
-                      删除
+                      {tr("pages.common.delete")}
                     </button>
                   </div>
                 </li>
@@ -607,9 +631,11 @@ export function ContentDrawer({
 
       <ConfirmDialog
         open={removing !== null}
-        title="删除模组"
-        message={removing ? `确定删除 ${removing.name ?? removing.fileName} 吗？文件会从该实例的 mods 目录移除。` : ""}
-        confirmText="删除"
+        title={tr("pages.content.deleteModTitle")}
+        message={removing
+          ? tr("pages.content.deleteModMessage", { name: removing.name ?? removing.fileName })
+          : ""}
+        confirmText={tr("pages.common.delete")}
         danger
         busy={busyRemove}
         onCancel={() => setRemoving(null)}

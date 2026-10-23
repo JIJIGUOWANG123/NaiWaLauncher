@@ -66,7 +66,8 @@ export interface Settings {
   javaDownloadSource: JavaSourceId;
   /** 按 Minecraft 版本自动匹配 JDK；关闭后只使用实例上指定的 Java。 */
   javaAutoMatch: boolean;
-  language: "zh-CN" | "en-US";
+  /** 界面语言：简体中文 / English / 日本語。 */
+  language: "zh-CN" | "en-US" | "ja-JP";
   closeToTray: boolean;
   /** 版本列表过滤器：正式版 / 测试版（快照）/ 远古版（old_beta + old_alpha），默认全开。 */
   showRelease: boolean;
@@ -103,6 +104,10 @@ export interface Settings {
   /** Steam 壁纸引擎来源的播放方式与轮播间隔。 */
   wallpaperBackgroundMode: BackgroundMode;
   wallpaperBackgroundIntervalSec: number;
+  /** 三个来源各自的「每次启动随机一张」：启动时从该来源的池子里随机选一张，与轮播方式互不影响。 */
+  backgroundStartupRandom: boolean;
+  apiBackgroundStartupRandom: boolean;
+  wallpaperBackgroundStartupRandom: boolean;
   /** 关窗口时的行为：ask = 首次弹窗询问（默认）；tray = 隐藏到托盘；quit = 直接退出。 */
   closeAction: "ask" | "tray" | "quit";
   /** Wallpaper Engine 壁纸目录；留空表示自动探测 Steam 库。 */

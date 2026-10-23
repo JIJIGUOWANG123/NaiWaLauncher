@@ -9,6 +9,7 @@ import { downloadFile } from "../core/http";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { getSettings } from "../core/settings";
+import { mt } from "../core/i18n";
 
 const log = logger("natfrp");
 
@@ -24,7 +25,9 @@ const KILL_GRACE_MS = 1500;
 const DEFAULT_LOCAL_IP = "127.0.0.1";
 const DEFAULT_LOCAL_PORT = 25565;
 
-const MISSING_TOKEN = "请先在联机页填写樱花穿透访问密钥";
+function missingToken(): string {
+  return mt("net.natfrp.missingToken");
+}
 
 interface NatfrpState {
   child: ChildProcess | null;
@@ -75,7 +78,7 @@ function errorMessage(err: unknown): string {
 
 function requireToken(): string {
   const token = getSettings().natfrpToken.trim();
-  if (!token) throw new Error(MISSING_TOKEN);
+  if (!token) throw new Error(missingToken());
   return token;
 }
 
@@ -150,8 +153,8 @@ async function request(path: string, opts: ApiOptions = {}): Promise<ApiRaw> {
     const res = await fetch(url, { method: opts.method ?? "GET", headers, body, redirect: "follow", signal: controller.signal });
     return { status: res.status, text: await res.text(), contentType: res.headers.get("content-type") ?? "" };
   } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") throw new Error(`樱花穿透接口超时（${TIMEOUT_MS}ms）· ${path}`);
-    throw new Error(`樱花穿透接口不可用：${errorMessage(err)} · ${path}`);
+    if (err instanceof Error && err.name === "AbortError") throw new Error(mt("net.natfrp.timeout", { ms: TIMEOUT_MS, path }));
+    throw new Error(mt("net.natfrp.unavailable", { error: errorMessage(err), path }));
   } finally {
     clearTimeout(timer);
   }
@@ -175,7 +178,7 @@ function serverError(path: string, raw: ApiRaw, json: unknown): Error {
   const body = jsonObject(json);
   const code = jsonNumber(body.code, raw.status);
   const msg = jsonString(body.msg) || jsonString(body.message);
-  const text = msg ? `樱花穿透接口返回 ${code}：${msg}` : `樱花穿透接口异常（HTTP ${raw.status}）`;
+  const text = msg ? mt("net.natfrp.replyCode", { code, msg }) : mt("net.natfrp.replyHttp", { status: raw.status });
   const err = new Error(`${text} · ${path}`) as Error & { code?: number; status?: number };
   err.code = code;
   err.status = code;
@@ -187,7 +190,7 @@ async function apiJson<T>(path: string, opts: ApiOptions = {}): Promise<T> {
   const json = parseJson(raw.text);
   const bodyCode = jsonNumber(jsonObject(json).code);
   if (raw.status < 200 || raw.status >= 300 || bodyCode >= 400) throw serverError(path, raw, json);
-  if (json === undefined) throw new Error(`樱花穿透接口返回了无法解析的内容 · ${path}`);
+  if (json === undefined) throw new Error(mt("net.natfrp.badJson", { path }));
   return json as T;
 }
 
@@ -204,10 +207,10 @@ async function apiText(path: string, opts: ApiOptions = {}): Promise<{ text: str
 function toUser(raw: unknown): NatfrpUser {
   const user = jsonObject(raw);
   const id = jsonNumber(user.id);
-  if (!id) throw new Error("樱花穿透接口没有返回用户 id");
+  if (!id) throw new Error(mt("net.natfrp.noUserId"));
   const ban = jsonObject(user.ban);
   const banTitle = jsonString(ban.title);
-  if (banTitle) throw new Error(`樱花穿透账号不可用：${banTitle}${jsonString(ban.reason) ? `（${jsonString(ban.reason)}）` : ""}`);
+  if (banTitle) throw new Error(mt("net.natfrp.banned", { title: banTitle, reason: jsonString(ban.reason) ? "（" + jsonString(ban.reason) + "）" : "" }));
 
   // traffic = [本日已消耗, 总剩余流量]（字节）；sign 只做只读展示
   const traffic = jsonArray(user.traffic);
@@ -265,11 +268,11 @@ export async function natfrpNodes(): Promise<{ id: number; name: string; publicG
 
 export async function natfrpCreate(name: string, node: number, localPort: number): Promise<{ id: number; name: string }> {
   const tunnelName = jsonString(name);
-  if (!tunnelName) throw new Error("隧道名不能为空");
+  if (!tunnelName) throw new Error(mt("net.natfrp.tunnelNameRequired"));
   const nodeId = Number(node);
-  if (!Number.isInteger(nodeId) || nodeId <= 0) throw new Error(`节点 ID 不合法：${String(node)}`);
+  if (!Number.isInteger(nodeId) || nodeId <= 0) throw new Error(mt("net.natfrp.badNodeId", { id: String(node) }));
   const port = Number(localPort);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`本地端口不合法：${String(localPort)}（应在 1-65535 之间）`);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(mt("net.natfrp.badPort", { port: String(localPort) }));
 
   const raw = await apiJson<unknown>("/tunnels", {
     method: "POST",
@@ -277,7 +280,7 @@ export async function natfrpCreate(name: string, node: number, localPort: number
   });
   const created = jsonObject(raw);
   const id = jsonNumber(created.id);
-  if (!id) throw new Error("樱花穿透接口没有返回隧道 id");
+  if (!id) throw new Error(mt("net.natfrp.noTunnelId"));
   const warning = jsonString(created.important_warning_for_ai);
   if (warning) log.warn(warning);
   return { id, name: jsonString(created.name) || tunnelName };
@@ -300,7 +303,7 @@ async function frpcClient(): Promise<FrpcClient> {
   const frpc = jsonObject(jsonObject(raw).frpc);
   const win = jsonObject(jsonObject(frpc.archs).windows_amd64);
   const url = jsonString(win.url);
-  if (!url) throw new Error("樱花穿透接口没有返回 frpc 的 Windows 下载地址");
+  if (!url) throw new Error(mt("net.natfrp.noFrpcUrl"));
   // 下载地址里带着归档的真实版本号（实测比 frpc.ver 新一版），取配置时以它为准
   const version = /\/frpc\/([^/]+)\//.exec(url)?.[1] ?? jsonString(frpc.ver);
   return { version, url, hash: jsonString(win.hash).toLowerCase(), size: jsonNumber(win.size) };
@@ -332,19 +335,19 @@ export async function ensureFrpc(): Promise<string> {
 
   await mkdir(toolsDir(), { recursive: true });
   const startedAt = Date.now();
-  await downloadFile(client.url, dest, { connections: 4, label: "樱花穿透客户端 frpc" });
+  await downloadFile(client.url, dest, { connections: 4, label: mt("net.natfrp.downloadLabel") });
 
   const bytes = await sizeOf(dest);
-  if (bytes === null) throw new Error("frpc 下载失败：文件不存在");
+  if (bytes === null) throw new Error(mt("net.natfrp.frpcDownloadFailed"));
   if (expectedSize !== null && bytes !== expectedSize) {
     await rm(dest, { force: true });
-    throw new Error(`frpc 下载不完整：期望 ${expectedSize} 字节，实际 ${bytes} 字节`);
+    throw new Error(mt("net.natfrp.frpcIncomplete", { expected: expectedSize, actual: bytes }));
   }
   if (algorithm) {
     const actual = await hashOfFile(dest, algorithm);
     if (actual !== client.hash) {
       await rm(dest, { force: true });
-      throw new Error(`frpc 校验失败（${algorithm}）：期望 ${client.hash}，实际 ${actual}`);
+      throw new Error(mt("net.natfrp.frpcChecksum", { algorithm, expected: client.hash, actual }));
     }
   }
   log.info(
@@ -390,7 +393,7 @@ function handleOutputLine(line: string): void {
   const found = parseFrpcAddress(line);
   if (found && found !== state.address) {
     state.address = found;
-    pushLine(`公网地址：${found}`);
+    pushLine(mt("net.natfrp.publicAddr", { addr: found }));
   }
 }
 
@@ -427,13 +430,13 @@ function attachProcess(tunnelId: number, child: ChildProcess): void {
   pipeLines(child.stdout);
   pipeLines(child.stderr);
   child.on("error", (err) => {
-    pushLine(`frpc 启动失败：${err.message}`);
+    pushLine(mt("net.natfrp.frpcStartFailed", { error: err.message }));
     log.error(`frpc 启动失败（隧道 ${tunnelId}）：${err.message}`);
     releaseState(tunnelId);
   });
   child.on("exit", (code, signal) => {
     const reason = signal ? `signal=${signal}` : `code=${code}`;
-    pushLine(`frpc 已退出（${reason}）`);
+    pushLine(mt("net.natfrp.frpcExited", { reason }));
     log.info(`frpc 已退出（隧道 ${tunnelId}，${reason}）`);
     releaseState(tunnelId);
   });
@@ -475,7 +478,7 @@ async function spawnFrpc(tunnelId: number, configText: string, contentType = "")
   const exe = await ensureFrpc();
   const ext = configExtension(configText, contentType, state.frpcVersion);
   if (ext === ".toml" && !frpcSupportsToml(state.frpcVersion)) {
-    throw new Error(`frpc ${state.frpcVersion || "未知版本"} 不支持 TOML 配置（该版本只认 ini），请更新 frpc 后重试`);
+    throw new Error(mt("net.natfrp.tomlUnsupported", { version: state.frpcVersion || mt("core.unknownVersion") }));
   }
   const dir = netDir();
   const file = join(dir, `frpc-${tunnelId}${ext}`);
@@ -487,7 +490,7 @@ async function spawnFrpc(tunnelId: number, configText: string, contentType = "")
   state.child = child;
   state.tunnelId = tunnelId;
   state.address = "";
-  pushLine(`启动 frpc：${exe} -c ${file}`);
+  pushLine(mt("net.natfrp.frpcStart", { cmd: exe + " -c " + file }));
   attachProcess(tunnelId, child);
   return natfrpStatus();
 }
@@ -498,7 +501,7 @@ async function spawnFrpc(tunnelId: number, configText: string, contentType = "")
  */
 export async function natfrpStart(tunnelId: number, opts: { configText?: string } = {}): Promise<NatfrpStatus> {
   const id = Number(tunnelId);
-  if (!Number.isInteger(id) || id <= 0) throw new Error(`隧道 ID 不合法：${String(tunnelId)}`);
+  if (!Number.isInteger(id) || id <= 0) throw new Error(mt("net.natfrp.badTunnelId", { id: String(tunnelId) }));
   if (state.child) await natfrpStop();
 
   const stub = opts.configText ?? "";
@@ -510,7 +513,7 @@ export async function natfrpStart(tunnelId: number, opts: { configText?: string 
     method: "POST",
     form: { query: String(id), frpc: client.version },
   });
-  if (!config.text.trim()) throw new Error("樱花穿透没有返回隧道配置内容");
+  if (!config.text.trim()) throw new Error(mt("net.natfrp.noConfig"));
   return await spawnFrpc(id, config.text, config.contentType);
 }
 
@@ -525,7 +528,7 @@ export async function natfrpStop(): Promise<NatfrpStatus> {
   }
 
   const pid = child.pid;
-  pushLine(`停止 frpc（隧道 ${tunnelId ?? "?"}）`);
+  pushLine(mt("net.natfrp.frpcStop", { id: tunnelId ?? "?" }));
   let exited = false;
   try {
     child.kill();
@@ -546,7 +549,7 @@ export async function natfrpStop(): Promise<NatfrpStatus> {
     exited = await waitExit(child, 1000);
   }
 
-  pushLine(exited ? "frpc 已停止" : "frpc 未在预期时间内退出");
+  pushLine(exited ? mt("net.natfrp.frpcStopped") : mt("net.natfrp.frpcStopTimeout"));
   state.child = null;
   state.tunnelId = null;
   state.address = "";

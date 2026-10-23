@@ -8,6 +8,7 @@ import {
   apiJson, canonicalLoader, clampLimit, httpStatusOf, jsonArray, jsonIdString, jsonNumber, jsonObject, jsonString,
   jsonStringArray, loaderAppliesTo, loaderTags, messageOf, SEARCH_LIMIT_DEFAULT, type ModProvider,
 } from "./provider";
+import { mt } from "../core/i18n";
 
 /** 内容类型 → 面板接口路径。地图不走面板接口（见下面的 MAP_LIST），单独处理。 */
 const PANEL_PATHS: Record<Exclude<ModContentKind, "map">, string> = {
@@ -84,7 +85,7 @@ function matchesFilters(raw: unknown, gameVersion?: string, loader?: LoaderKind,
 function unavailable(err: unknown): Error {
   const status = httpStatusOf(err);
   return new Error(
-    status !== null ? `麦块社区接口不可用（HTTP ${status}）` : `麦块社区接口不可用：${messageOf(err)}`,
+    status !== null ? mt("mods.minekuaiApiUnavailable", { detail: mt("mods.minekuaiApiStatus", { status }) }) : mt("mods.minekuaiApiUnavailable", { detail: mt("mods.minekuaiApiError", { error: messageOf(err) }) }),
   );
 }
 
@@ -120,7 +121,7 @@ function categoryFilters(opts: MinekuaiSearchOptions): string[] {
 export async function searchMinekuaiItems(opts: MinekuaiSearchOptions): Promise<ModSearchResult[]> {
   const { kind } = opts;
   const path = panelPath(kind);
-  if (!path) throw new Error("地图列表请用 listMapEntries，不走面板搜索接口");
+  if (!path) throw new Error(mt("mods.minekuaiMapHint"));
   const q = opts.query ?? "";
   const take = clampLimit(opts.limit, SEARCH_LIMIT_DEFAULT, SEARCH_LIMIT_MAX);
   const skip = Math.max(0, Math.trunc(opts.offset ?? 0));
@@ -328,12 +329,12 @@ function normalize(kind: "search", raw: unknown): ModSearchResult;
 function normalize(kind: "file", raw: unknown): never;
 function normalize(kind: "search" | "file", raw: unknown): ModSearchResult | never {
   if (kind === "search") return toSearchResult(raw);
-  throw new Error("麦块社区只提供搜索，文件信息请用 modrinth 提供方");
+  throw new Error(mt("mods.minekuaiSearchOnly"));
 }
 
 export const minekuaiProvider: ModProvider = {
   id: "minekuai",
-  label: "麦块社区",
+  label: mt("mods.provider.minekuai"),
   search: (req) =>
     searchMinekuaiItems({
       kind: req.kind ?? "mod",
@@ -346,7 +347,7 @@ export const minekuaiProvider: ModProvider = {
       resolution: req.resolution,
     }),
   // 下面三个方法由 index.ts 的 nativeProvider 转给 modrinth，不会被调用；保留是为了满足接口。
-  listFiles: () => Promise.reject(new Error("麦块社区的文件列表由 modrinth 提供方返回")),
-  getFile: () => Promise.reject(new Error("麦块社区的文件下载由 modrinth 提供方返回")),
+  listFiles: () => Promise.reject(new Error(mt("mods.minekuaiFilesFromModrinth"))),
+  getFile: () => Promise.reject(new Error(mt("mods.minekuaiDownloadFromModrinth"))),
   normalize,
 };

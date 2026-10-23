@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { InstanceMeta, LoaderKind, WindowMode } from "../../shared/types";
 import { api } from "../lib/api";
-import { LITELOADER_VERSION_HINT, formatBytes, instanceDiskUsage, loaderLabel, liteloaderUnsupported } from "../lib/format";
+import { formatBytes, instanceDiskUsage, loaderLabel, liteloaderUnsupported, liteloaderVersionHint } from "../lib/format";
+import { useT } from "../lib/i18n";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "./Toast";
@@ -13,32 +14,42 @@ import { LoaderBadge } from "./Badges";
 import { ErrorState } from "./State";
 import { IconRefresh } from "./icons";
 
-const LOADER_OPTIONS: Array<{ value: LoaderKind; label: string }> = [
-  { value: "vanilla", label: "原版（不装加载器）" },
-  { value: "fabric", label: "Fabric" },
-  { value: "quilt", label: "Quilt" },
-  { value: "forge", label: "Forge" },
-  { value: "neoforge", label: "NeoForge" },
-  { value: "liteloader", label: "LiteLoader" },
-];
+type Translator = (key: string, vars?: Record<string, string | number>) => string;
 
-const WINDOW_MODE_OPTIONS: Array<{ value: WindowMode; label: string }> = [
-  { value: "inherit", label: "跟随全局" },
-  { value: "windowed", label: "窗口" },
-  { value: "fullscreen", label: "全屏" },
+/** 加载器下拉：原版走词典，其余是专有名词，保持英文。 */
+function loaderOptions(tr: Translator): Array<{ value: LoaderKind; label: string }> {
+  return [
+    { value: "vanilla", label: tr("pages.instanceDetail.loaderVanilla") },
+    { value: "fabric", label: "Fabric" },
+    { value: "quilt", label: "Quilt" },
+    { value: "forge", label: "Forge" },
+    { value: "neoforge", label: "NeoForge" },
+    { value: "liteloader", label: "LiteLoader" },
+  ];
+}
+
+const WINDOW_MODE_OPTIONS: Array<{ value: WindowMode; labelKey: string }> = [
+  { value: "inherit", labelKey: "pages.instanceDetail.windowInherit" },
+  { value: "windowed", labelKey: "pages.instanceDetail.windowWindowed" },
+  { value: "fullscreen", labelKey: "pages.instanceDetail.windowFullscreen" },
 ];
 
 const WINDOW_SIZE_PRESETS = ["inherit", "default", "1024x768", "1280x720", "1600x900", "1920x1080"];
 
-const WINDOW_SIZE_OPTIONS: SelectOption[] = [
-  { value: "inherit", label: "跟随全局" },
-  { value: "default", label: "原版默认（854 × 480）" },
+const WINDOW_SIZE_OPTIONS: Array<Omit<SelectOption, "label"> & { labelKey?: string; label?: string }> = [
+  { value: "inherit", labelKey: "pages.instanceDetail.windowInherit" },
+  { value: "default", labelKey: "pages.instanceDetail.sizeVanillaDefault" },
   { value: "1024x768", label: "1024 × 768" },
   { value: "1280x720", label: "1280 × 720" },
   { value: "1600x900", label: "1600 × 900" },
   { value: "1920x1080", label: "1920 × 1080" },
-  { value: "custom", label: "自定义…" },
+  { value: "custom", labelKey: "pages.instanceDetail.windowCustom" },
 ];
+
+/** 选项文案存 key，渲染时再翻；纯尺寸标签直接给出字面量。 */
+function localizeSizes(options: typeof WINDOW_SIZE_OPTIONS, tr: Translator): SelectOption[] {
+  return options.map(({ value, labelKey, label }) => ({ value, label: labelKey ? tr(labelKey) : (label ?? value) }));
+}
 
 /** "1920x1080" → {w,h}；inherit / default / 非法值返回 null。 */
 function parseWindowSize(value: string): { w: number; h: number } | null {
@@ -57,6 +68,7 @@ export function InstanceDetailDrawer({
 }) {
   const { push } = useToast();
   const { settings } = useApp();
+  const tr = useT();
   const instanceId = instance?.id ?? null;
 
   const [targetLoader, setTargetLoader] = useState<LoaderKind>("vanilla");
@@ -177,7 +189,7 @@ export function InstanceDetailDrawer({
     try {
       const { bytes } = await api.instances.usage(instanceId, true);
       setDiskOverride(bytes);
-      push(`已重新统计：${formatBytes(bytes)}`, "success");
+      push(tr("pages.instanceDetail.restatted", { size: formatBytes(bytes) }), "success");
       onChanged();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -196,7 +208,12 @@ export function InstanceDetailDrawer({
         targetLoader,
         targetLoader === "vanilla" ? undefined : targetVersion || undefined,
       );
-      push(`加载器已切换为 ${loaderLabel(updated.loader)}${updated.loaderVersion ? ` ${updated.loaderVersion}` : ""}`, "success");
+      push(
+        tr("pages.instanceDetail.loaderSwitched", {
+          loader: `${loaderLabel(updated.loader, tr)}${updated.loaderVersion ? ` ${updated.loaderVersion}` : ""}`,
+        }),
+        "success",
+      );
       onChanged();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -211,7 +228,7 @@ export function InstanceDetailDrawer({
     setSavingJava(true);
     try {
       await api.instances.update(instance.id, { javaPath: path });
-      push(path ? `已指定 Java：${path}` : "已切换为自动匹配 Java 版本", "success");
+      push(path ? tr("pages.instanceDetail.javaPinned", { path }) : tr("pages.instanceDetail.javaAuto"), "success");
       setJavaTick((tick) => tick + 1);
       onChanged();
     } catch (error: unknown) {
@@ -227,7 +244,7 @@ export function InstanceDetailDrawer({
     setSavingWindow(true);
     try {
       await api.instances.update(instance.id, patch);
-      push("启动窗口已保存", "success");
+      push(tr("pages.instanceDetail.windowSaved"), "success");
       onChanged();
     } catch (error: unknown) {
       revert();
@@ -265,7 +282,7 @@ export function InstanceDetailDrawer({
     const w = Math.round(Number(sizeW));
     const h = Math.round(Number(sizeH));
     if (!Number.isFinite(w) || !Number.isFinite(h) || w < 640 || h < 480 || w > 7680 || h > 4320) {
-      push("窗口宽高需在 640×480 – 7680×4320 之间", "error");
+      push(tr("pages.instanceDetail.sizeOutOfRange"), "error");
       return;
     }
     const value = `${w}x${h}`;
@@ -280,34 +297,34 @@ export function InstanceDetailDrawer({
   };
 
   const diskText = instance
-    ? (diskOverride === null ? instanceDiskUsage(instance) : formatBytes(diskOverride))
-    : "计算中…";
+    ? (diskOverride === null ? instanceDiskUsage(instance, tr) : formatBytes(diskOverride))
+    : tr("pages.instanceDetail.diskCalculating");
 
   const switchTarget = targetLoader === "vanilla"
-    ? "原版"
-    : `${loaderLabel(targetLoader)} ${targetVersion || "（最新稳定版）"}`;
+    ? tr("pages.instanceDetail.loaderVanillaShort")
+    : `${loaderLabel(targetLoader, tr)} ${targetVersion || tr("pages.instanceDetail.latestStable")}`;
 
   return (
     <>
       <Drawer
         open={open && instance !== null}
         title={instance?.name ?? ""}
-        subtitle={instance ? `Minecraft ${instance.mcVersion} · 启动版本 ${instance.versionId}` : undefined}
+        subtitle={instance ? tr("pages.instanceDetail.subtitle", { mc: instance.mcVersion, version: instance.versionId }) : undefined}
         width={760}
         onClose={onClose}
       >
         {instance ? (
           <div className="detail-hero">
             <div className="detail-hero-badges">
-              <span className="field-label">当前加载器</span>
+              <span className="field-label">{tr("pages.instanceDetail.currentLoader")}</span>
               <LoaderBadge loader={instance.loader} />
-              <span className="badge detail-version">{instance.loaderVersion ?? "无需加载器版本"}</span>
+              <span className="badge detail-version">{instance.loaderVersion ?? tr("pages.instanceDetail.noLoaderVersion")}</span>
             </div>
             <div className="detail-hero-meta">
-              <span className="field-label">Minecraft 版本</span>
+              <span className="field-label">{tr("pages.instanceDetail.mcVersion")}</span>
               <span className="detail-mc">{instance.mcVersion}</span>
               <span className="detail-disk" data-detail-disk>
-                <span data-detail-disk-value>本地占用：{diskText}</span>
+                <span data-detail-disk-value>{tr("pages.instanceDetail.localUsage", { size: diskText })}</span>
                 <button
                   type="button"
                   className="btn btn-sm btn-ghost"
@@ -316,7 +333,7 @@ export function InstanceDetailDrawer({
                   disabled={restatting || switching}
                 >
                   <IconRefresh size={15} />
-                  {restatting ? "统计中…" : "重新统计"}
+                  {restatting ? tr("pages.instanceDetail.restatting") : tr("pages.instanceDetail.restat")}
                 </button>
               </span>
             </div>
@@ -325,39 +342,43 @@ export function InstanceDetailDrawer({
 
         <section className="detail-section">
           <div className="drawer-section-head">
-            <span className="field-label">加载器</span>
-            <span className="muted-text">切换会重装 <code className="mono">.minecraft/versions</code> 下的加载器版本</span>
+            <span className="field-label">{tr("pages.instanceDetail.loaderSection")}</span>
+            <span className="muted-text">
+              {tr("pages.instanceDetail.loaderSectionHintBefore")}
+              <code className="mono">.minecraft/versions</code>
+              {tr("pages.instanceDetail.loaderSectionHintAfter")}
+            </span>
           </div>
 
           <div className={`detail-loader-row ${targetLoader === "vanilla" ? "is-vanilla" : ""}`}>
             <div className="field">
-              <span className="field-label">目标加载器</span>
+              <span className="field-label">{tr("pages.instanceDetail.targetLoader")}</span>
               <Select
                 value={targetLoader}
-                options={LOADER_OPTIONS}
+                options={loaderOptions(tr)}
                 onChange={(value) => setTargetLoader(value as LoaderKind)}
-                ariaLabel="目标加载器"
+                ariaLabel={tr("pages.instanceDetail.targetLoader")}
                 disabled={switching}
               />
             </div>
             {targetLoader === "vanilla" ? null : (
               <div className="field">
-                <span className="field-label">加载器版本</span>
+                <span className="field-label">{tr("pages.instanceDetail.loaderVersionLabel")}</span>
                 <Select
                   value={targetVersion}
                   options={(loaderVersions.data ?? []).map((item) => ({
                     value: item.version,
-                    label: item.stable ? item.version : `${item.version}（测试版）`,
+                    label: item.stable ? item.version : tr("pages.instanceDetail.versionBeta", { version: item.version }),
                   }))}
                   onChange={setTargetVersion}
-                  ariaLabel="加载器版本"
+                  ariaLabel={tr("pages.instanceDetail.loaderVersionLabel")}
                   placeholder={liteloaderBlocked
-                    ? "该 MC 版本不支持 LiteLoader"
-                    : (loaderVersions.loading ? "读取中…" : "请选择加载器版本")}
+                    ? tr("pages.instanceDetail.liteloaderUnsupported")
+                    : (loaderVersions.loading ? tr("pages.instanceDetail.reading") : tr("pages.instanceDetail.selectLoaderVersion"))}
                   disabled={switching || loaderVersions.loading || liteloaderBlocked}
                 />
                 {liteloaderBlocked ? (
-                  <span className="field-hint" data-litloader-warning>{LITELOADER_VERSION_HINT}</span>
+                  <span className="field-hint" data-litloader-warning>{liteloaderVersionHint(tr)}</span>
                 ) : null}
               </div>
             )}
@@ -367,7 +388,7 @@ export function InstanceDetailDrawer({
               onClick={() => setConfirmSwitch(true)}
               disabled={switching || unchanged || liteloaderBlocked || (targetLoader !== "vanilla" && !targetVersion)}
             >
-              {switching ? "切换中…" : "切换加载器"}
+              {switching ? tr("pages.instanceDetail.switching") : tr("pages.instanceDetail.switchLoader")}
             </button>
           </div>
 
@@ -378,10 +399,10 @@ export function InstanceDetailDrawer({
           {switching ? (
             <p className="detail-progress" role="status">
               <span className="spinner" aria-hidden="true" />
-              正在安装 {switchTarget}，完成后模组目录保持不变…
+              {tr("pages.instanceDetail.installingLoader", { target: switchTarget })}
             </p>
           ) : (
-            <p className="hint-inline">切换后模组目录保留，但加载器专属模组可能不再生效。</p>
+            <p className="hint-inline">{tr("pages.instanceDetail.loaderSwitchHint")}</p>
           )}
         </section>
 
@@ -389,23 +410,23 @@ export function InstanceDetailDrawer({
           <div className="drawer-section-head">
             <span className="field-label">Java</span>
             <span className="muted-text" data-java-mode>
-              {savedJavaPath ? "手动指定" : "自动匹配（按游戏版本）"}
+              {savedJavaPath ? tr("pages.instanceDetail.javaManual") : tr("pages.instanceDetail.javaAutoShort")}
             </span>
           </div>
 
           <div className="detail-java-row">
             <div className="field">
-              <span className="field-label">运行环境</span>
+              <span className="field-label">{tr("pages.instanceDetail.javaRuntime")}</span>
               <Select
                 value={javaDraft}
                 options={javaOptions}
                 onChange={setJavaDraft}
-                placeholder={installedJava.loading ? "读取已安装 JDK…" : "自动匹配（按游戏版本）"}
-                ariaLabel="Java 运行环境"
+                placeholder={installedJava.loading ? tr("pages.instanceDetail.readingJdk") : tr("pages.instanceDetail.javaAutoShort")}
+                ariaLabel={tr("pages.instanceDetail.javaRuntimeAria")}
                 disabled={savingJava || installedJava.loading}
               />
-              <span className="field-hint detail-java-path" title={javaDraft || "由启动器按游戏版本挑选 JDK"}>
-                {javaDraft || "由启动器按游戏版本挑选 JDK"}
+              <span className="field-hint detail-java-path" title={javaDraft || tr("pages.instanceDetail.javaPickedByLauncher")}>
+                {javaDraft || tr("pages.instanceDetail.javaPickedByLauncher")}
               </span>
             </div>
             <button
@@ -415,24 +436,22 @@ export function InstanceDetailDrawer({
               disabled={savingJava || installedJava.loading || javaDraft.trim() === savedJavaPath}
             >
               <IconCheck size={15} />
-              {savingJava ? "保存中…" : "保存"}
+              {savingJava ? tr("pages.common.saving") : tr("pages.common.save")}
             </button>
           </div>
 
           {installedJava.error ? <ErrorState message={installedJava.error} onRetry={installedJava.reload} /> : null}
 
           {javaDraft.trim() === "" ? (
-            <p className="hint-inline">
-              自动匹配规则：优先按版本 JSON 的 javaVersion；兜底为 ≤1.16.5 → Java 8、1.17–1.20.4 → Java 17、1.20.5–1.25 → Java 21、26.x 起 → Java 25。
-            </p>
+            <p className="hint-inline">{tr("pages.instanceDetail.javaRule")}</p>
           ) : null}
 
           {javaExists === false ? (
             <div className="detail-java-stale" data-java-stale>
               <div className="detail-java-stale-main">
-                <span className="badge detail-java-stale-tag">已失效的路径</span>
+                <span className="badge detail-java-stale-tag">{tr("pages.instanceDetail.stalePath")}</span>
                 <p className="detail-java-stale-path mono" title={savedJavaPath}>{savedJavaPath}</p>
-                <p className="field-hint">这个位置已经找不到 javaw.exe（文件被移动或删除），启动会失败。</p>
+                <p className="field-hint">{tr("pages.instanceDetail.stalePathHint")}</p>
               </div>
               <button
                 type="button"
@@ -444,36 +463,44 @@ export function InstanceDetailDrawer({
                 }}
                 disabled={savingJava}
               >
-                清除
+                {tr("pages.instanceDetail.clear")}
               </button>
             </div>
           ) : null}
 
           {settings?.javaAutoMatch === false && savedJavaPath === "" ? (
-            <p className="hint-inline">设置里已关闭「自动匹配 Java 版本」，这个实例必须指定 JDK，否则启动会报错。</p>
+            <p className="hint-inline">{tr("pages.instanceDetail.javaAutoDisabledHint")}</p>
           ) : null}
         </section>
 
         <section className="detail-section" data-detail-window>
           <div className="drawer-section-head">
-            <span className="field-label">启动窗口</span>
+            <span className="field-label">{tr("pages.instanceDetail.windowSection")}</span>
             <span className="muted-text" data-window-mode-current>
-              {windowMode === "inherit" ? "跟随全局设置" : windowMode === "fullscreen" ? "全屏" : "窗口"}
+              {windowMode === "inherit"
+                ? tr("pages.instanceDetail.windowInheritGlobal")
+                : windowMode === "fullscreen"
+                  ? tr("pages.instanceDetail.windowFullscreen")
+                  : tr("pages.instanceDetail.windowWindowed")}
             </span>
           </div>
 
           <div className="detail-window-row">
             <div className="field">
-              <span className="field-label">形态</span>
-              <Segmented value={windowMode} options={WINDOW_MODE_OPTIONS} onChange={changeWindowMode} />
+              <span className="field-label">{tr("pages.instanceDetail.windowMode")}</span>
+              <Segmented
+                value={windowMode}
+                options={WINDOW_MODE_OPTIONS.map((option) => ({ value: option.value, label: tr(option.labelKey) }))}
+                onChange={changeWindowMode}
+              />
             </div>
             <div className="field">
-              <span className="field-label">尺寸</span>
+              <span className="field-label">{tr("pages.instanceDetail.windowSize")}</span>
               <Select
                 value={sizeCustom ? "custom" : windowSize}
-                options={WINDOW_SIZE_OPTIONS}
+                options={localizeSizes(WINDOW_SIZE_OPTIONS, tr)}
                 onChange={changeWindowSize}
-                ariaLabel="启动窗口尺寸"
+                ariaLabel={tr("pages.instanceDetail.windowSizeAria")}
                 disabled={savingWindow || windowMode === "fullscreen"}
               />
             </div>
@@ -486,7 +513,7 @@ export function InstanceDetailDrawer({
                 min={640}
                 max={7680}
                 value={sizeW}
-                aria-label="窗口宽度"
+                aria-label={tr("pages.instanceDetail.windowWidthAria")}
                 onChange={(event) => setSizeW(event.target.value)}
                 disabled={savingWindow || windowMode === "fullscreen"}
               />
@@ -496,7 +523,7 @@ export function InstanceDetailDrawer({
                 min={480}
                 max={4320}
                 value={sizeH}
-                aria-label="窗口高度"
+                aria-label={tr("pages.instanceDetail.windowHeightAria")}
                 onChange={(event) => setSizeH(event.target.value)}
                 disabled={savingWindow || windowMode === "fullscreen"}
               />
@@ -507,25 +534,25 @@ export function InstanceDetailDrawer({
                 onClick={applyCustomSize}
                 disabled={savingWindow || windowMode === "fullscreen"}
               >
-                应用
+                {tr("pages.instanceDetail.apply")}
               </button>
             </div>
           ) : null}
 
           {windowMode === "fullscreen" ? (
-            <p className="hint-inline" data-window-fullscreen-hint>全屏使用桌面分辨率</p>
+            <p className="hint-inline" data-window-fullscreen-hint>{tr("pages.instanceDetail.fullscreenHint")}</p>
           ) : null}
 
-          <p className="hint-inline">跟随全局表示使用「启动」页里的窗口大小设置；实例设置优先生效。</p>
+          <p className="hint-inline">{tr("pages.instanceDetail.inheritHint")}</p>
         </section>
 
         <ConfirmDialog
           open={confirmSwitch}
-          title="切换加载器"
+          title={tr("pages.instanceDetail.switchConfirmTitle")}
           message={instance
-            ? `把「${instance.name}」的加载器切换为 ${switchTarget}？切换后模组目录保留，但加载器专属模组可能不再生效。`
+            ? tr("pages.instanceDetail.switchConfirmMessage", { name: instance.name, target: switchTarget })
             : ""}
-          confirmText="切换"
+          confirmText={tr("pages.instanceDetail.switchConfirmAction")}
           busy={switching}
           onCancel={() => setConfirmSwitch(false)}
           onConfirm={() => void applyLoader()}

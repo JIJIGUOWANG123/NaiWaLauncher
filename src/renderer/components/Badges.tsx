@@ -1,17 +1,27 @@
 import type { ReactNode } from "react";
 import type { LoaderKind, VersionBrief } from "../../shared/types";
 import { loaderLabel, versionTypeLabel } from "../lib/format";
+import { useT } from "../lib/i18n";
 
 export function LoaderBadge({ loader }: { loader: LoaderKind }) {
-  return <span className={`badge loader-badge loader-${loader}`}>{loaderLabel(loader)}</span>;
+  const t = useT();
+  return <span className={`badge loader-badge loader-${loader}`}>{loaderLabel(loader, t)}</span>;
 }
 
 export function VersionTypeTag({ type }: { type: VersionBrief["type"] }) {
-  return <span className={`badge type-tag type-${type}`}>{versionTypeLabel(type)}</span>;
+  const t = useT();
+  return <span className={`badge type-tag type-${type}`}>{versionTypeLabel(type, t)}</span>;
 }
 
+const RELEASE_KEY: Record<"release" | "beta" | "alpha", string> = {
+  release: "pages.badges.stable",
+  beta: "pages.badges.beta",
+  alpha: "pages.badges.alpha",
+};
+
 export function ReleaseTypeTag({ type }: { type: "release" | "beta" | "alpha" }) {
-  return <span className={`badge type-tag type-${type}`}>{type === "release" ? "稳定版" : type === "beta" ? "测试版" : "预览版"}</span>;
+  const t = useT();
+  return <span className={`badge type-tag type-${type}`}>{t(RELEASE_KEY[type])}</span>;
 }
 
 export function LtsTag() {
@@ -23,7 +33,8 @@ export function Chip({ children }: { children: ReactNode }) {
 }
 
 export function MatchTag({ exact }: { exact: boolean }) {
+  const t = useT();
   return exact
-    ? <span className="badge match-tag">匹配当前版本</span>
-    : <span className="badge muted-tag">其他版本</span>;
+    ? <span className="badge match-tag">{t("pages.badges.matchExact")}</span>
+    : <span className="badge muted-tag">{t("pages.badges.matchOther")}</span>;
 }

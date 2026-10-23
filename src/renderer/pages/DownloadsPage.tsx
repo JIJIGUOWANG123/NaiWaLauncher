@@ -2,26 +2,27 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DownloadJob } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatDateTime } from "../lib/format";
+import { useT } from "../lib/i18n";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
 import { Drawer } from "../components/Drawer";
 import { ErrorState, SkeletonRows } from "../components/State";
 import { IconDownload, IconRefresh, IconTrash } from "../components/icons";
 
-const STATUS_META: Record<DownloadJob["status"], { label: string; cls: string }> = {
-  running: { label: "进行中", cls: "dl-status-running" },
-  paused: { label: "已暂停", cls: "dl-status-paused" },
-  interrupted: { label: "已中断", cls: "dl-status-interrupted" },
-  cancelled: { label: "已终止", cls: "dl-status-cancelled" },
-  done: { label: "已完成", cls: "dl-status-done" },
-  failed: { label: "失败", cls: "dl-status-failed" },
+const STATUS_META: Record<DownloadJob["status"], { labelKey: string; cls: string }> = {
+  running: { labelKey: "pages.downloads.statusRunning", cls: "dl-status-running" },
+  paused: { labelKey: "pages.downloads.statusPaused", cls: "dl-status-paused" },
+  interrupted: { labelKey: "pages.downloads.statusInterrupted", cls: "dl-status-interrupted" },
+  cancelled: { labelKey: "pages.downloads.statusCancelled", cls: "dl-status-cancelled" },
+  done: { labelKey: "pages.downloads.statusDone", cls: "dl-status-done" },
+  failed: { labelKey: "pages.downloads.statusFailed", cls: "dl-status-failed" },
 };
 
-const KIND_LABEL: Record<DownloadJob["kind"], string> = {
-  version: "安装游戏版本",
-  loader: "安装加载器",
-  java: "安装 Java",
-  content: "下载模组内容",
+const KIND_KEY: Record<DownloadJob["kind"], string> = {
+  version: "pages.downloads.kindVersion",
+  loader: "pages.downloads.kindLoader",
+  java: "pages.downloads.kindJava",
+  content: "pages.downloads.kindContent",
 };
 
 /** 进度条宽度与百分比共用的夹取，避免脏数据把条撑破。 */
@@ -32,6 +33,7 @@ function clampProgress(progress: number): number {
 
 export function DownloadsPage() {
   const { push } = useToast();
+  const t = useT();
   const [jobs, setJobs] = useState<DownloadJob[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -65,17 +67,17 @@ export function DownloadsPage() {
     try {
       if (action === "resume" && job) {
         await api.downloads.resume(job.id);
-        push(`已继续「${job.title}」`, "success");
+        push(t("pages.downloads.resumed", { title: job.title }), "success");
       } else if (action === "cancel" && job) {
         // 主进程正在实现真正的传输中断；UI 只负责发请求并如实显示「已终止」。
         await api.downloads.cancel(job.id);
-        push(`已终止「${job.title}」`, "success");
+        push(t("pages.downloads.cancelled", { title: job.title }), "success");
       } else if (action === "remove" && job) {
         await api.downloads.remove(job.id);
-        push(`已移除「${job.title}」`, "success");
+        push(t("pages.downloads.removed", { title: job.title }), "success");
       } else {
         await api.downloads.clearFinished();
-        push("已清空完成记录", "success");
+        push(t("pages.downloads.cleared"), "success");
       }
       // 主进程会推 onChanged；这里再拉一次，保证没有推送的实现也不会停在旧列表。
       await load();
@@ -101,7 +103,7 @@ export function DownloadsPage() {
             onClick={() => void act("resume", job)}
           >
             <IconDownload size={14} />
-            继续
+            {t("pages.downloads.resume")}
           </button>
         ) : null}
         {canCancel ? (
@@ -110,11 +112,11 @@ export function DownloadsPage() {
             className="btn btn-ghost btn-sm"
             data-action="cancel"
             data-dl-id={job.id}
-            title="终止这次下载（进度保留，可再继续）"
+            title={t("pages.downloads.cancelTitle")}
             disabled={busy !== null}
             onClick={() => void act("cancel", job)}
           >
-            终止
+            {t("pages.downloads.cancel")}
           </button>
         ) : null}
         <button
@@ -126,7 +128,7 @@ export function DownloadsPage() {
           onClick={() => void act("remove", job)}
         >
           <IconTrash size={14} />
-          移除
+          {t("pages.downloads.remove")}
         </button>
       </div>
     );
@@ -136,37 +138,39 @@ export function DownloadsPage() {
     <div className="dl-detail-view" data-dl-detail={job.id}>
       <dl className="dl-facts">
         <div className="dl-fact">
-          <dt>状态</dt>
+          <dt>{t("pages.downloads.status")}</dt>
           <dd>
-            <span className={`badge dl-status ${STATUS_META[job.status].cls}`}>{STATUS_META[job.status].label}</span>
+            <span className={`badge dl-status ${STATUS_META[job.status].cls}`}>
+              {t(STATUS_META[job.status].labelKey)}
+            </span>
           </dd>
         </div>
         <div className="dl-fact">
-          <dt>进度</dt>
+          <dt>{t("pages.downloads.progress")}</dt>
           <dd>{clampProgress(job.progress)}%</dd>
         </div>
         <div className="dl-fact">
-          <dt>类型</dt>
-          <dd>{KIND_LABEL[job.kind]}</dd>
+          <dt>{t("pages.downloads.kind")}</dt>
+          <dd>{t(KIND_KEY[job.kind])}</dd>
         </div>
         <div className="dl-fact">
-          <dt>创建时间</dt>
+          <dt>{t("pages.downloads.createdAt")}</dt>
           <dd>{formatDateTime(job.createdAt)}</dd>
         </div>
         <div className="dl-fact">
-          <dt>最近更新</dt>
+          <dt>{t("pages.downloads.updatedAt")}</dt>
           <dd>{formatDateTime(job.updatedAt)}</dd>
         </div>
         <div className="dl-fact">
-          <dt>任务 id</dt>
+          <dt>{t("pages.downloads.taskId")}</dt>
           <dd className="dl-mono">{job.id}</dd>
         </div>
       </dl>
 
       <section className="dl-message-block">
-        <h3 className="hint-title">详细信息</h3>
+        <h3 className="hint-title">{t("pages.downloads.detailTitle")}</h3>
         <p className="hint-text dl-message" data-dl-message>
-          {job.message ? job.message : "这次任务没有留下额外信息。"}
+          {job.message ? job.message : t("pages.downloads.detailEmpty")}
         </p>
       </section>
     </div>
@@ -178,13 +182,13 @@ export function DownloadsPage() {
     <section className="page">
       <header className="page-head">
         <div>
-          <h1 className="page-title">管理</h1>
-          <p className="page-sub">下载游戏、安装加载器与模组的记录都在这里；中途关掉启动器也能接着下。</p>
+          <h1 className="page-title">{t("pages.downloads.title")}</h1>
+          <p className="page-sub">{t("pages.downloads.sub")}</p>
         </div>
         <div className="page-actions">
           <button type="button" className="btn btn-ghost" onClick={() => void load()}>
             <IconRefresh size={16} />
-            刷新
+            {t("pages.downloads.refresh")}
           </button>
           <button
             type="button"
@@ -193,7 +197,7 @@ export function DownloadsPage() {
             disabled={busy !== null}
             onClick={() => void act("clearFinished")}
           >
-            清空已完成
+            {t("pages.downloads.clearFinished")}
           </button>
         </div>
       </header>
@@ -215,12 +219,14 @@ export function DownloadsPage() {
                       className="dl-title"
                       data-action="open-detail"
                       data-dl-id={job.id}
-                      title="查看下载详情"
+                      title={t("pages.downloads.viewDetail")}
                       onClick={() => setDetailId(job.id)}
                     >
                       {job.title}
                     </button>
-                    <span className={`badge dl-status ${meta.cls}`} data-dl-status={job.status}>{meta.label}</span>
+                    <span className={`badge dl-status ${meta.cls}`} data-dl-status={job.status}>
+                      {t(meta.labelKey)}
+                    </span>
                   </div>
                   <p className="dl-detail">{job.detail}</p>
                   <div className="dl-progress">
@@ -230,8 +236,10 @@ export function DownloadsPage() {
                     <span className="dl-percent">{percent}%</span>
                   </div>
                   <div className="dl-meta">
-                    <span>{KIND_LABEL[job.kind]}</span>
-                    <span className="dl-time">更新于 {formatDateTime(job.updatedAt)}</span>
+                    <span>{t(KIND_KEY[job.kind])}</span>
+                    <span className="dl-time">
+                      {t("pages.downloads.updatedAtShort", { time: formatDateTime(job.updatedAt) })}
+                    </span>
                   </div>
                 </div>
                 {renderActions(job)}
@@ -244,7 +252,7 @@ export function DownloadsPage() {
       {jobs !== null && list.length === 0 ? (
         <div className="state state-empty" data-dl-empty>
           <div className="state-body">
-            <p className="state-hint">还没有下载记录。下载游戏或安装模组时会自动记录，中途关闭也能在这里继续。</p>
+            <p className="state-hint">{t("pages.downloads.empty")}</p>
           </div>
         </div>
       ) : null}
@@ -253,7 +261,7 @@ export function DownloadsPage() {
       <div className="dl-drawer-scope">
         <Drawer
           open={detail !== null}
-          title={detail?.title ?? "下载详情"}
+          title={detail?.title ?? t("pages.downloads.drawerTitle")}
           subtitle={detail?.detail}
           onClose={() => setDetailId(null)}
           footer={detail ? renderActions(detail) : null}

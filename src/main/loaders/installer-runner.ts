@@ -11,6 +11,7 @@ import { getSettings } from "../core/settings";
 import { resolveJavaExeForMc } from "../java/locate";
 import { mavenPathOf, rulesAllow } from "../minecraft/args";
 import { clearVersionCache } from "../minecraft/manifest";
+import { mt } from "../core/i18n";
 
 const log = logger("loaders/installer");
 
@@ -162,7 +163,7 @@ export function prepareVersionJson(raw: unknown, job: Pick<InstallerJob, "versio
 export function readInstaller(installerPath: string): { profile: InstallProfile; versionJson: any } {
   const zip = new AdmZip(installerPath);
   const profileEntry = zip.getEntry("install_profile.json");
-  if (!profileEntry) throw new Error("安装器缺少 install_profile.json");
+  if (!profileEntry) throw new Error(mt("loader.noInstallProfile"));
   const profile = JSON.parse(profileEntry.getData().toString("utf8")) as InstallProfile;
 
   const readEntryJson = (name: string): any => {
@@ -180,7 +181,7 @@ export function readInstaller(installerPath: string): { profile: InstallProfile;
   }
   if (!versionJson && profile.versionInfo) versionJson = profile.versionInfo;
   if (!versionJson) versionJson = readEntryJson("version.json");
-  if (!versionJson) throw new Error("安装器缺少版本描述（version.json / install_profile.json#versionInfo）");
+  if (!versionJson) throw new Error(mt("loader.noVersionJson"));
 
   return { profile, versionJson };
 }
@@ -261,7 +262,7 @@ function runInstallerJar(
 
     const timer = setTimeout(() => {
       child.kill();
-      finish(new Error(`安装器执行超时（${INSTALLER_TIMEOUT_MS / 60000} 分钟）：${installerPath}`));
+      finish(new Error(mt("loader.installerTimeout", { minutes: INSTALLER_TIMEOUT_MS / 60000, path: installerPath })));
     }, INSTALLER_TIMEOUT_MS);
 
     const absorb = (chunk: Buffer): void => {
@@ -282,7 +283,7 @@ function runInstallerJar(
         log.info(`安装器执行完成：${tag}`);
         finish();
       } else {
-        finish(new Error(`安装器退出码 ${code}\n${tail}`));
+        finish(new Error(mt("loader.installerExitCode", { code: code === null ? "null" : code, tail })));
       }
     });
   });
@@ -303,7 +304,7 @@ export async function installFromInstaller(job: InstallerJob, signal?: AbortSign
     await mkdir(paths.libraries, { recursive: true });
     await mkdir(paths.logs, { recursive: true });
 
-    task.update({ stage: "下载安装器", percent: 0 });
+    task.update({ stage: mt("loader.stage.downloadInstaller"), percent: 0 });
     const installerPath = join(paths.downloads, job.installerFileName);
     await downloadFile(job.installerUrl, installerPath, {
       task,
@@ -320,23 +321,23 @@ export async function installFromInstaller(job: InstallerJob, signal?: AbortSign
       profile = parsed.profile;
       versionJson = parsed.versionJson;
     } catch (err) {
-      warnings.push(`安装器结构解析失败：${fail(err).message}`);
+      warnings.push(mt("loader.installerParseFailed", { error: fail(err).message }));
       log.warn(warnings[warnings.length - 1]);
     }
 
     if (profile && versionJson) {
       const profileMc = profile.minecraft ? String(profile.minecraft) : "";
       if (profileMc && profileMc !== job.mcVersion) {
-        warnings.push(`安装器面向 Minecraft ${profileMc}，与请求的 ${job.mcVersion} 不一致`);
+        warnings.push(mt("loader.installerMcMismatch", { actual: profileMc, wanted: job.mcVersion }));
       }
-      task.update({ stage: "写入版本描述" });
+      task.update({ stage: mt("loader.stage.writeVersion") });
       await writeVersionJson(job.versionId, prepareVersionJson(versionJson, job));
 
-      task.update({ stage: "下载依赖库" });
+      task.update({ stage: mt("loader.stage.libraries") });
       const items = [...collectLibraryItems(versionJson, mapUrl), ...collectLibraryItems(profile, mapUrl)];
       const { failed } = await downloadLibraries(items, { task, label: job.label, signal });
       if (failed.length > 0) {
-        warnings.push(`依赖库下载失败 ${failed.length} 个，首个：${failed[0].url}（${failed[0].error}）`);
+        warnings.push(mt("loader.librariesFailed", { loader: job.label, count: failed.length, url: failed[0].url, error: failed[0].error }));
       }
     }
 
@@ -349,23 +350,23 @@ export async function installFromInstaller(job: InstallerJob, signal?: AbortSign
         const gameDir = gameDirOf(paths);
         log.info(`安装器目标目录（Minecraft 游戏目录）：${gameDir}`);
         await ensureLauncherProfile(gameDir);
-        task.update({ stage: "运行加载器安装器", percent: null });
+        task.update({ stage: mt("loader.stage.runInstaller"), percent: null });
         await runInstallerJar(installerPath, gameDir, job.versionId, javaExe, job.mirrorUrl);
         ranInstaller = true;
         const producedId = profile?.version ? String(profile.version) : job.versionId;
         if (!(await adoptInstallerOutput(producedId, job))) {
-          warnings.push("安装器执行完成但未找到产出的版本描述，沿用自解析结果");
+          warnings.push(mt("loader.installerNoVersionJson"));
         }
       } catch (err) {
         // 取消要直接上抛，不能当成"安装器执行失败"继续往下走
         if (signal?.aborted) throw err;
-        warnings.push(`安装器执行失败，沿用自解析结果：${fail(err).message}`);
+        warnings.push(mt("loader.installerFailedFallback", { error: fail(err).message }));
         log.warn(warnings[warnings.length - 1]);
       }
     }
 
     if (!versionJson && !ranInstaller) {
-      throw new Error(`${job.label} 安装失败：安装器既无法解析也无法执行`);
+      throw new Error(mt("loader.installerFailed", { label: job.label }));
     }
 
     clearVersionCache();

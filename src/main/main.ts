@@ -15,6 +15,7 @@ import type { Settings } from "../shared/types";
 import { createSplash, fadeInWindow, fadeOutSplash, logoPathFor, splashHoldRemaining } from "./splash";
 import { destroyTray, hasTray, isQuitting, markQuitting, syncTray } from "./tray";
 import { stopSkinApi } from "./skins/localapi";
+import { mt } from "./core/i18n";
 
 let mainWindow: BrowserWindow | null = null;
 const log = logger("main");
@@ -155,13 +156,13 @@ async function askCloseAction(win: BrowserWindow): Promise<void> {
   try {
     const result = await dialog.showMessageBox(win, {
       type: "question",
-      title: "关闭奶娃启动器",
-      message: "关闭后要退出启动器，还是最小化到托盘继续运行？",
-      detail: "托盘图标会一直显示，点它就能回到界面。",
-      buttons: ["最小化到托盘", "直接退出", "取消"],
+      title: mt("main.closeTitle"),
+      message: mt("main.closeMessage"),
+      detail: mt("main.closeDetail"),
+      buttons: [mt("main.minimizeToTray"), mt("main.quitNow"), mt("common.cancel")],
       defaultId: 0,
       cancelId: 2,
-      checkboxLabel: "记住我的选择",
+      checkboxLabel: mt("main.rememberChoice"),
       checkboxChecked: false,
       noLink: true,
     });
@@ -217,9 +218,9 @@ function bringToFront(): void {
   // 不 await：second-instance 里阻塞会让第二次启动的进程一直挂在那里
   void dialog.showMessageBox(win, {
     type: "info",
-    title: "已经有一个在运行",
-    message: "奶娃启动器已经在运行，已为你切回原窗口。",
-    buttons: ["知道了"],
+    title: mt("main.alreadyRunningTitle"),
+    message: mt("main.alreadyRunningMessage"),
+    buttons: [mt("main.gotIt")],
   });
 }
 

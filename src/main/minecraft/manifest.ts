@@ -6,6 +6,7 @@ import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { getSettings } from "../core/settings";
 import { mapUrl } from "../core/sources";
+import { mt } from "../core/i18n";
 
 const log = logger("manifest");
 
@@ -101,9 +102,9 @@ async function loadManifest(forceRefresh = false): Promise<VersionManifest> {
       return manifestCache;
     }
   }
-  const fresh = await fetchMetadata<VersionManifest>(MANIFEST_URL, "版本清单");
+  const fresh = await fetchMetadata<VersionManifest>(MANIFEST_URL, mt("manifest.labelList"));
   if (!fresh || !Array.isArray(fresh.versions) || fresh.versions.length === 0) {
-    throw new Error("版本清单返回内容异常");
+    throw new Error(mt("manifest.badShape"));
   }
   manifestCache = fresh;
   // __source 记录这份缓存来自哪个来源，切来源后据此重新拉取
@@ -149,10 +150,10 @@ export async function getVanillaJson(mcVersion: string): Promise<any> {
 
   const manifest = await loadManifest(false);
   const entry = manifest.versions.find((item) => item.id === mcVersion);
-  if (!entry || !entry.url) throw new Error(`版本清单里没有 ${mcVersion}，请下拉刷新版本列表`);
+  if (!entry || !entry.url) throw new Error(mt("manifest.noVersion", { version: mcVersion }));
 
-  const json = await fetchMetadata<any>(entry.url, mcVersion + " 版本 JSON");
-  if (!json || !json.id) throw new Error(`${mcVersion} 的版本 JSON 解析失败`);
+  const json = await fetchMetadata<any>(entry.url, mt("manifest.labelVersionJson", { version: mcVersion }));
+  if (!json || !json.id) throw new Error(mt("manifest.parseFailed", { version: mcVersion }));
   vanillaCache.set(mcVersion, json);
   await writeJsonFile(vanillaPath(mcVersion), json);
   log.info(`已缓存 ${mcVersion} 的版本 JSON`);
@@ -228,7 +229,7 @@ export async function getVersionJson(versionId: string): Promise<any> {
   if (cached) return cached;
 
   const raw = await loadRawVersionJson(versionId);
-  if (!raw) throw new Error(`找不到版本 ${versionId}，请先安装`);
+  if (!raw) throw new Error(mt("manifest.notFound", { version: versionId }));
 
   const merged = raw.inheritsFrom ? mergeVersionJson(raw, await getVersionJson(String(raw.inheritsFrom))) : raw;
   mergedCache.set(versionId, merged);
@@ -252,7 +253,7 @@ export async function resolveBaseVersionId(versionId: string): Promise<string> {
   let current = versionId;
   const visited = new Set<string>();
   for (;;) {
-    if (visited.has(current)) throw new Error(`版本 ${versionId} 的 inheritsFrom 出现循环`);
+    if (visited.has(current)) throw new Error(mt("manifest.inheritCycle", { version: versionId }));
     visited.add(current);
     const raw = await loadRawVersionJson(current);
     if (!raw) return current;

@@ -1,5 +1,6 @@
 import type { DownloadSourceId, DownloadSourceInfo, SourceProbe } from "../../shared/types";
 import { getSettings, updateSettings } from "./settings";
+import { mt } from "./i18n";
 
 /** 具体下载源；auto 是选择器，不是源。 */
 type ConcreteSource = Exclude<DownloadSourceId, "auto">;
@@ -18,11 +19,51 @@ const SJTU_BASE = "https://mirror.sjtu.edu.cn/bmclapi";
 
 // FastMinecraftMirror 已移除：镜像站长期不可达（子域解析到劫持 IP、证书不匹配），用户要求下线。
 
+// 名称与描述用 getter：模块级常量会在读到设置之前就把语言定格
 export const SOURCES: DownloadSourceInfo[] = [
-  { id: "official", name: "官方源", description: "Mojang 官方下载", baseUrl: "https://launchermeta.mojang.com", selectable: true },
-  { id: "bmclapi", name: "BMCLAPI 镜像", description: "国内镜像加速，接口与资源全量镜像", baseUrl: BMCLAPI_BASE, selectable: true },
-  { id: "sjtu", name: "上海交大镜像", description: "只镜像 Maven 依赖库，其余走官方；缺失的文件自动回退", baseUrl: SJTU_BASE, selectable: true },
-  { id: "auto", name: "自动选择", description: "按实测延迟自动切换，跳过不可用镜像", selectable: true },
+  {
+    id: "official",
+    get name() {
+      return mt("core.source.officialName");
+    },
+    get description() {
+      return mt("core.source.officialDesc");
+    },
+    baseUrl: "https://launchermeta.mojang.com",
+    selectable: true,
+  },
+  {
+    id: "bmclapi",
+    get name() {
+      return mt("core.source.bmclapiName");
+    },
+    get description() {
+      return mt("core.source.bmclapiDesc");
+    },
+    baseUrl: BMCLAPI_BASE,
+    selectable: true,
+  },
+  {
+    id: "sjtu",
+    get name() {
+      return mt("core.source.sjtuName");
+    },
+    get description() {
+      return mt("core.source.sjtuDesc");
+    },
+    baseUrl: SJTU_BASE,
+    selectable: true,
+  },
+  {
+    id: "auto",
+    get name() {
+      return mt("core.source.autoName");
+    },
+    get description() {
+      return mt("core.source.autoDesc");
+    },
+    selectable: true,
+  },
 ];
 
 const USER_AGENT = "NaiWaLauncher/0.1 (naiwa)";
@@ -193,7 +234,7 @@ async function probeOne(source: ConcreteSource): Promise<SourceProbe> {
     }
   }
   if (samples.length === 0) {
-    return { sourceId: source, ok: false, latencyMs: null, error: lastError || "探测失败" };
+    return { sourceId: source, ok: false, latencyMs: null, error: lastError || mt("core.source.probeFailed") };
   }
   return { sourceId: source, ok: true, latencyMs: median(samples) };
 }

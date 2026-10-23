@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { InstanceMeta, LoaderKind, Settings, VersionBrief } from "../../shared/types";
 import { api } from "../lib/api";
-import { LITELOADER_VERSION_HINT, loaderLabel, liteloaderUnsupported } from "../lib/format";
+import { useT } from "../lib/i18n";
+import { loaderLabel, liteloaderUnsupported, liteloaderVersionHint } from "../lib/format";
 import { usePersist } from "../lib/persist";
 import { useApp } from "../lib/store";
 import { useAsync, errorMessage } from "../lib/useAsync";
@@ -9,24 +10,29 @@ import { useToast } from "./Toast";
 import { Modal } from "./Modal";
 import { Field, Select, Slider, TextInput } from "./Form";
 
-const LOADERS: Array<{ value: LoaderKind; label: string }> = [
-  { value: "vanilla", label: "原版" },
-  { value: "fabric", label: "Fabric" },
-  { value: "quilt", label: "Quilt" },
-  { value: "forge", label: "Forge" },
-  { value: "neoforge", label: "NeoForge" },
-  { value: "liteloader", label: "LiteLoader" },
-];
+type Translator = (key: string, vars?: Record<string, string | number>) => string;
+
+/** 加载器下拉：原版走词典，其余是专有名词，保持英文。 */
+function loaderOptions(tr: Translator): Array<{ value: LoaderKind; label: string }> {
+  return [
+    { value: "vanilla", label: tr("pages.instanceModals.loaderVanilla") },
+    { value: "fabric", label: "Fabric" },
+    { value: "quilt", label: "Quilt" },
+    { value: "forge", label: "Forge" },
+    { value: "neoforge", label: "NeoForge" },
+    { value: "liteloader", label: "LiteLoader" },
+  ];
+}
 
 const memoryLabel = (mb: number) => `${(mb / 1024).toFixed(1)} GB`;
 
 type TypeFilterKey = "showRelease" | "showSnapshot" | "showLegacy";
 
 /** 与下载页同一组 settings 布尔：正式版 / 测试版（快照）/ 远古版。 */
-const TYPE_FILTERS: Array<{ key: TypeFilterKey; label: string; detail: string }> = [
-  { key: "showRelease", label: "正式版", detail: "release" },
-  { key: "showSnapshot", label: "测试版", detail: "snapshot 快照" },
-  { key: "showLegacy", label: "远古版", detail: "old_beta / old_alpha" },
+const TYPE_FILTERS: Array<{ key: TypeFilterKey; labelKey: string; detail: string }> = [
+  { key: "showRelease", labelKey: "pages.instanceModals.typeRelease", detail: "release" },
+  { key: "showSnapshot", labelKey: "pages.instanceModals.typeSnapshot", detail: "snapshot" },
+  { key: "showLegacy", labelKey: "pages.instanceModals.typeLegacy", detail: "old_beta / old_alpha" },
 ];
 
 export function CreateInstanceModal({
@@ -39,6 +45,7 @@ export function CreateInstanceModal({
   const { versions, reloadVersions, settings } = useApp();
   const { push } = useToast();
   const persist = usePersist();
+  const tr = useT();
   const [name, setName] = useState("");
   const [mcVersion, setMcVersion] = useState("");
   const [loader, setLoader] = useState<LoaderKind>("vanilla");
@@ -57,13 +64,13 @@ export function CreateInstanceModal({
   flagsRef.current = { showRelease, showSnapshot, showLegacy };
 
   const persistType = (key: TypeFilterKey, value: boolean) => {
-    const label = TYPE_FILTERS.find((item) => item.key === key)?.label ?? key;
+    const label = tr(TYPE_FILTERS.find((item) => item.key === key)?.labelKey ?? key);
     const patch: Partial<Settings> = key === "showRelease"
       ? { showRelease: value }
       : key === "showSnapshot"
         ? { showSnapshot: value }
         : { showLegacy: value };
-    void persist(patch, `${label}显示`);
+    void persist(patch, tr("pages.download.persistShow", { label }));
   };
 
   const visibleVersions = useMemo(() => {
@@ -82,7 +89,10 @@ export function CreateInstanceModal({
       ...releases.map((item) => ({ value: item.id, label: item.id })),
       ...others.map((item) => ({
         value: item.id,
-        label: `${item.id}（${item.type === "snapshot" ? "测试版" : "远古版"}）`,
+        label: tr("pages.instanceModals.versionOption", {
+          id: item.id,
+          type: tr(item.type === "snapshot" ? "pages.instanceModals.typeSnapshot" : "pages.instanceModals.typeLegacy"),
+        }),
       })),
     ];
   }, [visibleVersions]);
@@ -129,8 +139,8 @@ export function CreateInstanceModal({
     const first = versionOptions[0]?.value ?? "";
     if (open && current !== "") {
       setAutoNote(first
-        ? `已选版本 ${current} 不在当前勾选的版本类型内，已自动改选 ${first}`
-        : "当前勾选下没有任何可选版本，请至少勾选一种版本类型");
+        ? tr("pages.instanceModals.autoSwitched", { current, next: first })
+        : tr("pages.instanceModals.autoEmpty"));
     }
     setMcVersion(first);
   }, [open, versionOptions]);
@@ -150,23 +160,23 @@ export function CreateInstanceModal({
 
   const submit = async () => {
     if (!mcVersion) {
-      push("请先选择 Minecraft 版本", "error");
+      push(tr("pages.instanceModals.errNoVersion"), "error");
       return;
     }
     if (liteloaderBlocked) {
-      push(LITELOADER_VERSION_HINT, "error");
+      push(liteloaderVersionHint(tr), "error");
       return;
     }
     setBusy(true);
     try {
       const created = await api.instances.create({
-        name: name.trim() || `${mcVersion} ${loaderLabel(loader)}`,
+        name: name.trim() || `${mcVersion} ${loaderLabel(loader, tr)}`,
         mcVersion,
         loader,
         loaderVersion: loader === "vanilla" ? undefined : loaderVersion || undefined,
         memoryMb,
       });
-      push(`实例「${created.name}」已创建`, "success");
+      push(tr("pages.instanceModals.created", { name: created.name }), "success");
       onCreated(created);
       onClose();
     } catch (error: unknown) {
@@ -179,57 +189,61 @@ export function CreateInstanceModal({
   return (
     <Modal
       open={open}
-      title="新建实例"
-      subtitle="下载游戏本体与加载器，装好后即可启动"
+      title={tr("pages.instanceModals.createTitle")}
+      subtitle={tr("pages.instanceModals.createSubtitle")}
       onClose={onClose}
       width={560}
       footer={
         <>
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>
-            取消
+            {tr("pages.common.cancel")}
           </button>
           <button
             type="button"
             className="btn btn-primary"
             onClick={() => void submit()}
             disabled={busy || !mcVersion || liteloaderBlocked}
-            title={liteloaderBlocked ? LITELOADER_VERSION_HINT : undefined}
+            title={liteloaderBlocked ? liteloaderVersionHint(tr) : undefined}
             data-create-blocked={liteloaderBlocked ? "liteloader" : undefined}
           >
-            {busy ? "创建中…" : "创建实例"}
+            {busy ? tr("pages.instanceModals.creating") : tr("pages.instanceModals.createAction")}
           </button>
         </>
       }
     >
       <div className="form-grid">
-        <Field label="实例名称" hint="留空则按「版本 + 加载器」自动命名">
+        <Field label={tr("pages.instanceModals.nameLabel")} hint={tr("pages.instanceModals.nameHint")}>
           <TextInput
             value={name}
-            placeholder={`${mcVersion || "1.21.4"} ${loaderLabel(loader)}`}
+            placeholder={`${mcVersion || "1.21.4"} ${loaderLabel(loader, tr)}`}
             onChange={(event) => setName(event.target.value)}
           />
         </Field>
 
-        <Field label="版本类型" hint="与下载页共用同一组设置，只影响这里的版本候选">
+        <Field label={tr("pages.instanceModals.typeLabel")} hint={tr("pages.instanceModals.typeHint")}>
           <div className="version-type-filter" data-version-type-filter="modal">
             {TYPE_FILTERS.map((filter) => (
-              <label key={filter.key} className="checkline" title={`${filter.label}（${filter.detail}）`}>
+              <label
+                key={filter.key}
+                className="checkline"
+                title={tr("pages.instanceModals.typeTitle", { label: tr(filter.labelKey), detail: filter.detail })}
+              >
                 <input
                   type="checkbox"
-                  aria-label={filter.label}
+                  aria-label={tr(filter.labelKey)}
                   checked={typeChecked[filter.key]}
                   onChange={(event) => persistType(filter.key, event.target.checked)}
                 />
-                <span>{filter.label}</span>
+                <span>{tr(filter.labelKey)}</span>
               </label>
             ))}
           </div>
         </Field>
 
-        <Field label="Minecraft 版本" hint={versions === null ? "正在读取版本清单…" : undefined}>
+        <Field label={tr("pages.instanceModals.mcVersionLabel")} hint={versions === null ? tr("pages.instanceModals.readingVersions") : undefined}>
           {versions === null ? (
             <button type="button" className="btn btn-ghost" onClick={() => void reloadVersions(true)}>
-              读取版本清单
+              {tr("pages.instanceModals.loadVersions")}
             </button>
           ) : (
             <Select
@@ -239,46 +253,46 @@ export function CreateInstanceModal({
                 setMcVersion(value);
                 setAutoNote(null);
               }}
-              ariaLabel="Minecraft 版本"
-              placeholder="请选择版本"
+              ariaLabel={tr("pages.instanceModals.mcVersionLabel")}
+              placeholder={tr("pages.instanceModals.selectVersion")}
             />
           )}
           {autoNote ? <span className="field-hint" data-version-auto-note>{autoNote}</span> : null}
         </Field>
 
-        <Field label="加载器">
+        <Field label={tr("pages.instanceModals.loader")}>
           <Select
             value={loader}
-            options={LOADERS}
+            options={loaderOptions(tr)}
             onChange={(value) => setLoader(value as LoaderKind)}
-            ariaLabel="加载器"
+            ariaLabel={tr("pages.instanceModals.loader")}
           />
         </Field>
 
         {loader === "vanilla" ? null : (
           <Field
-            label="加载器版本"
+            label={tr("pages.instanceModals.loaderVersionLabel")}
             hint={liteloaderBlocked
-              ? LITELOADER_VERSION_HINT
-              : (loaderError ?? (loaderLoading ? "读取加载器版本…" : undefined))}
+              ? liteloaderVersionHint(tr)
+              : (loaderError ?? (loaderLoading ? tr("pages.instanceModals.readingLoaderVersions") : undefined))}
           >
             <Select
               value={loaderVersion}
               options={(loaderVersions ?? []).map((item) => ({
                 value: item.version,
-                label: item.stable ? item.version : `${item.version}（测试版）`,
+                label: item.stable ? item.version : tr("pages.instanceModals.versionBeta", { version: item.version }),
               }))}
               onChange={setLoaderVersion}
-              ariaLabel="加载器版本"
+              ariaLabel={tr("pages.instanceModals.loaderVersionLabel")}
               placeholder={liteloaderBlocked
-                ? "该 MC 版本不支持 LiteLoader"
-                : (loaderLoading ? "读取中…" : "请选择加载器版本")}
+                ? tr("pages.instanceModals.liteloaderUnsupported")
+                : (loaderLoading ? tr("pages.instanceModals.reading") : tr("pages.instanceModals.selectLoaderVersion"))}
               disabled={loaderLoading || liteloaderBlocked}
             />
           </Field>
         )}
 
-        <Field label="内存分配">
+        <Field label={tr("pages.instanceModals.memory")}>
           <Slider value={memoryMb} min={1024} max={16384} step={512} onChange={setMemoryMb} format={memoryLabel} />
         </Field>
       </div>
@@ -295,6 +309,7 @@ export function EditInstanceModal({
   onSaved: (instance: InstanceMeta) => void;
 }) {
   const { push } = useToast();
+  const tr = useT();
   const [name, setName] = useState("");
   const [memoryMb, setMemoryMb] = useState(4096);
   const [extraJvmArgs, setExtraJvmArgs] = useState("");
@@ -310,13 +325,13 @@ export function EditInstanceModal({
   const save = async () => {
     if (!instance) return;
     if (!name.trim()) {
-      push("实例名称不能为空", "error");
+      push(tr("pages.instanceModals.errEmptyName"), "error");
       return;
     }
     setBusy(true);
     try {
       const updated = await api.instances.update(instance.id, { name: name.trim(), memoryMb, extraJvmArgs });
-      push("实例设置已保存", "success");
+      push(tr("pages.instanceModals.editSaved"), "success");
       onSaved(updated);
       onClose();
     } catch (error: unknown) {
@@ -329,28 +344,28 @@ export function EditInstanceModal({
   return (
     <Modal
       open={open}
-      title="实例设置"
-      subtitle={instance ? `${instance.mcVersion} · ${loaderLabel(instance.loader)} · ${instance.versionId}` : undefined}
+      title={tr("pages.instanceModals.editTitle")}
+      subtitle={instance ? `${instance.mcVersion} · ${loaderLabel(instance.loader, tr)} · ${instance.versionId}` : undefined}
       onClose={onClose}
       footer={
         <>
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>
-            取消
+            {tr("pages.common.cancel")}
           </button>
           <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={busy}>
-            {busy ? "保存中…" : "保存"}
+            {busy ? tr("pages.common.saving") : tr("pages.common.save")}
           </button>
         </>
       }
     >
       <div className="form-grid">
-        <Field label="实例名称">
+        <Field label={tr("pages.instanceModals.nameLabel")}>
           <TextInput value={name} onChange={(event) => setName(event.target.value)} />
         </Field>
-        <Field label="内存分配">
+        <Field label={tr("pages.instanceModals.memory")}>
           <Slider value={memoryMb} min={1024} max={16384} step={512} onChange={setMemoryMb} format={memoryLabel} />
         </Field>
-        <Field label="额外 JVM 参数" hint="例如 -XX:+UseG1GC，留空则使用默认参数">
+        <Field label={tr("pages.instanceModals.extraJvm")} hint={tr("pages.instanceModals.extraJvmHint")}>
           <TextInput
             value={extraJvmArgs}
             placeholder="-XX:+UseG1GC"

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { InstanceMeta, SaveInfo } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatBytes, formatDate } from "../lib/format";
+import { t, useT } from "../lib/i18n";
 import { useApp } from "../lib/store";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "./Toast";
@@ -14,12 +15,12 @@ const NEW_SAVE = "__new__";
 
 /** 存档时间用「相对时间」，与实例卡上的 lastPlayedAt 文案区分开。 */
 function relativeTime(timestamp: number): string {
-  if (!timestamp) return "时间未知";
+  if (!timestamp) return t("pages.saves.timeUnknown");
   const diff = Date.now() - timestamp;
-  if (diff < 60 * 1000) return "刚刚";
-  if (diff < 3600 * 1000) return `${Math.floor(diff / 60000)} 分钟前`;
-  if (diff < 86400 * 1000) return `${Math.floor(diff / 3600000)} 小时前`;
-  if (diff < 30 * 86400 * 1000) return `${Math.floor(diff / 86400000)} 天前`;
+  if (diff < 60 * 1000) return t("pages.saves.justNow");
+  if (diff < 3600 * 1000) return t("pages.saves.minutesAgo", { count: Math.floor(diff / 60000) });
+  if (diff < 86400 * 1000) return t("pages.saves.hoursAgo", { count: Math.floor(diff / 3600000) });
+  if (diff < 30 * 86400 * 1000) return t("pages.saves.daysAgo", { count: Math.floor(diff / 86400000) });
   return formatDate(new Date(timestamp).toISOString());
 }
 
@@ -34,6 +35,7 @@ export function SaveDrawer({
 }) {
   const { push } = useToast();
   const { info } = useApp();
+  const tr = useT();
   const instanceId = instance?.id ?? null;
 
   const [saves, setSaves] = useState<SaveInfo[] | null>(null);
@@ -75,10 +77,10 @@ export function SaveDrawer({
         // Minecraft 没有「新建世界」的命令行参数（quickPlay 只可靠地进入已有存档），
         // 所以这里正常启动到主菜单，由玩家在游戏内创建世界。
         await api.instances.launch(instanceId);
-        push("游戏已启动，请在主菜单点「单人游戏 → 创建新世界」", "info");
+        push(tr("pages.saves.launchedToMenu"), "info");
       } else {
         await api.instances.launch(instanceId, target);
-        push(`正在进入存档 ${label}`, "success");
+        push(tr("pages.saves.enteringSave", { name: label }), "success");
       }
       onLaunched();
     } catch (err: unknown) {
@@ -94,7 +96,7 @@ export function SaveDrawer({
     try {
       const gameRoot = (info ?? (await api.app.info())).gameRoot.replace(/[\\/]+$/, "");
       await api.app.openPath(`${gameRoot}/instances/${instanceId}/saves`);
-      push("已打开存档目录", "success");
+      push(tr("pages.saves.openedDir"), "success");
     } catch (err: unknown) {
       push(errorMessage(err), "error");
     }
@@ -105,14 +107,14 @@ export function SaveDrawer({
   return (
     <Drawer
       open={open}
-      title="存档"
+      title={tr("pages.saves.title")}
       subtitle={instance ? `Minecraft ${instance.mcVersion} · ${instance.name}` : undefined}
       onClose={onClose}
       width={620}
       footer={
         <button type="button" className="btn btn-ghost" onClick={() => void openSavesDir()}>
           <IconFolder size={16} />
-          打开存档目录
+          {tr("pages.saves.openDir")}
         </button>
       }
     >
@@ -120,20 +122,18 @@ export function SaveDrawer({
         <button
           type="button"
           className="btn btn-primary"
-          onClick={() => void enter(NEW_SAVE, "新的世界")}
+          onClick={() => void enter(NEW_SAVE, tr("pages.saves.newWorld"))}
           disabled={busy}
         >
           <IconPlus size={16} />
-          {entering === NEW_SAVE ? "进入中…" : "新建存档（启动到主菜单）"}
+          {entering === NEW_SAVE ? tr("pages.saves.entering") : tr("pages.saves.newSave")}
         </button>
-        <p className="save-new-hint">
-          Minecraft 没有「新建世界」的命令行参数：点击后启动到主菜单，请在游戏里点「单人游戏 → 创建新世界」（已有存档可直接用下方「进入」）
-        </p>
+        <p className="save-new-hint">{tr("pages.saves.newSaveHint")}</p>
       </div>
 
       <div className="save-list-head">
-        <span className="field-label">已有存档</span>
-        {saves ? <span className="save-count">{saves.length} 个</span> : null}
+        <span className="field-label">{tr("pages.saves.existing")}</span>
+        {saves ? <span className="save-count">{tr("pages.saves.count", { count: saves.length })}</span> : null}
       </div>
 
       {loading ? <SkeletonRows count={2} /> : null}
@@ -142,8 +142,8 @@ export function SaveDrawer({
 
       {!loading && !error && saves && saves.length === 0 ? (
         <EmptyState
-          title="这个实例还没有存档。"
-          hint="点上面的按钮创建一个并直接进入。"
+          title={tr("pages.saves.emptyTitle")}
+          hint={tr("pages.saves.emptyHint")}
         />
       ) : null}
 
@@ -171,7 +171,7 @@ export function SaveDrawer({
                 disabled={busy}
               >
                 <IconPlay size={15} />
-                {entering === save.folder ? "进入中…" : "进入"}
+                {entering === save.folder ? tr("pages.saves.entering") : tr("pages.saves.enter")}
               </button>
             </li>
           ))}

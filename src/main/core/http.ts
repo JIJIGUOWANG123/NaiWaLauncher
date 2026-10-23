@@ -10,6 +10,7 @@ import type { TaskHandle } from "./events";
 import { logger } from "./logger";
 import { getSettings } from "./settings";
 import { mapUrl, resolveBase } from "./sources";
+import { mt } from "./i18n";
 
 export interface DownloadOptions {
   task?: TaskHandle;
@@ -51,10 +52,12 @@ const PROGRESS_INTERVAL_MS = 200;
 const SHA1_ATTEMPTS = 2;
 
 /** 取消时的统一错误信息：上层据此把「用户取消」和真实失败区分开。 */
-export const CANCELLED_MESSAGE = "下载已取消";
+export function cancelledMessage(): string {
+  return mt("core.cancelled");
+}
 
 function cancelledError(): Error {
-  const err = new Error(CANCELLED_MESSAGE) as Error & { cancelled?: boolean };
+  const err = new Error(cancelledMessage()) as Error & { cancelled?: boolean };
   err.name = "CancelledError";
   err.cancelled = true;
   return err;
@@ -181,7 +184,7 @@ async function cancelBody(res: Response): Promise<void> {
 }
 
 function readerOf(res: Response): ByteReader {
-  if (!res.body) throw new Error("响应没有正文");
+  if (!res.body) throw new Error(mt("core.http.noBody"));
   return res.body.getReader() as unknown as ByteReader;
 }
 
@@ -195,7 +198,7 @@ async function readWithTimeout(
   const races: Promise<{ done: boolean; value?: Uint8Array }>[] = [
     reader.read(),
     rejectLater((reject) => {
-      timer = setTimeout(() => reject(new Error("下载超时：长时间没有收到数据")), ms);
+      timer = setTimeout(() => reject(new Error(mt("core.downloadTimeout"))), ms);
     }),
   ];
   if (signal) {
@@ -228,13 +231,13 @@ interface Target {
 function sourceLabel(source: DownloadSourceId): string {
   switch (source) {
     case "official":
-      return "官方";
+      return mt("core.sourceLabel.official");
     case "bmclapi":
       return "BMCLAPI";
     case "sjtu":
-      return "上海交大";
+      return mt("core.sourceLabel.sjtu");
     default:
-      return "自动";
+      return mt("core.sourceLabel.auto");
   }
 }
 
@@ -298,7 +301,7 @@ async function fetchTextOnce(
   } catch (err) {
     // 先看调用方信号：超时与取消都是 AbortError，但取消必须原样上抛
     if (signal?.aborted) throw cancelledError();
-    if (err instanceof Error && err.name === "AbortError") throw new Error(`请求超时（${timeoutMs}ms）· ${url}`);
+    if (err instanceof Error && err.name === "AbortError") throw new Error(mt("core.http.timeout", { ms: timeoutMs, url }));
     throw err;
   } finally {
     link.release();
@@ -344,13 +347,13 @@ export async function fetchText(url: string, opts: FetchOptions = {}): Promise<s
     const next = targets[index + 1];
     if (next) {
       log.warn(
-        `跨源回退：${hostOf(target.url)} 在${sourceLabel(target.source)}失败（${describeError(error)}），改用${sourceLabel(next.source)}`,
+        mt("core.fallbackCrossOrigin", { host: hostOf(target.url), from: sourceLabel(target.source), error: describeError(error), to: sourceLabel(next.source) }),
       );
     }
   }
 
-  if (targets.length > 1) throw new Error(`镜像与官方均失败：${failures.join("；")} · ${url}`);
-  throw lastError instanceof Error ? lastError : new Error(`请求失败 · ${url}`);
+  if (targets.length > 1) throw new Error(mt("core.http.allFailed", { details: failures.join("; "), url }));
+  throw lastError instanceof Error ? lastError : new Error(mt("core.requestFailed", { url }));
 }
 
 export async function fetchJson<T>(url: string, opts: FetchOptions = {}): Promise<T> {
@@ -358,7 +361,7 @@ export async function fetchJson<T>(url: string, opts: FetchOptions = {}): Promis
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new Error(`JSON 解析失败 · ${url}`);
+    throw new Error(mt("core.http.badJson", { url }));
   }
 }
 
@@ -515,7 +518,7 @@ async function openGet(url: string, headers: Record<string, string>, signal?: Ab
     });
   } catch (err) {
     if (signal?.aborted) throw cancelledError();
-    if (err instanceof Error && err.name === "AbortError") throw new Error(`连接超时（${HEADER_TIMEOUT_MS}ms）· ${url}`);
+    if (err instanceof Error && err.name === "AbortError") throw new Error(mt("core.http.headerTimeout", { ms: HEADER_TIMEOUT_MS, url }));
     throw err;
   } finally {
     // 定时器必须在拿到响应头后立刻清掉，否则会把正常的长正文拖到 abort
@@ -653,7 +656,7 @@ async function runChunk(
         await cancelBody(res);
         throw httpError(
           res.status,
-          res.ok ? `服务器不支持分段下载（HTTP ${res.status}）` : `HTTP ${res.status} ${res.statusText} · ${url}`,
+          res.ok ? mt("core.noRangeSupport", { status: res.status }) : "HTTP " + res.status + " " + res.statusText + " · " + url,
         );
       }
       await pumpToFile(readerOf(res), handle, chunk, onBytes, signal);
@@ -719,7 +722,7 @@ async function transfer(url: string, dest: string, ctx: TransferContext): Promis
     if (!force && now - lastReport < PROGRESS_INTERVAL_MS) return;
     lastReport = now;
     ctx.task?.update({
-      stage: "下载",
+      stage: mt("core.http.stage.download"),
       downloadedBytes: received,
       totalBytes: Math.max(0, totalBytes),
       percent: totalBytes > 0 ? Math.min(1, received / totalBytes) : null,
@@ -847,7 +850,7 @@ export async function downloadFile(
           const actual = await sha1OfFile(dest);
           if (actual !== expected) {
             await discardPartial(dest);
-            const mismatch = new Error(`SHA1 校验失败：期望 ${expected}，实际 ${actual} · ${target.url}`);
+            const mismatch = new Error(mt("core.sha1Mismatch", { expected, actual, url: target.url }));
             // 校验失败重下一次，仍失败才算真失败
             if (attempt >= SHA1_ATTEMPTS) throw mismatch;
             log.warn(mismatch.message + "（重试一次）");
@@ -858,7 +861,7 @@ export async function downloadFile(
       } catch (err) {
         // 取消：不清理半成品、不重试、不换源，直接把「下载已取消」交给上层
         if (signal?.aborted || isCancelledError(err)) {
-          log.info(`${CANCELLED_MESSAGE} · ${dest}`);
+          log.info(`${cancelledMessage()} · ${dest}`);
           throw isCancelledError(err) ? err : cancelledError();
         }
         error = err;
@@ -872,13 +875,13 @@ export async function downloadFile(
     const next = targets[index + 1];
     if (next) {
       log.warn(
-        `跨源回退：${hostOf(url)} 在${sourceLabel(target.source)}失败（${describeError(error)}），改用${sourceLabel(next.source)}`,
+        mt("core.fallbackCrossOrigin", { host: hostOf(url), from: sourceLabel(target.source), error: describeError(error), to: sourceLabel(next.source) }),
       );
     }
   }
 
   // 两个源都挂：错误里保留两端状态码，别让上层只看到一个 404
-  if (targets.length > 1) throw new Error(`镜像与官方均失败：${failures.join("；")} · ${url}`);
+  if (targets.length > 1) throw new Error(mt("core.http.allFailed", { details: failures.join("; "), url }));
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
@@ -919,7 +922,7 @@ export async function downloadMany(
     for (const value of active.values()) inflight += value;
     const downloaded = completedBytes + inflight;
     task.update({
-      stage: opts.label ?? "下载",
+      stage: opts.label ?? mt("core.http.stage.download"),
       downloadedBytes: downloaded,
       totalBytes: knownTotal ? totalBytes : 0,
       percent: knownTotal && totalBytes > 0 ? Math.min(1, downloaded / totalBytes) : null,
@@ -1010,7 +1013,7 @@ export async function downloadMany(
       };
     });
     log.warn(
-      `首轮失败 ${failed.length} 个，正在重试（并发 ${Math.min(concurrent, retryItems.length)}，每文件连接 ${retryConnections}）`,
+      mt("core.retryRound", { failed: failed.length, concurrent: Math.min(concurrent, retryItems.length), connections: retryConnections }),
     );
     // 重试的文件退回"未完成"：进度不会越过总数
     filesDone = Math.max(0, filesDone - failed.length);
@@ -1029,7 +1032,7 @@ export async function downloadMany(
   if (failed.length > 0) {
     const first = failed[0];
     log.warn(
-      "批量下载完成：成功 " + (totalFiles - failed.length) + "/" + totalFiles + " 个，失败 " + failed.length + " 个（首个：" + first.dest + " · " + first.error + "）",
+      mt("core.batchDone", { ok: totalFiles - failed.length, total: totalFiles, failed: failed.length, first: first.dest, error: first.error }),
     );
   }
   return { failed };

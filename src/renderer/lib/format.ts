@@ -1,5 +1,11 @@
 import type { InstanceMeta, LoaderKind, VersionBrief } from "../../shared/types";
 
+/**
+ * 文案翻译器：签名与 lib/i18n.ts 的 useT() / t() 一致。
+ * 本文件只产出「数字 + 单位」，带语序的文案统一走词条 key，由调用方传入 tr。
+ */
+export type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
 const UNITS = ["B", "KB", "MB", "GB", "TB"];
 
 export function formatBytes(bytes: number): string {
@@ -24,12 +30,12 @@ export function formatPercent(percent: number | null): string {
   return `${Math.round(Math.max(0, Math.min(1, percent)) * 100)}%`;
 }
 
-/** 一万以上折算为中文单位，卡片上不撑破布局。 */
-export function formatCount(count: number): string {
+/** 一万以上折算成缩写单位，卡片上不撑破布局（中文万/亿，英文 K/M，日文万/億）。 */
+export function formatCount(count: number, tr: Translate): string {
   if (!Number.isFinite(count) || count < 0) return "0";
   const trim = (value: number) => (value >= 100 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, ""));
-  if (count >= 100000000) return `${trim(count / 100000000)} 亿`;
-  if (count >= 10000) return `${trim(count / 10000)} 万`;
+  if (count >= 100000000) return tr("pages.format.countYi", { value: trim(count / 100000000) });
+  if (count >= 10000) return tr("pages.format.countWan", { value: trim(count / 10000) });
   return String(Math.round(count));
 }
 
@@ -48,25 +54,26 @@ export function formatDateTime(timestamp: number): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function formatRelative(timestamp?: number): string {
-  if (!timestamp) return "尚未启动";
+export function formatRelative(timestamp: number | undefined, tr: Translate): string {
+  if (!timestamp) return tr("pages.format.relativeNeverStarted");
   const diff = Date.now() - timestamp;
-  if (diff < 60 * 1000) return "刚刚启动过";
-  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)} 分钟前`;
-  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)} 小时前`;
-  if (diff < 30 * 24 * 60 * 60 * 1000) return `${Math.floor(diff / 86400000)} 天前`;
+  if (diff < 60 * 1000) return tr("pages.format.relativeJustStarted");
+  if (diff < 60 * 60 * 1000) return tr("pages.format.agoMinutes", { count: Math.floor(diff / 60000) });
+  if (diff < 24 * 60 * 60 * 1000) return tr("pages.format.agoHours", { count: Math.floor(diff / 3600000) });
+  if (diff < 30 * 24 * 60 * 60 * 1000) return tr("pages.format.agoDays", { count: Math.floor(diff / 86400000) });
   return formatDate(new Date(timestamp).toISOString());
 }
 
-export function formatLatency(ms: number | null, ok: boolean): string {
-  if (!ok || ms === null) return "不可用";
+export function formatLatency(ms: number | null, ok: boolean, tr: Translate): string {
+  if (!ok || ms === null) return tr("pages.format.latencyUnavailable");
   return `${Math.round(ms)} ms`;
 }
 
-export function loaderLabel(loader: LoaderKind): string {
+/** 加载器展示名：原版走词典，其余是专有名词保持英文，未知值原样输出。 */
+export function loaderLabel(loader: LoaderKind, tr: Translate): string {
   switch (loader) {
     case "vanilla":
-      return "原版";
+      return tr("pages.format.loaderVanilla");
     case "fabric":
       return "Fabric";
     case "quilt":
@@ -90,7 +97,9 @@ function loadersFallback(loader: never): string {
 export const LITELOADER_MAX_VERSION = "1.12.2";
 
 /** 提示文案：LiteLoader 与过高 MC 版本不兼容时显示。 */
-export const LITELOADER_VERSION_HINT = `LiteLoader 只支持 ${LITELOADER_MAX_VERSION} 及更早版本`;
+export function liteloaderVersionHint(tr: Translate): string {
+  return tr("pages.format.liteloaderMaxVersion", { version: LITELOADER_MAX_VERSION });
+}
 
 function parseMcVersion(version: string): [number, number, number] | null {
   const match = /^(\d+)\.(\d+)(?:\.(\d+))?$/.exec(version.trim());
@@ -111,37 +120,37 @@ export function liteloaderUnsupported(mcVersion: string): boolean {
   return patch > 2;
 }
 
-export function versionTypeLabel(type: VersionBrief["type"]): string {
+export function versionTypeLabel(type: VersionBrief["type"], tr: Translate): string {
   switch (type) {
     case "release":
-      return "正式版";
+      return tr("pages.format.versionRelease");
     case "snapshot":
-      return "快照";
+      return tr("pages.format.versionSnapshot");
     case "old_beta":
-      return "远古 Beta";
+      return tr("pages.format.versionOldBeta");
     case "old_alpha":
-      return "远古 Alpha";
+      return tr("pages.format.versionOldAlpha");
     default:
       return String(type);
   }
 }
 
-export function releaseTypeLabel(type: "release" | "beta" | "alpha"): string {
-  if (type === "release") return "稳定版";
-  if (type === "beta") return "测试版";
-  return "预览版";
+export function releaseTypeLabel(type: "release" | "beta" | "alpha", tr: Translate): string {
+  if (type === "release") return tr("pages.format.releaseStable");
+  if (type === "beta") return tr("pages.format.releaseBeta");
+  return tr("pages.format.releaseAlpha");
 }
 
 /** 资源卡片的更新时间：「3 天前」这类相对说法，超过一个月退回日期。 */
-export function formatAgo(iso?: string): string {
+export function formatAgo(iso: string | undefined, tr: Translate): string {
   if (!iso) return "";
   const time = Date.parse(iso);
   if (Number.isNaN(time)) return "";
   const diff = Date.now() - time;
-  if (diff < 60 * 1000) return "刚刚";
-  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)} 分钟前`;
-  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)} 小时前`;
-  if (diff < 30 * 24 * 60 * 60 * 1000) return `${Math.floor(diff / 86400000)} 天前`;
+  if (diff < 60 * 1000) return tr("pages.format.agoJustNow");
+  if (diff < 60 * 60 * 1000) return tr("pages.format.agoMinutes", { count: Math.floor(diff / 60000) });
+  if (diff < 24 * 60 * 60 * 1000) return tr("pages.format.agoHours", { count: Math.floor(diff / 3600000) });
+  if (diff < 30 * 24 * 60 * 60 * 1000) return tr("pages.format.agoDays", { count: Math.floor(diff / 86400000) });
   return formatDate(new Date(time).toISOString());
 }
 
@@ -150,8 +159,8 @@ export function instanceMemory(instance: InstanceMeta): string {
 }
 
 /** 实例目录占用量：尚未统计（缺省）时说「计算中…」，统计到 0 也照实显示 "0 B"。 */
-export function instanceDiskUsage(instance: InstanceMeta): string {
+export function instanceDiskUsage(instance: InstanceMeta, tr: Translate): string {
   const bytes = instance.diskUsageBytes;
-  if (bytes === undefined || bytes === null || !Number.isFinite(bytes)) return "计算中…";
+  if (bytes === undefined || bytes === null || !Number.isFinite(bytes)) return tr("pages.format.diskCalculating");
   return formatBytes(bytes);
 }

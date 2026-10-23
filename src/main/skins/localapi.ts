@@ -18,10 +18,13 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { logger } from "../core/logger";
 import { selectedLocalCape } from "./capes";
 import { selectedLocalSkin } from "./local";
+import { mt } from "../core/i18n";
 
 const log = logger("skins");
 
-const SERVER_NAME = "NaiWa 本地皮肤";
+function serverName(): string {
+  return mt("skins.localServerName");
+}
 const IMPLEMENTATION_NAME = "NaiWa Launcher local skin API";
 const IMPLEMENTATION_VERSION = "0.2.2";
 /** 请求体上限：认证请求只有几百字节，超了直接当空体处理。 */
@@ -143,7 +146,7 @@ async function profilePayload(uuid: string): Promise<unknown | undefined> {
 
 const METADATA = {
   meta: {
-    serverName: SERVER_NAME,
+    serverName: serverName(),
     implementationName: IMPLEMENTATION_NAME,
     implementationVersion: IMPLEMENTATION_VERSION,
   },

@@ -2,16 +2,17 @@ import type { ReactNode } from "react";
 import type { ModProviderId } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatCount, formatDate } from "../lib/format";
+import { useT } from "../lib/i18n";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { Drawer } from "./Drawer";
 import { ErrorState, SkeletonRows } from "./State";
 import { useToast } from "./Toast";
 
-const PROVIDER_LABEL: Record<ModProviderId, string> = {
-  modrinth: "Modrinth",
-  curseforge: "CurseForge",
-  minekuai: "麦块社区（中文）",
-};
+/** 平台展示名：Modrinth / CurseForge 是专有名词保持英文，麦块社区按界面语言翻译。 */
+function providerName(id: ModProviderId, tr: (key: string, vars?: Record<string, string | number>) => string): string {
+  if (id === "minekuai") return tr("pages.modDetail.providerMinekuai");
+  return id === "modrinth" ? "Modrinth" : "CurseForge";
+}
 
 /** 版本标签最多展开 10 个，其余折叠成「+N」。 */
 const VERSION_LIMIT = 10;
@@ -44,6 +45,7 @@ export function ModDetailPanel({
   noInstance: boolean;
 }) {
   const { push } = useToast();
+  const tr = useT();
   const detail = useAsync(() => api.mods.detail(provider, projectId), [provider, projectId]);
   const data = detail.data;
   const sourceUrl = data?.sourceUrl ?? "";
@@ -54,7 +56,7 @@ export function ModDetailPanel({
     if (!sourceUrl) return;
     try {
       await api.app.openExternal(sourceUrl);
-      push("已在系统浏览器中打开项目主页", "success");
+      push(tr("pages.modDetail.openedHome"), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -64,7 +66,7 @@ export function ModDetailPanel({
     if (!sourceUrl) return;
     try {
       await api.app.copyText(sourceUrl);
-      push("项目链接已复制", "success");
+      push(tr("pages.modDetail.copied"), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -75,15 +77,15 @@ export function ModDetailPanel({
       <p className="mod-detail-foot-hint" data-install-hint>
         {installHint
           ?? (noInstance
-            ? "未选择实例：点「安装」会先让你在卡片上选目标实例。"
-            : `将安装到「${instanceName ?? ""}」`)}
+            ? tr("pages.modDetail.noInstanceHint")
+            : tr("pages.modDetail.installTo", { name: instanceName ?? "" }))}
       </p>
       <div className="mod-detail-foot-actions">
         <button type="button" className="btn btn-ghost" onClick={() => void openHome()} disabled={!sourceUrl} data-action="open-home">
-          打开项目主页
+          {tr("pages.modDetail.openHome")}
         </button>
         <button type="button" className="btn btn-ghost" onClick={() => void copyLink()} disabled={!sourceUrl} data-action="copy-link">
-          复制链接
+          {tr("pages.modDetail.copyLink")}
         </button>
         <button
           type="button"
@@ -92,7 +94,7 @@ export function ModDetailPanel({
           disabled={installing || !data}
           data-action="install"
         >
-          {installing ? (installingLabel ?? "安装中…") : (installLabel ?? "安装到当前实例")}
+          {installing ? (installingLabel ?? tr("pages.modDetail.installing")) : (installLabel ?? tr("pages.modDetail.installToCurrent"))}
         </button>
       </div>
     </>
@@ -103,7 +105,7 @@ export function ModDetailPanel({
       open={open}
       width={720}
       title={zhTitle ?? data?.title ?? fallbackTitle}
-      subtitle={data ? `${PROVIDER_LABEL[data.provider]} · ${data.author} · ${data.slug}` : undefined}
+      subtitle={data ? `${providerName(data.provider, tr)} · ${data.author} · ${data.slug}` : undefined}
       onClose={onClose}
       footer={footer}
     >
@@ -129,36 +131,36 @@ export function ModDetailPanel({
               ) : null}
               <p className="mod-detail-author">{data.author}</p>
               <div className="mod-detail-stats" data-mod-detail-fields>
-                <span><b data-field="downloads">{formatCount(data.downloads)}</b> 下载</span>
-                <span><b data-field="followers">{data.followers ? formatCount(data.followers) : "—"}</b> 关注</span>
-                <span><b data-field="license">{data.license ?? "未标注"}</b> 许可</span>
-                <span><b data-field="updatedAt">{data.updatedAt ? formatDate(data.updatedAt) : "—"}</b> 最后更新</span>
+                <span><b data-field="downloads">{formatCount(data.downloads, tr)}</b> {tr("pages.modDetail.downloads")}</span>
+                <span><b data-field="followers">{data.followers ? formatCount(data.followers, tr) : "—"}</b> {tr("pages.modDetail.followers")}</span>
+                <span><b data-field="license">{data.license ?? tr("pages.modDetail.unmarked")}</b> {tr("pages.modDetail.license")}</span>
+                <span><b data-field="updatedAt">{data.updatedAt ? formatDate(data.updatedAt) : "—"}</b> {tr("pages.modDetail.lastUpdated")}</span>
               </div>
             </div>
           </div>
 
           <section className="mod-detail-section">
-            <span className="field-label">简介</span>
+            <span className="field-label">{tr("pages.modDetail.summary")}</span>
             <p className="mod-detail-summary" data-mod-detail-summary>{summaryZh ?? data.summaryZh ?? data.summary}</p>
           </section>
 
           <section className="mod-detail-section">
-            <span className="field-label">完整介绍</span>
+            <span className="field-label">{tr("pages.modDetail.fullDescription")}</span>
             {/* 纯文本渲染：保留换行，不注入 HTML，避免介绍里的标签变成可执行内容。 */}
             <div className="mod-detail-body" data-mod-detail-body>{data.body}</div>
           </section>
 
           <section className="mod-detail-section">
-            <span className="field-label">标签</span>
+            <span className="field-label">{tr("pages.modDetail.tags")}</span>
             <div className="mod-detail-tags">
               <div className="mod-detail-tag-row">
-                <span className="mod-detail-tag-label">分类</span>
+                <span className="mod-detail-tag-label">{tr("pages.modDetail.categories")}</span>
                 {data.categories.length > 0
                   ? data.categories.map((category) => <span key={category} className="chip chip-sm">{category}</span>)
-                  : <span className="muted-text">未分类</span>}
+                  : <span className="muted-text">{tr("pages.modDetail.uncategorized")}</span>}
               </div>
               <div className="mod-detail-tag-row">
-                <span className="mod-detail-tag-label">游戏版本</span>
+                <span className="mod-detail-tag-label">{tr("pages.modDetail.gameVersions")}</span>
                 {data.gameVersions.slice(0, VERSION_LIMIT).map((version) => (
                   <span key={version} className="chip chip-sm">{version}</span>
                 ))}
@@ -167,27 +169,27 @@ export function ModDetailPanel({
                     +{data.gameVersions.length - VERSION_LIMIT}
                   </span>
                 ) : null}
-                {data.gameVersions.length === 0 ? <span className="muted-text">未标注</span> : null}
+                {data.gameVersions.length === 0 ? <span className="muted-text">{tr("pages.modDetail.unmarked")}</span> : null}
               </div>
               <div className="mod-detail-tag-row">
-                <span className="mod-detail-tag-label">加载器</span>
+                <span className="mod-detail-tag-label">{tr("pages.modDetail.loaders")}</span>
                 {data.loaders.length > 0
                   ? data.loaders.map((loader) => <span key={loader} className="chip chip-sm">{loader}</span>)
-                  : <span className="muted-text">通用</span>}
+                  : <span className="muted-text">{tr("pages.modDetail.anyLoader")}</span>}
               </div>
             </div>
           </section>
 
           {data.gallery.length > 0 ? (
             <section className="mod-detail-section">
-              <span className="field-label">画廊</span>
+              <span className="field-label">{tr("pages.modDetail.gallery")}</span>
               <div className="mod-gallery" data-mod-gallery>
                 {data.gallery.map((shot, index) => (
                   <img
                     key={`${index}-${shot.slice(0, 24)}`}
                     className="mod-gallery-shot"
                     src={shot}
-                    alt={`画廊图片 ${index + 1}`}
+                    alt={tr("pages.modDetail.galleryAlt", { index: index + 1 })}
                     data-gallery-item
                     loading="lazy"
                   />

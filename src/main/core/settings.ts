@@ -31,7 +31,7 @@ function clampUnit(value: unknown, fallback: number): number {
 /** 同时运行的游戏实例上限：默认一个，可在设置里放开。 */
 const GAME_LIMITS: Array<"one" | "unlimited"> = ["one", "unlimited"];
 const PROVIDER_IDS: ModProviderId[] = ["modrinth", "curseforge", "minekuai"];
-const LANGUAGES: Settings["language"][] = ["zh-CN", "en-US"];
+const LANGUAGES: Settings["language"][] = ["zh-CN", "en-US", "ja-JP"];
 
 let cached: Settings | null = null;
 let loaded = false;
@@ -77,6 +77,9 @@ export function defaults(): Settings {
     backgroundWallpaperEnabled: true,
     backgroundMode: "single",
     backgroundIntervalSec: 20,
+    backgroundStartupRandom: false,
+    apiBackgroundStartupRandom: false,
+    wallpaperBackgroundStartupRandom: false,
     apiBackgroundMode: "single",
     apiBackgroundIntervalSec: 20,
     wallpaperBackgroundMode: "single",
@@ -200,6 +203,9 @@ function normalize(raw: unknown, base: Settings): Settings {
     backgroundMode: pickEnum(src.backgroundMode, BACKGROUND_MODES, base.backgroundMode),
     backgroundIntervalSec: clampInt(src.backgroundIntervalSec, 5, 600, base.backgroundIntervalSec),
     // 新增的两个来源默认继承「本地」那套旧配置，老用户升级后观感一致
+    backgroundStartupRandom: pickBool(src.backgroundStartupRandom, base.backgroundStartupRandom),
+    apiBackgroundStartupRandom: pickBool(src.apiBackgroundStartupRandom, base.apiBackgroundStartupRandom),
+    wallpaperBackgroundStartupRandom: pickBool(src.wallpaperBackgroundStartupRandom, base.wallpaperBackgroundStartupRandom),
     apiBackgroundMode: pickEnum(src.apiBackgroundMode, BACKGROUND_MODES, base.backgroundMode),
     apiBackgroundIntervalSec: clampInt(src.apiBackgroundIntervalSec, 5, 600, base.backgroundIntervalSec),
     wallpaperBackgroundMode: pickEnum(src.wallpaperBackgroundMode, BACKGROUND_MODES, base.backgroundMode),

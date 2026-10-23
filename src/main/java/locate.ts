@@ -10,9 +10,12 @@ import { getVersionJson } from "../minecraft/manifest";
 import { readJavaMeta } from "./liberica";
 import { installJavaFrom } from "./sources";
 import { detectVendor } from "./vendor";
+import { mt } from "../core/i18n";
 
 const log = logger("java/locate");
-const VENDOR_UNKNOWN = "未知（系统安装）";
+function vendorUnknown(): string {
+  return mt("java.locate.vendorUnknown");
+}
 
 /** 扫描结果缓存：java -version 每次要几十到几百毫秒。 */
 let cache: InstalledJava[] | null = null;
@@ -151,7 +154,7 @@ export async function listInstalledJava(forceRefresh = false): Promise<Installed
   const seen = new Set<string>();
   const found: InstalledJava[] = [];
   for (const home of homes) {
-    const info = await scanHome(home, VENDOR_UNKNOWN);
+    const info = await scanHome(home, vendorUnknown());
     if (!info) continue;
     const key = normalize(info.path);
     if (seen.has(key)) continue;
@@ -250,13 +253,13 @@ export async function resolveJavaFor(mcVersion: string): Promise<string> {
     }
   }
   if (!getSettings().javaAutoDownload) {
-    throw new Error(`该版本需要 Java ${major}，当前未安装，请到 Java 页安装或允许自动下载`);
+    throw new Error(mt("java.requiredMissing", { major }));
   }
   log.info(`${mcVersion} 需要 Java ${major}，本机没有满足的版本，按设置的下载源自动安装`);
   const installed = await installJavaFrom(major);
   invalidateJavaCache();
   if (installed.major < major) {
-    throw new Error(`自动安装的 JDK 主版本 ${installed.major} 低于所需的 ${major}`);
+    throw new Error(mt("java.autoTooLow", { got: installed.major, need: major }));
   }
   log.info(`已安装 Java ${installed.major}（${installed.version}）：${installed.path}`);
   return installed.path;

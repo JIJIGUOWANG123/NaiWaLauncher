@@ -11,6 +11,7 @@ import { getSettings } from "../core/settings";
 import { ADOPTIUM_MAJORS, install as installAdoptium, listReleases as listAdoptium } from "./adoptium";
 import { install as installLiberica, listReleases as listLiberica } from "./liberica";
 import type { ManagedSource } from "./vendor";
+import { mt } from "../core/i18n";
 
 const log = logger("java/sources");
 
@@ -32,7 +33,9 @@ const PROBES: ProbeTarget[] = [
       "https://api.bell-sw.com/v1/liberica/releases?version-feature=21&os=windows&arch=x86&package-type=zip&bundle-type=jdk&bitness=64&output=json",
   },
   { source: "adoptium", label: "Adoptium Temurin", url: "https://api.adoptium.net/v3/info/available_releases" },
-  { source: "tuna", label: "清华 TUNA 镜像", url: "https://mirrors.tuna.tsinghua.edu.cn/Adoptium/" },
+  { source: "tuna", get label() {
+      return mt("java.source.tuna");
+    }, url: "https://mirrors.tuna.tsinghua.edu.cn/Adoptium/" },
 ];
 
 function messageOf(err: unknown): string {
@@ -62,7 +65,7 @@ async function probeOne(target: ProbeTarget): Promise<JavaSourceProbe> {
     label: target.label,
     latencyMs: best,
     ok: best !== null,
-    ...(best === null ? { detail: "无法连接或超时（" + PROBE_TIMEOUT_MS + "ms）" } : {}),
+    ...(best === null ? { detail: mt("java.sources.unreachable", { ms: PROBE_TIMEOUT_MS }) } : {}),
   };
 }
 

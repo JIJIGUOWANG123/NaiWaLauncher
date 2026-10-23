@@ -47,6 +47,7 @@ import {
   createServer, installLifecycle as installServerLifecycle, listEntries as listServerEntries,
   removeServer, sendCommand as sendServerCommand, startServer, stopServer, updateServer,
 } from "../servers/index";
+import { mt } from "../core/i18n";
 
 const handle = <T>(channel: string, fn: (...args: any[]) => Promise<T> | T): void => {
   ipcMain.handle(channel, async (_event, ...args: any[]) => fn(...args));
@@ -76,7 +77,7 @@ function assertInsideRoot(target: string): string {
   const root = getPaths().root;
   const resolved = resolve(target);
   const rel = relative(root, resolved);
-  if (rel.startsWith("..") || rel.includes(":")) throw new Error(`拒绝打开根目录之外的路径：${target}`);
+  if (rel.startsWith("..") || rel.includes(":")) throw new Error(mt("core.openOutsideRoot", { path: target }));
   return resolved;
 }
 
@@ -146,7 +147,7 @@ export function registerIpc(): void {
   // 导出到系统目录后的「打开所在文件夹」：shell.showItemInFolder 不受启动器根目录守卫限制
   handle<ChangelogSection[]>(IPC.appChangelog, (limit?: number) => getChangelog(limit));
   handle<void>(IPC.appReveal, (target: string) => {
-    if (!target) throw new Error("路径为空");
+    if (!target) throw new Error(mt("core.path.empty"));
     shell.showItemInFolder(resolve(target));
   });
 

@@ -9,6 +9,7 @@ import type { ServerConsoleLine, ServerEntry, ServerMeta, ServerStatus } from ".
 import { logger } from "../core/logger";
 import { findJavaHome, resolveRequiredMajor } from "../java/locate";
 import { readMeta, serverDir, writeMeta } from "./store";
+import { mt } from "../core/i18n";
 
 const log = logger("servers/process");
 
@@ -191,10 +192,10 @@ async function resolveJavaExe(mcVersion: string): Promise<string> {
   const major = await resolveRequiredMajor(mcVersion);
   const home = await findJavaHome(major);
   if (!home) {
-    throw new Error(`启动服务端需要 Java ${major}，本机没有检测到满足要求的 Java，请到「Java」页安装后再启动`);
+    throw new Error(mt("srv.javaRequired", { major }));
   }
   const exe = join(home, "bin", "java.exe");
-  if (!existsSync(exe)) throw new Error(`Java 安装不完整：${exe} 不存在，请重新安装 Java ${major}`);
+  if (!existsSync(exe)) throw new Error(mt("srv.javaIncomplete", { path: exe, major }));
   return exe;
 }
 
@@ -259,7 +260,7 @@ async function handleExit(
   const status: ServerStatus = rt.stopRequested || code === 0 ? "stopped" : "crashed";
   rt.stopRequested = false;
 
-  appendLine(id, "system", `进程已退出（exitCode=${code === null ? "null" : code}${signal ? ` · signal=${signal}` : ""}）`);
+  appendLine(id, "system", mt("srv.console.exited", { code: code === null ? "null" : code, signal: signal ? " · signal=" + signal : "" }));
   // 先落盘再唤醒等待者：stop() 返回时 server.json 里已经有 lastExitCode
   try {
     const meta = await readMeta(id);
@@ -302,7 +303,7 @@ async function doStart(id: string, rt: Runtime): Promise<ServerStatus> {
   rt.stopRequested = false;
   rt.partial = { stdout: "", stderr: "" };
   setStatus(id, "starting");
-  appendLine(id, "system", `启动 ${meta.name}：${base.command} ${base.args.join(" ")}`);
+  appendLine(id, "system", mt("srv.console.started", { name: meta.name, cmd: base.command, args: base.args.join(" ") }));
 
   let child: ChildProcess;
   try {
@@ -313,16 +314,16 @@ async function doStart(id: string, rt: Runtime): Promise<ServerStatus> {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    appendLine(id, "system", `启动失败：${message}`);
+    appendLine(id, "system", mt("srv.console.startFailed", { error: message }));
     setStatus(id, "crashed");
-    throw new Error(`启动服务端失败：${message}`);
+    throw new Error(mt("srv.startFailed", { error: message }));
   }
 
   rt.child = child;
   child.stdout?.on("data", (chunk: Buffer) => pipeLines(id, rt, "stdout", chunk));
   child.stderr?.on("data", (chunk: Buffer) => pipeLines(id, rt, "stderr", chunk));
   child.on("spawn", () => { if (rt.child === child) setStatus(id, "running"); });
-  child.on("error", (err) => { appendLine(id, "system", `进程错误：${err.message}`); });
+  child.on("error", (err) => { appendLine(id, "system", mt("srv.console.processError", { error: err.message })); });
   child.on("exit", (code, signal) => { void handleExit(id, rt, code, signal); });
 
   await writeMeta({ ...meta, lastStartedAt: Date.now() }).catch((err: unknown) => {
@@ -342,7 +343,7 @@ export async function stopServer(id: string): Promise<ServerStatus> {
 
   rt.stopRequested = true;
   setStatus(id, "stopping");
-  appendLine(id, "system", "正在停止服务端（发送 stop）…");
+  appendLine(id, "system", mt("srv.console.stopping"));
   try {
     child.stdin?.write("stop\n");
   } catch (err) {
@@ -350,10 +351,10 @@ export async function stopServer(id: string): Promise<ServerStatus> {
   }
 
   if (!(await waitExit(rt, STOP_TIMEOUT_MS)) && rt.child) {
-    appendLine(id, "system", `stop 后 ${Math.round(STOP_TIMEOUT_MS / 1000)}s 未退出，强制结束进程树`);
+    appendLine(id, "system", mt("srv.console.forceKill", { seconds: Math.round(STOP_TIMEOUT_MS / 1000) }));
     killTree(rt.child);
     if (!(await waitExit(rt, KILL_TIMEOUT_MS))) {
-      appendLine(id, "system", "进程仍未退出，请手动检查（可能已变成孤儿进程）");
+      appendLine(id, "system", mt("srv.console.stillRunning"));
       rt.child = null;
       setStatus(id, "stopped");
     }
@@ -366,8 +367,8 @@ export function sendCommand(id: string, line: string): void {
   const rt = runtime(id);
   const child = rt.child;
   const text = String(line ?? "").replace(/[\r\n]+/g, " ").trim();
-  if (!text) throw new Error("命令不能为空");
-  if (!child || !child.stdin || child.stdin.destroyed) throw new Error("服务端未在运行，无法执行命令");
+  if (!text) throw new Error(mt("srv.commandRequired"));
+  if (!child || !child.stdin || child.stdin.destroyed) throw new Error(mt("srv.notRunning"));
   appendLine(id, "system", `> ${text}`);
   child.stdin.write(text + "\n");
 }

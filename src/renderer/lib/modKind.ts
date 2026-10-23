@@ -1,6 +1,6 @@
 import type { ModFilesRequest, ModInstallRequest, ModSearchRequest } from "../../shared/ipc";
 import type { LoaderKind, ModContentKind, ModProviderId } from "../../shared/types";
-import { loaderLabel } from "./format";
+import { loaderLabel, type Translate } from "./format";
 
 /**
  * 渲染层的内容类型比 shared/types 多一个 datapack：
@@ -19,28 +19,31 @@ export type KindSearchRequest = ModSearchRequest & { kind: ModContentKind };
 export type KindFilesRequest = ModFilesRequest & { kind: ModContentKind };
 export type KindInstallRequest = ModInstallRequest & { kind: ModContentKind };
 
+/** 翻译器类型统一由 lib/format.ts 提供，这里转出去给页面按需引用。 */
+export type { Translate };
+
 /** 后端真正实现了的 kind（数据包尚未落地）。 */
 export function isBackendKind(kind: UiContentKind): kind is ModContentKind {
   return kind !== "datapack";
 }
 
 /** 一级标签：顺序与「资源」页顶部一致。 */
-export const KIND_TABS: Array<{ value: UiContentKind; label: string; disabled?: boolean; hint?: string }> = [
-  { value: "modpack", label: "整合包" },
-  { value: "mod", label: "模组" },
-  { value: "resourcepack", label: "资源包" },
-  { value: "datapack", label: "数据包", disabled: true, hint: "数据包暂不支持：后端还没有对应接口" },
-  { value: "map", label: "地图" },
-  { value: "shader", label: "光影包" },
+export const KIND_TABS: Array<{ value: UiContentKind; labelKey: string; disabled?: boolean; hintKey?: string }> = [
+  { value: "modpack", labelKey: "pages.mods.kindModpack" },
+  { value: "mod", labelKey: "pages.mods.kindMod" },
+  { value: "resourcepack", labelKey: "pages.mods.kindResourcepack" },
+  { value: "datapack", labelKey: "pages.mods.kindDatapack", disabled: true, hintKey: "pages.mods.kindDatapackHint" },
+  { value: "map", labelKey: "pages.mods.kindMap" },
+  { value: "shader", labelKey: "pages.mods.kindShader" },
 ];
 
 /** 卡片上的类型徽标；模组是默认内容，不加徽标。 */
-export const KIND_BADGE: Record<ModContentKind, string | null> = {
+export const KIND_BADGE_KEY: Record<ModContentKind, string | null> = {
   mod: null,
-  shader: "光影",
-  resourcepack: "资源包",
-  modpack: "整合包",
-  map: "地图",
+  shader: "pages.mods.badgeShader",
+  resourcepack: "pages.mods.badgeResourcepack",
+  modpack: "pages.mods.badgeModpack",
+  map: "pages.mods.badgeMap",
 };
 
 /** 主进程按 kind 落盘到不同目录，提示文案里要写出目录名。 */
@@ -53,66 +56,67 @@ export const KIND_DIR: Record<ModContentKind, string> = {
 };
 
 /** 详情面板底部安装按钮文案。 */
-export const KIND_INSTALL_LABEL: Record<ModContentKind, string> = {
-  mod: "安装到实例",
-  shader: "安装到 shaderpacks",
-  resourcepack: "安装到 resourcepacks",
-  modpack: "安装并创建实例",
-  map: "下载",
+export const KIND_INSTALL_LABEL_KEY: Record<ModContentKind, string> = {
+  mod: "pages.mods.installMod",
+  shader: "pages.mods.installShader",
+  resourcepack: "pages.mods.installResourcepack",
+  modpack: "pages.mods.installAndCreate",
+  map: "pages.mods.installMap",
 };
 
 /** 文件行里的按钮文案（比底部按钮短，避免撑破行宽）。 */
-export const KIND_FILE_ACTION: Record<ModContentKind, string> = {
-  mod: "安装",
-  shader: "安装",
-  resourcepack: "安装",
-  modpack: "安装并创建实例",
-  map: "下载",
+export const KIND_FILE_ACTION_KEY: Record<ModContentKind, string> = {
+  mod: "pages.mods.fileActionInstall",
+  shader: "pages.mods.fileActionInstall",
+  resourcepack: "pages.mods.fileActionInstall",
+  modpack: "pages.mods.installAndCreate",
+  map: "pages.mods.installMap",
 };
 
 /** 搜索框占位符。 */
-export const KIND_PLACEHOLDER: Record<UiContentKind, string> = {
-  mod: "支持中文，例如：钠 / 光影",
-  shader: "支持中文，例如：清新光影 / BSL",
-  resourcepack: "支持中文，例如：材质 / 原版增强",
-  modpack: "支持中文，例如：空岛 / 工业",
-  datapack: "数据包暂不支持",
-  map: "支持中文，例如：空岛 / 生存",
+export const KIND_PLACEHOLDER_KEY: Record<UiContentKind, string> = {
+  mod: "pages.mods.placeholderMod",
+  shader: "pages.mods.placeholderShader",
+  resourcepack: "pages.mods.placeholderResourcepack",
+  modpack: "pages.mods.placeholderModpack",
+  datapack: "pages.mods.placeholderDatapack",
+  map: "pages.mods.placeholderMap",
 };
 
-export function kindLabel(kind: UiContentKind): string {
-  return KIND_TABS.find((tab) => tab.value === kind)?.label ?? kind;
+export function kindLabel(kind: UiContentKind, tr: Translate): string {
+  const key = KIND_TABS.find((tab) => tab.value === kind)?.labelKey;
+  return key ? tr(key) : kind;
 }
 
 /** 结果为空时的提示。 */
-export const KIND_EMPTY_HINT: Record<UiContentKind, string> = {
-  mod: "换个关键词试试，或切换来源。",
-  shader: "换个关键词试试，或清空左侧筛选。",
-  resourcepack: "换个关键词试试，或清空左侧筛选。",
-  modpack: "换个关键词试试，或清空左侧筛选。",
-  datapack: "数据包暂不支持。",
-  map: "换个关键词试试，地图列表来自麦块社区。",
+export const KIND_EMPTY_HINT_KEY: Record<UiContentKind, string> = {
+  mod: "pages.mods.emptyHintMod",
+  shader: "pages.mods.emptyHintFilter",
+  resourcepack: "pages.mods.emptyHintFilter",
+  modpack: "pages.mods.emptyHintFilter",
+  datapack: "pages.mods.emptyHintDatapack",
+  map: "pages.mods.emptyHintMap",
 };
 
-/** 卡片上的来源徽标。 */
-export const SOURCE_BADGE: Record<ModProviderId, string> = {
-  modrinth: "Modrinth",
-  curseforge: "CurseForge",
-  minekuai: "麦块",
-};
+/** 卡片上的来源徽标：Modrinth / CurseForge 是专有名词，麦块走词典。 */
+export function sourceBadge(provider: ModProviderId, tr: Translate): string {
+  if (provider === "minekuai") return tr("pages.mods.badgeMinekuai");
+  return provider === "modrinth" ? "Modrinth" : "CurseForge";
+}
 
 /** 排序下拉。 */
-export const SORT_OPTIONS: Array<{ value: ModSort; label: string }> = [
-  { value: "relevance", label: "相关性" },
-  { value: "downloads", label: "下载量" },
-  { value: "updated", label: "最近更新" },
+export const SORT_OPTIONS_KEY: Array<{ value: ModSort; labelKey: string }> = [
+  { value: "relevance", labelKey: "pages.mods.sortRelevance" },
+  { value: "downloads", labelKey: "pages.mods.sortDownloads" },
+  { value: "updated", labelKey: "pages.mods.sortUpdated" },
 ];
 
 const LOADER_KINDS: readonly string[] = ["vanilla", "fabric", "quilt", "forge", "neoforge", "liteloader"];
 
-/** 加载器下拉的文案：已知加载器走中文标签，未知值原样显示。 */
-export function loaderOptionLabel(value: string): string {
-  return LOADER_KINDS.includes(value) ? loaderLabel(value as LoaderKind) : value;
+/** 加载器下拉的文案：原版走词典，其余加载器是专有名词，未知值原样显示。 */
+export function loaderOptionLabel(value: string, tr: Translate): string {
+  if (value === "vanilla") return tr("pages.mods.loaderVanilla");
+  return LOADER_KINDS.includes(value) ? loaderLabel(value as LoaderKind, tr) : value;
 }
 
 /** 加载器下拉只在模组 / 整合包下出现。 */
@@ -126,8 +130,8 @@ export function showsResolution(kind: UiContentKind): boolean {
 }
 
 /** 地图来源说明（页面顶部固定展示）。 */
-export const MAPS_NOTICE = "地图列表来自麦块社区；下载需登录，启动器暂只支持浏览与版本适配提示";
+export const MAPS_NOTICE_KEY = "pages.mods.mapsNotice";
 /** 麦块社区的地图页：没有直链时让用户在浏览器里下载。 */
 export const MAPS_WEB_URL = "https://bbs.minekuai.com/resources/maps";
 /** 无直链时按钮旁的提示。 */
-export const MAPS_LOGIN_HINT = "需登录麦块社区下载";
+export const MAPS_LOGIN_HINT_KEY = "pages.mods.mapsLoginHint";

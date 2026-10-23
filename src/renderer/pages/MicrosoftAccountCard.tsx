@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DeviceCodeChallenge } from "../../shared/types";
 import { api } from "../lib/api";
 import { copyText } from "../lib/clipboard";
+import { useT } from "../lib/i18n";
 import { useApp } from "../lib/store";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
@@ -34,6 +35,7 @@ function applicationTemplate(clientId: string): string {
 export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void }) {
   const { settings, applySettings } = useApp();
   const { push } = useToast();
+  const tr = useT();
   const saved = settings?.microsoftClientIdManual ?? "";
   const effectiveClientId = (saved.trim() || settings?.microsoftClientId || "").trim();
   const [draft, setDraft] = useState(saved);
@@ -62,9 +64,9 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
   useEffect(() => {
     if (!challenge || !polling || remaining > 0) return;
     setPolling(false);
-    setError("设备码已过期，请重新登录。");
+    setError(tr("pages.msAccount.codeExpired"));
     setGuide(null);
-    push("设备码已过期，请重新登录。", "error");
+    push(tr("pages.msAccount.codeExpired"), "error");
   }, [challenge, polling, remaining, push]);
 
   const intervalMs = Math.max(1, challenge?.interval ?? 5) * 1000;
@@ -87,7 +89,7 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
           setChallenge(null);
           setError(null);
           setGuide(null);
-          push(`微软账号「${state.account.name}」登录成功`, "success");
+          push(tr("pages.msAccount.loginSuccess", { name: state.account.name }), "success");
           loggedInRef.current();
           return;
         }
@@ -130,12 +132,12 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
 
   const recopyCode = async (code: string) => {
     const ok = await copyToClipboard(code);
-    push(ok ? `代码 ${code} 已复制` : "复制失败，请手动复制设备码", ok ? "success" : "error");
+    push(ok ? tr("pages.msAccount.codeCopied", { code }) : tr("pages.msAccount.copyFailed"), ok ? "success" : "error");
   };
 
   const copyTemplate = async () => {
     const ok = await copyToClipboard(applicationTemplate(effectiveClientId));
-    push(ok ? "申请模板已复制，可直接粘贴到审批表单" : "复制失败，请手动复制模板", ok ? "success" : "error");
+    push(ok ? tr("pages.msAccount.templateCopied") : tr("pages.msAccount.templateCopyFailed"), ok ? "success" : "error");
   };
 
   const saveClientId = async () => {
@@ -144,11 +146,16 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
       const next = await api.settings.update({ microsoftClientIdManual: draft.trim() });
       const reread = await api.settings.get();
       if ((reread.microsoftClientIdManual ?? "") !== (next.microsoftClientIdManual ?? "")) {
-        throw new Error("client id 保存后回读不一致，请重试。");
+        throw new Error(tr("pages.msAccount.clientIdMismatch"));
       }
       applySettings(reread);
       setDraft(reread.microsoftClientIdManual ?? "");
-      push((reread.microsoftClientIdManual ?? "").trim() ? "已保存自定义 client id，将不再使用内置 id" : "已清空自定义 id，改回使用内置公共 id", "success");
+      push(
+        (reread.microsoftClientIdManual ?? "").trim()
+          ? tr("pages.msAccount.clientIdSaved")
+          : tr("pages.msAccount.clientIdCleared"),
+        "success",
+      );
     } catch (failure: unknown) {
       push(errorMessage(failure), "error");
     } finally {
@@ -170,8 +177,8 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
       // 设备码登录最省事的一步：代码进剪贴板、浏览器直接打开，用户只需粘贴并授权。
       const copied = await copyToClipboard(next.userCode);
       await openExternal(next.verificationUri);
-      push(`代码 ${next.userCode} 已复制，浏览器已打开；粘贴后完成授权`, copied ? "success" : "info");
-      if (!copied) push("复制失败，请手动复制设备码", "error");
+      push(tr("pages.msAccount.codeCopiedOpened", { code: next.userCode }), copied ? "success" : "info");
+      if (!copied) push(tr("pages.msAccount.copyFailed"), "error");
     } catch (failure: unknown) {
       const message = errorMessage(failure);
       setError(message);
@@ -186,7 +193,7 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
     setPolling(false);
     setChallenge(null);
     setRemaining(0);
-    push("已取消微软登录", "info");
+    push(tr("pages.msAccount.cancelled"), "info");
   };
 
   // 留空时使用内置公共 id，因此只要生效值存在就允许点击登录
@@ -194,28 +201,28 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
   const clock = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
 
   return (
-    <section className="panel account-add" aria-label="微软账号">
+    <section className="panel account-add" aria-label={tr("pages.msAccount.title")}>
       <div className="panel-head">
-        <h2 className="panel-title">微软账号</h2>
-        <span className="panel-count">设备码登录</span>
+        <h2 className="panel-title">{tr("pages.msAccount.title")}</h2>
+        <span className="panel-count">{tr("pages.msAccount.deviceCodeLogin")}</span>
       </div>
 
       <p className="account-note">
-        需在 Azure 门户注册应用，重定向类型选「公共客户端」，API 权限勾选 XboxLive.signin；把应用 ID 填在这里。
+        {tr("pages.msAccount.note")}
         <button type="button" className="account-link" onClick={() => void openExternal(AZURE_URL)}>
-          打开 Azure 门户
+          {tr("pages.msAccount.openAzure")}
         </button>
       </p>
 
       <Field
-        label="Azure 应用 client id"
-        hint="留空则使用内置公共 client id；填入自己的 id 后将**不再**使用内置。报 AADSTS70002 需在 Azure 门户开启「允许公共客户端流」，报 AppID 审批需向 Mojang 提交申请。"
+        label={tr("pages.msAccount.clientIdLabel")}
+        hint={tr("pages.msAccount.clientIdHint")}
       >
         <div className="account-row">
           <TextInput
             value={draft}
-            aria-label="微软 client id"
-            placeholder="留空 = 使用内置公共 client id"
+            aria-label={tr("pages.msAccount.clientIdAria")}
+            placeholder={tr("pages.msAccount.clientIdPlaceholder")}
             onChange={(event) => setDraft(event.target.value)}
           />
           <button
@@ -224,14 +231,14 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
             onClick={() => void saveClientId()}
             disabled={saving || draft.trim() === saved}
           >
-            {saving ? "保存中…" : "保存"}
+            {saving ? tr("pages.common.saving") : tr("pages.common.save")}
           </button>
         </div>
       </Field>
 
       {challenge ? (
-        <div className="device-code" aria-label="设备码登录">
-          <span className="device-code-label">代码已复制、浏览器已打开，粘贴到页面即可完成授权</span>
+        <div className="device-code" aria-label={tr("pages.msAccount.deviceCodeLogin")}>
+          <span className="device-code-label">{tr("pages.msAccount.deviceCodeLabel")}</span>
           <strong className="device-code-value" data-device-user-code>{challenge.userCode}</strong>
           <button
             type="button"
@@ -242,7 +249,7 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
             {challenge.verificationUri}
           </button>
           <p className="device-code-meta" data-device-meta>
-            {polling ? `等待授权… 剩余 ${clock} · 已轮询 ${polls} 次` : "已停止轮询"}
+            {polling ? tr("pages.msAccount.waitingAuth", { time: clock, count: polls }) : tr("pages.msAccount.pollingStopped")}
           </p>
           <div className="account-row">
             <button
@@ -251,7 +258,7 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
               onClick={() => void recopyCode(challenge.userCode)}
               data-copy-code
             >
-              重新复制
+              {tr("pages.msAccount.recopy")}
             </button>
             <button
               type="button"
@@ -259,10 +266,10 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
               onClick={() => void openExternal(challenge.verificationUri)}
               data-open-browser
             >
-              重新打开
+              {tr("pages.msAccount.reopen")}
             </button>
             <button type="button" className="btn btn-ghost btn-danger-ghost btn-sm" onClick={cancelLogin}>
-              取消
+              {tr("pages.common.cancel")}
             </button>
           </div>
         </div>
@@ -274,7 +281,7 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
             onClick={() => void startLogin()}
             disabled={starting || polling || !hasClientId}
           >
-            {starting ? "正在获取设备码…" : "使用微软账号登录"}
+            {starting ? tr("pages.msAccount.fetchingCode") : tr("pages.msAccount.signIn")}
           </button>
           
         </div>
@@ -282,11 +289,8 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
 
       {guide === "appid" ? (
         <div className="ms-guide" role="alert" data-guide="appid">
-          <p className="ms-guide-title">该 Azure 应用需通过 Mojang AppID 审批</p>
-          <p className="ms-guide-text">
-            Mojang 只给通过审批的公共客户端应用发放 Minecraft 登录权限。可以先复制申请模板提交审批，或把 client id
-            换成你自己已获批的应用。
-          </p>
+          <p className="ms-guide-title">{tr("pages.msAccount.appidTitle")}</p>
+          <p className="ms-guide-text">{tr("pages.msAccount.appidText")}</p>
           <div className="account-row">
             <button
               type="button"
@@ -294,10 +298,10 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
               onClick={() => void openExternal(APPROVAL_URL)}
               data-approval-link
             >
-              打开审批说明页
+              {tr("pages.msAccount.openApproval")}
             </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => void copyTemplate()} data-copy-template>
-              复制申请模板
+              {tr("pages.msAccount.copyTemplate")}
             </button>
           </div>
         </div>
@@ -305,11 +309,8 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
 
       {guide === "aadsts" ? (
         <div className="ms-guide" role="alert" data-guide="aadsts">
-          <p className="ms-guide-title">到 Azure 门户开启允许公共客户端流</p>
-          <p className="ms-guide-text">
-            AADSTS70002 说明该应用没开启公共客户端（设备码）流：在 Azure 门户 → 应用 → 身份验证里把「允许公共客户端流」
-            设为「是」并保存，然后重新登录。
-          </p>
+          <p className="ms-guide-title">{tr("pages.msAccount.aadstsTitle")}</p>
+          <p className="ms-guide-text">{tr("pages.msAccount.aadstsText")}</p>
           <div className="account-row">
             <button
               type="button"
@@ -317,7 +318,7 @@ export function MicrosoftAccountCard({ onLoggedIn }: { onLoggedIn: () => void })
               onClick={() => void openExternal(AZURE_URL)}
               data-azure-link
             >
-              打开 Azure 门户
+              {tr("pages.msAccount.openAzure")}
             </button>
           </div>
         </div>

@@ -12,6 +12,7 @@ import { logger } from "../core/logger";
 import { getPaths, instanceDir } from "../core/paths";
 import { assertLoaderKind, createInstance, createInstanceRecord, getInstance, listInstances } from "./instances";
 import { isVersionInstalled } from "./install";
+import { mt } from "../core/i18n";
 
 const log = logger("share");
 
@@ -104,16 +105,16 @@ async function writeArchive(
   target: string,
   task: TaskHandle,
 ): Promise<InstanceExportResult> {
-  task.update({ stage: "收集实例文件", percent: null });
+  task.update({ stage: mt("share.stage.collect"), percent: null });
   const files = await collectFiles(root);
-  if (files.length === 0) throw new Error(`实例「${instance.name}」没有任何可打包的文件`);
+  if (files.length === 0) throw new Error(mt("share.empty", { name: instance.name }));
 
   const zip = new AdmZip();
   for (const [index, file] of files.entries()) {
     // adm-zip 没有流式写入接口，只能整块读入内存后逐个加条目
     zip.addFile(file.rel, await fs.readFile(file.abs));
     task.update({
-      stage: `打包 ${index + 1}/${files.length}`,
+      stage: mt("share.stage.pack", { done: index + 1, total: files.length }),
       filesDone: index + 1,
       filesTotal: files.length,
       percent: (index + 1) / files.length,
@@ -132,12 +133,12 @@ async function writeArchive(
   };
   zip.addFile(MANIFEST_NAME, Buffer.from(JSON.stringify(manifest, null, 2), "utf8"));
 
-  task.update({ stage: "写入压缩包", percent: null });
+  task.update({ stage: mt("share.stage.writeArchive"), percent: null });
   await fs.mkdir(dirname(target), { recursive: true });
   try {
     await zip.writeZipPromise(target, { overwrite: true });
   } catch (err) {
-    throw new Error(`压缩包写入失败：${messageOf(err)}`);
+    throw new Error(mt("share.writeFailed", { error: messageOf(err) }));
   }
   const sizeBytes = (await fs.stat(target)).size;
   return { path: target, name: instance.name, sizeBytes };
@@ -149,18 +150,18 @@ async function writeArchive(
  */
 export async function exportInstance(id: string): Promise<InstanceExportResult> {
   const instance = await getInstance(id);
-  if (!instance) throw new Error(`实例不存在：${id}`);
+  if (!instance) throw new Error(mt("inst.notFound", { id }));
   const root = instanceDir(id);
-  if (!existsSync(root)) throw new Error(`实例目录不存在：${root}`);
+  if (!existsSync(root)) throw new Error(mt("share.dirMissing", { path: root }));
 
   const picked = await dialog.showSaveDialog({
-    title: "导出实例",
+    title: mt("share.dialogExport"),
     defaultPath: defaultSavePath(suggestionFileName(instance.name, instance.mcVersion)),
-    filters: [{ name: "实例压缩包", extensions: ["zip"] }],
+    filters: [{ name: mt("share.filterName"), extensions: ["zip"] }],
   });
   if (picked.canceled || !picked.filePath) return { path: null, name: instance.name, sizeBytes: 0 };
 
-  const task = createTask("generic", `导出实例 ${instance.name}`);
+  const task = createTask("generic", mt("share.exportTitle", { name: instance.name }));
   try {
     const result = await writeArchive(instance, root, picked.filePath, task);
     task.done(result);
@@ -178,25 +179,25 @@ function readManifest(zipPath: string): InstanceManifest {
   try {
     zip = new AdmZip(zipPath);
   } catch (err) {
-    throw new Error(`不是有效的 NaiWa 实例包：压缩包打不开（${messageOf(err)}）`);
+    throw new Error(mt("share.badPackageZip", { error: messageOf(err) }));
   }
   const entry = zip.getEntry(MANIFEST_NAME);
-  if (!entry) throw new Error(`不是有效的 NaiWa 实例包：压缩包根部缺少 ${MANIFEST_NAME}`);
+  if (!entry) throw new Error(mt("share.badPackageManifest", { file: MANIFEST_NAME }));
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(entry.getData().toString("utf8"));
   } catch (err) {
-    throw new Error(`不是有效的 NaiWa 实例包：${MANIFEST_NAME} 不是合法 JSON（${messageOf(err)}）`);
+    throw new Error(mt("share.badPackageJson", { file: MANIFEST_NAME, error: messageOf(err) }));
   }
   if (!parsed || typeof parsed !== "object") {
-    throw new Error(`不是有效的 NaiWa 实例包：${MANIFEST_NAME} 内容不是对象`);
+    throw new Error(mt("share.badPackageShape", { file: MANIFEST_NAME }));
   }
   const raw = parsed as Partial<InstanceManifest>;
   const formatVersion = Number(raw.formatVersion);
-  if (!Number.isFinite(formatVersion)) throw new Error(`不是有效的 NaiWa 实例包：${MANIFEST_NAME} 缺少 formatVersion`);
+  if (!Number.isFinite(formatVersion)) throw new Error(mt("share.badPackageFormat", { file: MANIFEST_NAME }));
   if (formatVersion > FORMAT_VERSION) {
-    throw new Error(`不是有效的 NaiWa 实例包：formatVersion ${formatVersion} 需要更新版本的启动器`);
+    throw new Error(mt("share.badPackageTooNew", { format: formatVersion }));
   }
   return { ...raw, formatVersion } as InstanceManifest;
 }
@@ -204,15 +205,15 @@ function readManifest(zipPath: string): InstanceManifest {
 /** 清单里的实例名：去控制字符、压掉 Windows 保留字符、截到上限。 */
 function validInstanceName(raw: unknown): string {
   const name = typeof raw === "string" ? raw.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/[\\/:*?"<>|]/g, "-").trim() : "";
-  if (!name) throw new Error(`实例包里的实例名不合法：${typeof raw === "string" ? raw.trim() || "（空）" : "（缺失）"}`);
-  return name.slice(0, MAX_NAME_LEN).replace(/[ .]+$/, "") || "导入实例";
+  if (!name) throw new Error(mt("share.badName", { value: typeof raw === "string" ? raw.trim() || mt("common.empty") : mt("common.missing") }));
+  return name.slice(0, MAX_NAME_LEN).replace(/[ .]+$/, "") || mt("share.defaultInstanceName");
 }
 
 /** 清单里的原版版本号：只允许版本 id 里会出现的字符。 */
 function validMcVersion(raw: unknown): string {
   const version = typeof raw === "string" ? raw.trim() : "";
   if (!/^[0-9A-Za-z][0-9A-Za-z._-]{0,31}$/.test(version)) {
-    throw new Error(`实例包里的 Minecraft 版本不合法：${version || "（空）"}`);
+    throw new Error(mt("share.badMcVersion", { version: version || mt("common.empty") }));
   }
   return version;
 }
@@ -226,19 +227,19 @@ function uniqueInstanceName(desired: string, taken: string[]): string {
     const candidate = desired.slice(0, MAX_NAME_LEN - suffix.length).replace(/[ .]+$/, "") + suffix;
     if (!used.has(candidate)) return candidate;
   }
-  throw new Error(`实例名「${desired}」的重名序号已用尽，请换个名字`);
+  throw new Error(mt("share.nameExhausted", { name: desired }));
 }
 
 /** 路径分段：绝对路径、盘符、穿越、控制字符一律拒绝。 */
 function entrySegments(raw: string): string[] {
   const text = raw.trim().replace(/\\/g, "/");
-  if (!text) throw new Error("路径为空");
-  if (text.includes("\u0000")) throw new Error("路径含控制字符");
-  if (text.startsWith("/")) throw new Error("绝对路径");
-  if (/^[A-Za-z]:/.test(text)) throw new Error("盘符路径");
+  if (!text) throw new Error(mt("core.path.empty"));
+  if (text.includes("\u0000")) throw new Error(mt("core.path.controlChar"));
+  if (text.startsWith("/")) throw new Error(mt("core.path.absolute"));
+  if (/^[A-Za-z]:/.test(text)) throw new Error(mt("core.path.drive"));
   const segments = text.split("/").filter((segment) => segment !== "" && segment !== ".");
-  if (segments.length === 0) throw new Error("路径为空");
-  if (segments.some((segment) => segment === "..")) throw new Error("含目录穿越（..）");
+  if (segments.length === 0) throw new Error(mt("core.path.empty"));
+  if (segments.some((segment) => segment === "..")) throw new Error(mt("core.path.traversal"));
   return segments;
 }
 
@@ -247,7 +248,7 @@ function resolveInside(root: string, segments: string[]): string {
   const dest = join(root, ...segments);
   const base = resolve(root);
   const abs = resolve(dest);
-  if (abs !== base && !abs.startsWith(base + sep)) throw new Error(`路径越界：${segments.join("/")}`);
+  if (abs !== base && !abs.startsWith(base + sep)) throw new Error(mt("core.path.escape", { path: segments.join("/") }));
   return dest;
 }
 
@@ -273,7 +274,7 @@ async function extractArchive(zipPath: string, targetRoot: string, task: TaskHan
     if (segments.length === 1 && segments[0] === MANIFEST_NAME) continue;
 
     task.update({
-      stage: `解压 ${index + 1}/${entries.length}`,
+      stage: mt("share.stage.unpack", { done: index + 1, total: entries.length }),
       filesDone: index + 1,
       filesTotal: entries.length,
       percent: (index + 1) / entries.length,
@@ -344,9 +345,9 @@ async function installedVersionId(
  */
 export async function importInstance(): Promise<InstanceImportResult> {
   const picked = await dialog.showOpenDialog({
-    title: "导入实例",
+    title: mt("share.dialogImport"),
     properties: ["openFile"],
-    filters: [{ name: "实例压缩包", extensions: ["zip"] }],
+    filters: [{ name: mt("share.filterName"), extensions: ["zip"] }],
   });
   if (picked.canceled || picked.filePaths.length === 0) return { instanceId: null, name: "" };
 
@@ -358,11 +359,11 @@ export async function importInstance(): Promise<InstanceImportResult> {
   const loaderVersion = typeof manifest.loaderVersion === "string" ? manifest.loaderVersion.trim() || undefined : undefined;
   const name = uniqueInstanceName(desiredName, (await listInstances()).map((instance) => instance.name));
 
-  const task = createTask("generic", `导入实例 ${name}`);
+  const task = createTask("generic", mt("share.importTitle", { name }));
   const tempDir = await fs.mkdtemp(join(tmpdir(), "naiwa-instance-"));
   let created: InstanceMeta | undefined;
   try {
-    task.update({ stage: "解压压缩包", percent: null });
+    task.update({ stage: mt("share.stage.extractArchive"), percent: null });
     const extracted = await extractArchive(zipPath, tempDir, task);
     if (extracted.rejected > 0) log.warn(`实例包「${desiredName}」有 ${extracted.rejected} 个越界条目被拒绝，其余内容照常导入`);
 
@@ -373,7 +374,7 @@ export async function importInstance(): Promise<InstanceImportResult> {
     let instance: InstanceMeta;
     if (versionId === undefined) {
       task.update({
-        stage: loader === "vanilla" ? `安装原版 ${mcVersion}` : `安装加载器 ${loader} ${loaderVersion ?? ""}`.trim(),
+        stage: loader === "vanilla" ? mt("share.stage.installVanilla", { version: mcVersion }) : mt("share.stage.installLoader", { loader, version: loaderVersion ?? "" }).trim(),
         percent: null,
       });
       instance = await createInstance({
@@ -393,7 +394,7 @@ export async function importInstance(): Promise<InstanceImportResult> {
     }
     created = instance;
 
-    task.update({ stage: "写入实例目录", percent: null });
+    task.update({ stage: mt("share.stage.writeInstance"), percent: null });
     await fs.cp(tempDir, instanceDir(instance.id), { recursive: true });
 
     const result: InstanceImportResult = {
@@ -403,9 +404,7 @@ export async function importInstance(): Promise<InstanceImportResult> {
     };
     task.done(result);
     log.info(
-      `实例「${instance.name}」导入完成（${instance.id}）：${instance.mcVersion} / ${instance.loader}${
-        instance.loaderVersion ? " " + instance.loaderVersion : ""
-      }${versionId === undefined ? " · 已补装缺失的原版/加载器" : ""}`,
+      mt("share.importDone", { name: instance.name, id: instance.id, mc: instance.mcVersion, loader: instance.loader + (instance.loaderVersion ? " " + instance.loaderVersion : ""), extra: versionId === undefined ? mt("share.importLoaderPatched") : "" }),
     );
     return result;
   } catch (err) {
@@ -413,8 +412,8 @@ export async function importInstance(): Promise<InstanceImportResult> {
     const reason = messageOf(err);
     throw new Error(
       created
-        ? `导入实例失败：${reason}；已新建的实例「${created.name}」（${created.id}）保留，可在实例列表里删除`
-        : `导入实例失败：${reason}`,
+        ? mt("share.importFailedKept", { reason, name: created.name, id: created.id })
+        : mt("share.importFailed", { reason }),
     );
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true }).catch((err: unknown) => {

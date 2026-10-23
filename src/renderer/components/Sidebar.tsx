@@ -2,38 +2,41 @@ import type { ComponentType } from "react";
 import { useApp, type PageId } from "../lib/store";
 import { useTasks } from "../lib/tasks";
 import { isMockApi } from "../lib/api";
+import { useT } from "../lib/i18n";
 import { IconDownload, IconInfo, IconInstances, IconJava, IconList, IconMods, IconPalette, IconRocket, IconSettings, IconSkin, IconSliders, IconUser, IconWifi, IconZap } from "./icons";
 
 interface NavItem {
   id: PageId;
-  label: string;
+  /** i18n key：导航名随界面语言切换。 */
+  labelKey: string;
   Icon: ComponentType<{ size?: number }>;
 }
 
 const NAV: NavItem[] = [
-  { id: "instances", label: "实例", Icon: IconInstances },
-  { id: "servers", label: "开服", Icon: IconZap },
-  { id: "accounts", label: "账号", Icon: IconUser },
-  { id: "skins", label: "皮肤", Icon: IconSkin },
-  { id: "download", label: "游戏", Icon: IconDownload },
-  { id: "downloads", label: "管理", Icon: IconList },
-  { id: "mods", label: "资源", Icon: IconMods },
-  { id: "net", label: "联机", Icon: IconWifi },
-  { id: "java", label: "Java", Icon: IconJava },
-  { id: "personalize", label: "个性化", Icon: IconPalette },
-  { id: "launch", label: "启动", Icon: IconRocket },
-  { id: "other", label: "其它", Icon: IconSliders },
-  { id: "about", label: "关于", Icon: IconInfo },
-  { id: "settings", label: "设置", Icon: IconSettings },
+  { id: "instances", labelKey: "nav.instances", Icon: IconInstances },
+  { id: "servers", labelKey: "nav.servers", Icon: IconZap },
+  { id: "accounts", labelKey: "nav.accounts", Icon: IconUser },
+  { id: "skins", labelKey: "nav.skins", Icon: IconSkin },
+  { id: "download", labelKey: "nav.download", Icon: IconDownload },
+  { id: "downloads", labelKey: "nav.downloads", Icon: IconList },
+  { id: "mods", labelKey: "nav.mods", Icon: IconMods },
+  { id: "net", labelKey: "nav.net", Icon: IconWifi },
+  { id: "java", labelKey: "nav.java", Icon: IconJava },
+  { id: "personalize", labelKey: "nav.personalize", Icon: IconPalette },
+  { id: "launch", labelKey: "nav.launch", Icon: IconRocket },
+  { id: "other", labelKey: "nav.other", Icon: IconSliders },
+  { id: "about", labelKey: "nav.about", Icon: IconInfo },
+  { id: "settings", labelKey: "nav.settings", Icon: IconSettings },
 ];
 
 export function Sidebar() {
   const { page, navigate, info, update } = useApp();
   const { runningCount } = useTasks();
+  const tr = useT();
 
   return (
     <aside className="sidebar">
-      <nav className="nav" aria-label="主导航">
+      <nav className="nav" aria-label={tr("nav.main")}>
         {NAV.map((item) => (
           <button
             key={item.id}
@@ -45,11 +48,11 @@ export function Sidebar() {
             <span className="nav-icon">
               <item.Icon size={19} />
             </span>
-            <span>{item.label}</span>
+            <span>{tr(item.labelKey)}</span>
             {item.id === "instances" && runningCount > 0 ? <span className="nav-dot" aria-hidden="true" /> : null}
             {item.id === "about" && update?.hasUpdate ? (
-              <span className="nav-badge" data-nav-update title={`有新版本 v${update.latest}`}>
-                新
+              <span className="nav-badge" data-nav-update title={tr("shell.updateTitle", { version: update.latest ?? "" })}>
+                {tr("shell.updateBadge")}
               </span>
             ) : null}
           </button>
@@ -57,7 +60,9 @@ export function Sidebar() {
       </nav>
 
       <div className="sidebar-foot">
-        {isMockApi ? <span className="mock-badge">浏览器预览 · 假数据</span> : <span className="mock-badge live">已连接主进程</span>}
+        {isMockApi
+          ? <span className="mock-badge">{tr("shell.mock")}</span>
+          : <span className="mock-badge live">{tr("shell.live")}</span>}
         <span className="version-line">
           {info ? `v${info.version}` : "v0.1.5"}
           {update?.hasUpdate ? (
@@ -65,8 +70,8 @@ export function Sidebar() {
               type="button"
               className="version-dot"
               data-version-dot
-              title={`有新版本 v${update.latest}，点此查看`}
-              aria-label={`有新版本 v${update.latest}，点此查看`}
+              title={tr("shell.updateHint", { version: update.latest ?? "" })}
+              aria-label={tr("shell.updateHint", { version: update.latest ?? "" })}
               onClick={() => navigate("about")}
             />
           ) : null}

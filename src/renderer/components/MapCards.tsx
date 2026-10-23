@@ -1,6 +1,7 @@
 import type { MapEntry } from "../../shared/types";
 import { formatBytes } from "../lib/format";
-import { MAPS_LOGIN_HINT } from "../lib/modKind";
+import { useT } from "../lib/i18n";
+import { MAPS_LOGIN_HINT_KEY } from "../lib/modKind";
 import { IconDownload, IconLink } from "./icons";
 
 /**
@@ -16,6 +17,7 @@ export function MapCards({
   onDownload: (entry: MapEntry) => void;
   onOpenWeb: () => void;
 }) {
+  const t = useT();
   return (
     <div className="mod-grid map-grid">
       {entries.map((entry) => {
@@ -30,7 +32,7 @@ export function MapCards({
                 <h3 className="map-title" title={entry.title}>{entry.title}</h3>
                 {entry.compatible === false ? (
                   <span className="badge map-badge-bad" data-map-incompatible>
-                    不适配 {mcVersion ?? ""}
+                    {t("pages.maps.incompatible", { version: mcVersion ?? "" })}
                   </span>
                 ) : null}
               </div>
@@ -41,9 +43,9 @@ export function MapCards({
                 <span>{formatBytes(entry.fileSize)}</span>
               </div>
               <div className="map-versions" data-map-versions>
-                <span className="map-versions-label">适配版本</span>
+                <span className="map-versions-label">{t("pages.maps.versionsLabel")}</span>
                 {entry.versions.length === 0
-                  ? <span className="chip chip-sm">未标注</span>
+                  ? <span className="chip chip-sm">{t("pages.maps.noVersions")}</span>
                   : entry.versions.map((version) => <span key={version} className="chip chip-sm">{version}</span>)}
               </div>
               <div className="map-foot">
@@ -55,14 +57,14 @@ export function MapCards({
                   data-action="download-map"
                 >
                   <IconDownload size={15} />
-                  下载到存档
+                  {t("pages.maps.downloadToSaves")}
                 </button>
                 {locked ? (
                   <>
-                    <span className="map-login-hint" data-map-login-hint>{MAPS_LOGIN_HINT}</span>
+                    <span className="map-login-hint" data-map-login-hint>{t(MAPS_LOGIN_HINT_KEY)}</span>
                     <button type="button" className="btn btn-sm btn-ghost" onClick={onOpenWeb} data-action="open-map-web">
                       <IconLink size={15} />
-                      打开网页
+                      {t("pages.maps.openWeb")}
                     </button>
                   </>
                 ) : null}

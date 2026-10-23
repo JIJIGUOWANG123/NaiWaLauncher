@@ -7,6 +7,7 @@ import { logger } from "./core/logger";
 import { getPaths } from "./core/paths";
 import { getSettings } from "./core/settings";
 import { logoPathFor } from "./splash";
+import { mt } from "./core/i18n";
 
 const log = logger("tray");
 
@@ -73,13 +74,13 @@ export function syncTray(getWindow: () => BrowserWindow | null, quit: () => void
     // resize 失败（个别 ico 编码）时退回原始图，宁可大一点也别没有图标
     const image = scaled.isEmpty() ? source : scaled;
     tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
-    tray.setToolTip("奶娃启动器 NaiWa Launcher");
+    tray.setToolTip(mt("tray.tooltip"));
     tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: "打开界面", click: () => showWindow(getWindow) },
+        { label: mt("tray.open"), click: () => showWindow(getWindow) },
         { type: "separator" },
         {
-          label: "退出启动器",
+          label: mt("tray.quit"),
           click: () => {
             markQuitting();
             quit();

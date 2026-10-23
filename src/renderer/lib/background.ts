@@ -48,29 +48,89 @@ export interface BackgroundPlayback {
 /**
  * 背景图播放：single 用所选图片；sequence / random 按 backgroundIntervalSec 轮播。
  * 换图时先淡出再淡入（CSS transition），改间隔即时重排定时器。
+ *
+ * poolOverride：外部播放池（例如壁纸引擎的壁纸文件绝对路径）。
+ * 传了非空数组就用它做 sequence/random 的候选，顺序按调用方给的顺序（壁纸列表已按标题排序）；
+ * 不传或传空数组时行为与以前完全一致（用本地背景目录里的文件）。
  */
+/** 本次进程里已经做过「启动随机」的来源：切页面/重渲染/切回来都不再重随机。 */
+const startupRandomDone = new Set<string>();
+
 export function useBackgroundPlayback(
-  list: MediaList | null, selected: string, mode: BackgroundMode, intervalSec: number,
+  list: MediaList | null,
+  selected: string,
+  mode: BackgroundMode,
+  intervalSec: number,
+  poolOverride?: string[],
+  /** 传了就是「本次启动随机一张」，取值是来源标识（local / api / wallpaperEngine）。 */
+  startupRandomKey?: string,
 ): BackgroundPlayback {
-  const pool = useMemo(() => {
-    if (mode === "single") return selected ? [selected] : [];
+  // 用 join 出来的键做依赖：调用方即使每次传新数组也不会把 pool 反复重算。
+  const overrideKey = (poolOverride ?? []).filter(Boolean).join("\n");
+  // 来源的完整候选集（不受 single 影响）：「启动随机」要从这里抽，而不是从单张池里抽。
+  const sourcePool = useMemo(() => {
+    if (overrideKey) return overrideKey.split("\n");
     return sortBackgrounds([...(list?.backgrounds ?? [])]);
-  }, [list, selected, mode]);
+  }, [list, overrideKey]);
+  const sourceKey = sourcePool.join("\n");
+
+  // 本次启动随机选中的那张（null = 没开或还没抽到）
+  const [startupPick, setStartupPick] = useState<string | null>(null);
+  useEffect(() => {
+    if (!startupRandomKey || sourcePool.length === 0) return;
+    if (startupRandomDone.has(startupRandomKey)) return;
+    startupRandomDone.add(startupRandomKey);
+    setStartupPick(sourcePool[Math.floor(Math.random() * sourcePool.length)] ?? null);
+  }, [startupRandomKey, sourceKey]);
+
+  const pool = useMemo(() => {
+    if (mode === "single") {
+      // single：启动随机选中的那张优先，否则就是用户在设置里选的那张
+      const single = startupPick ?? selected;
+      return single ? [single] : [];
+    }
+    return sourcePool;
+  }, [selected, mode, startupPick, sourcePool]);
 
   // 用 join 出的字符串做依赖，避免数组每次渲染都是新引用。
   const poolKey = pool.join("\n");
   const [index, setIndex] = useState(0);
   const [name, setName] = useState(pool[0] ?? "");
   const [fading, setFading] = useState(false);
+  // nameRef 只用于「目标是否已经生效」的判断，避免把 name 放进依赖导致反复重入。
+  const nameRef = useRef(name);
+  nameRef.current = name;
 
-  // 播放方式 / 背景列表 / 所选背景变化：回到第一张。
-  // 只有当前这张已经不在新列表里时才换名，避免无条件清空把淡出流程重新踩一遍。
+  // 播放方式 / 背景列表 / 所选背景变化：
+  // · 当前这张还在新池子里就留在它上面（顺序轮播从它继续），否则从池头开始 ——
+  //   这样壁纸引擎池晚到、或用户手改过 backgroundImage 时不会出现「空白背景」。
   useEffect(() => {
-    setIndex(0);
+    const at = pool.findIndex((item) => sameName(item, nameRef.current));
+    setIndex(at >= 0 ? at : 0);
     const first = pool[0] ?? "";
     setName((current) => (pool.some((item) => sameName(item, current)) ? current : first));
     setFading(false);
   }, [poolKey]);
+
+  // 「启动随机」抽到之后立刻生效：single 直接换成它；sequence/random 把它设为当前并把 index 对齐，
+  // 之后照常从这个位置往下轮播。
+  useEffect(() => {
+    if (!startupPick) return;
+    if (!pool.some((item) => sameName(item, startupPick))) return;
+    setIndex(Math.max(0, pool.findIndex((item) => sameName(item, startupPick))));
+    setName(startupPick);
+    setFading(false);
+    // 只在抽到新的一张时执行
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startupPick]);
+
+  // 用户手动换了背景（settings.backgroundImage 变了）就不再让启动随机的那张压着它
+  const selectedRef = useRef(selected);
+  useEffect(() => {
+    if (selectedRef.current === selected) return;
+    selectedRef.current = selected;
+    setStartupPick(null);
+  }, [selected]);
 
   useEffect(() => {
     if (mode === "single" || pool.length === 0) return;
@@ -80,10 +140,6 @@ export function useBackgroundPlayback(
     );
     return () => clearInterval(timer);
   }, [mode, intervalSec, pool.length]);
-
-  // nameRef 只用于「目标是否已经生效」的判断，避免把 name 放进依赖导致反复重入。
-  const nameRef = useRef(name);
-  nameRef.current = name;
 
   // 目标变化：淡出 → 换背景 → 淡入。
   useEffect(() => {

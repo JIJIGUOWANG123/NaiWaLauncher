@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { t } from "../lib/i18n";
 
 type Tone = "success" | "error" | "info";
 
@@ -69,6 +70,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function useToast(): ToastValue {
   const context = useContext(ToastContext);
-  if (!context) throw new Error("useToast 必须在 ToastProvider 内使用");
+  if (!context) throw new Error(t("pages.common.toastProviderMissing"));
   return context;
 }

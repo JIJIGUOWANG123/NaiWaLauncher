@@ -24,6 +24,7 @@ import { downloadFile, fetchJson, fetchText } from "../core/http";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { installDirName, writeSourceRecord, type ManagedSource } from "./vendor";
+import { mt } from "../core/i18n";
 
 const log = logger("java/adoptium");
 
@@ -97,11 +98,11 @@ async function fetchLatest(major: number, signal?: AbortSignal): Promise<JavaRel
   try {
     body = await fetchJson<unknown>(url, { allowMirror: false, timeoutMs: 15000, signal });
   } catch (err) {
-    throw new Error("获取 Adoptium JDK " + major + " 列表失败：" + (err instanceof Error ? err.message : String(err)));
+    throw new Error(mt("java.adoptium.listFailed", { major, error: err instanceof Error ? err.message : String(err) }));
   }
   const first = Array.isArray(body) ? body[0] : undefined;
   const release = adoptiumReleaseOf(first, major, "adoptium");
-  if (!release) throw new Error("Adoptium 没有 JDK " + major + " 的 Windows x64 JDK 包（接口返回为空）");
+  if (!release) throw new Error(mt("java.adoptium.noRelease", { major }));
   cache.set(major, { at: Date.now(), release });
   return release;
 }
@@ -152,7 +153,7 @@ async function downloadVerified(
       if (actual === release.sha256.toLowerCase()) return;
       await rm(zipPath, { force: true });
       if (attempt >= 2) {
-        throw new Error("JDK 压缩包 sha256 校验失败：期望 " + release.sha256 + "，实际 " + actual);
+        throw new Error(mt("java.adoptium.checksumFailed", { expected: release.sha256, actual }));
       }
       log.warn("JDK 压缩包 sha256 不一致，重下一次：" + release.fileName);
       continue;
@@ -160,7 +161,7 @@ async function downloadVerified(
     if (expectedSize > 0 && size !== expectedSize) {
       await rm(zipPath, { force: true });
       if (attempt >= 2) {
-        throw new Error("JDK 压缩包大小校验失败：期望 " + expectedSize + " 字节，实际 " + size + " 字节");
+        throw new Error(mt("java.adoptium.sizeFailed", { expected: expectedSize, actual: size }));
       }
       log.warn("JDK 压缩包大小不一致，重下一次：" + release.fileName);
       continue;
@@ -172,17 +173,15 @@ async function downloadVerified(
 /** TUNA 目录页里确实有这个名字才下载：镜像可能比官方慢半拍，先给可读错误。 */
 async function assertTunaHas(major: number, fileName: string): Promise<void> {
   const dirUrl = TUNA_BASE + "/" + major + "/jdk/x64/windows/";
+  let missing = false;
   try {
     const html = await fetchText(dirUrl, { allowMirror: false, timeoutMs: 15000, retries: 1 });
-    if (!html.includes(fileName)) {
-      throw new Error("TUNA 镜像里还没有 " + fileName + "，请改用 Adoptium 官方源重试");
-    }
+    // 目录里没有该文件 = 镜像还没同步，交给上层换源；目录页本身拿不到不阻断下载
+    if (!html.includes(fileName)) missing = true;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message.includes("TUNA 镜像里还没有")) throw err;
-    // 目录页拿不到（限流/网络抖动）不阻断：直接尝试下载，失败时下载层会报出真实原因
-    log.warn("TUNA 目录校验失败，直接尝试下载：" + message);
+    log.warn("TUNA 目录校验失败，直接尝试下载：" + (err instanceof Error ? err.message : String(err)));
   }
+  if (missing) throw new Error(mt("java.adoptium.tunaMissing", { file: fileName }));
 }
 
 async function findJdkRoot(dir: string): Promise<string | undefined> {
@@ -266,26 +265,26 @@ export async function install(
 
   await mkdir(paths.java, { recursive: true });
   const zipPath = join(paths.downloads, installDirName(vendorSource, major, release.version) + ".zip");
-  const task = createTask("java", "安装 JDK " + major + " (" + release.version + ")");
+  const task = createTask("java", mt("java.installTitle", { major, version: release.version }));
   try {
-    task.update({ stage: "下载 JDK", percent: 0 });
+    task.update({ stage: mt("java.stage.download"), percent: 0 });
     if (vendorSource === "tuna") await assertTunaHas(major, release.fileName);
     await downloadVerified(release, zipPath, task, signal);
 
-    task.update({ stage: "解压 JDK" });
+    task.update({ stage: mt("java.stage.extract") });
     const tmp = join(paths.downloads, "unpack", "jdk-" + Date.now());
     await rm(tmp, { recursive: true, force: true });
     await mkdir(tmp, { recursive: true });
     new AdmZip(zipPath).extractAllTo(tmp, true);
     const root = await findJdkRoot(tmp);
-    if (!root) throw new Error("JDK 压缩包结构异常，未找到 bin/javaw.exe：" + release.fileName);
+    if (!root) throw new Error(mt("java.adoptium.badArchive", { file: release.fileName }));
 
     await rm(dir, { recursive: true, force: true });
     await mkdir(join(dir, ".."), { recursive: true });
     await rename(root, dir);
     await rm(tmp, { recursive: true, force: true });
 
-    if (!existsSync(javawExe)) throw new Error("解压后缺少 javaw.exe：" + dir);
+    if (!existsSync(javawExe)) throw new Error(mt("java.adoptium.noJavaw", { dir }));
     await writeMeta(dir, major, release, javaExe, javawExe);
     log.info("JDK " + major + " 安装完成（" + vendorSource + "）：" + dir);
     task.done({ major, version: release.version, path: javawExe });

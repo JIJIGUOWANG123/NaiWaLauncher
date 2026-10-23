@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Settings, TaskProgress, VersionBrief } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatDate, formatPercent } from "../lib/format";
+import { useT } from "../lib/i18n";
 import { usePersist } from "../lib/persist";
 import { useApp } from "../lib/store";
 import { errorMessage } from "../lib/useAsync";
@@ -13,15 +14,16 @@ import { IconDownload, IconRefresh, IconSearch } from "../components/icons";
 type TypeFilterKey = "showRelease" | "showSnapshot" | "showLegacy";
 
 /** 下载页 / 新建实例弹窗共用的三个版本类型勾选项，直接映射 settings 里的三个布尔。 */
-const TYPE_FILTERS: Array<{ key: TypeFilterKey; label: string; detail: string }> = [
-  { key: "showRelease", label: "正式版", detail: "release" },
-  { key: "showSnapshot", label: "测试版", detail: "snapshot 快照" },
-  { key: "showLegacy", label: "远古版", detail: "old_beta / old_alpha" },
+const TYPE_FILTERS: Array<{ key: TypeFilterKey; labelKey: string; detailKey: string }> = [
+  { key: "showRelease", labelKey: "pages.download.filterRelease", detailKey: "pages.download.detailRelease" },
+  { key: "showSnapshot", labelKey: "pages.download.filterSnapshot", detailKey: "pages.download.detailSnapshot" },
+  { key: "showLegacy", labelKey: "pages.download.filterLegacy", detailKey: "pages.download.detailLegacy" },
 ];
 
 export function DownloadPage() {
   const { versions, versionsError, reloadVersions, instances, reloadInstances, navigate, settings } = useApp();
   const { push } = useToast();
+  const t = useT();
   const persist = usePersist();
   const [query, setQuery] = useState("");
   const [installing, setInstalling] = useState<string | null>(null);
@@ -47,17 +49,18 @@ export function DownloadPage() {
   const noTypeSelected = !showRelease && !showSnapshot && !showLegacy;
 
   const persistType = (key: TypeFilterKey, value: boolean) => {
-    const label = TYPE_FILTERS.find((item) => item.key === key)?.label ?? key;
+    const labelKey = TYPE_FILTERS.find((item) => item.key === key)?.labelKey;
+    const label = labelKey ? t(labelKey) : key;
     const patch: Partial<Settings> = key === "showRelease"
       ? { showRelease: value }
       : key === "showSnapshot"
         ? { showSnapshot: value }
         : { showLegacy: value };
-    void persist(patch, `${label}显示`);
+    void persist(patch, t("pages.download.persistShow", { label }));
   };
 
   const selectAllTypes = () => {
-    void persist({ showRelease: true, showSnapshot: true, showLegacy: true }, "版本类型（全部勾选）");
+    void persist({ showRelease: true, showSnapshot: true, showLegacy: true }, t("pages.download.persistAll"));
   };
 
   const list = useMemo(() => {
@@ -91,12 +94,12 @@ export function DownloadPage() {
     setProgress(null);
     try {
       await api.instances.create({
-        name: `${version.id} 原版`,
+        name: t("pages.download.vanillaInstanceName", { version: version.id }),
         mcVersion: version.id,
         loader: "vanilla",
         memoryMb: 4096,
       });
-      push(`Minecraft ${version.id} 安装完成，已创建实例`, "success");
+      push(t("pages.download.installedToast", { version: version.id }), "success");
       await reloadInstances();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -110,13 +113,13 @@ export function DownloadPage() {
     <section className="page">
       <header className="page-head">
         <div>
-          <h1 className="page-title">游戏</h1>
-          <p className="page-sub">选择版本安装为纯原版实例；需要模组支持请到「实例 → 新建」挑选加载器</p>
+          <h1 className="page-title">{t("pages.download.title")}</h1>
+          <p className="page-sub">{t("pages.download.sub")}</p>
         </div>
         <div className="page-actions">
           <button type="button" className="btn btn-ghost" onClick={() => void refresh()} disabled={refreshing}>
             <IconRefresh size={16} />
-            {refreshing ? "刷新中…" : "刷新清单"}
+            {refreshing ? t("pages.download.refreshing") : t("pages.download.refresh")}
           </button>
         </div>
       </header>
@@ -127,24 +130,28 @@ export function DownloadPage() {
           <input
             className="input search-input"
             value={query}
-            placeholder="搜索版本号，例如 1.21"
+            placeholder={t("pages.download.searchPlaceholder")}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
         <div className="version-type-filter" data-version-type-filter="download">
           {TYPE_FILTERS.map((filter) => (
-            <label key={filter.key} className="checkline" title={`${filter.label}（${filter.detail}）`}>
+            <label
+              key={filter.key}
+              className="checkline"
+              title={`${t(filter.labelKey)} (${t(filter.detailKey)})`}
+            >
               <input
                 type="checkbox"
-                aria-label={filter.label}
+                aria-label={t(filter.labelKey)}
                 checked={typeChecked[filter.key]}
                 onChange={(event) => persistType(filter.key, event.target.checked)}
               />
-              <span>{filter.label}</span>
+              <span>{t(filter.labelKey)}</span>
             </label>
           ))}
         </div>
-        <span className="filter-count">{list.length} 个版本</span>
+        <span className="filter-count">{t("pages.download.count", { count: String(list.length) })}</span>
       </div>
 
       {versions === null && versionsError === null ? <SkeletonRows count={6} /> : null}
@@ -160,10 +167,12 @@ export function DownloadPage() {
                 <div className="version-main">
                   <span className="version-id">{version.id}</span>
                   <VersionTypeTag type={version.type} />
-                  <span className="version-date">发布于 {formatDate(version.releaseTime)}</span>
+                  <span className="version-date">
+                    {t("pages.download.published", { date: formatDate(version.releaseTime) })}
+                  </span>
                 </div>
                 <div className="version-action">
-                  {isInstalled ? <span className="pill pill-done">已安装</span> : null}
+                  {isInstalled ? <span className="pill pill-done">{t("pages.download.installed")}</span> : null}
                   <button
                     type="button"
                     className={`btn ${isInstalled ? "btn-ghost" : "btn-primary"} btn-sm`}
@@ -171,7 +180,9 @@ export function DownloadPage() {
                     disabled={installing !== null}
                   >
                     <IconDownload size={15} />
-                    {isInstalling ? "安装中…" : isInstalled ? "重新安装" : "安装"}
+                    {isInstalling
+                      ? t("pages.download.installing")
+                      : isInstalled ? t("pages.download.reinstall") : t("pages.download.install")}
                   </button>
                 </div>
                 {isInstalling ? (
@@ -180,7 +191,9 @@ export function DownloadPage() {
                       <div className="progress-fill" style={{ width: `${Math.round((progress?.percent ?? 0) * 100)}%` }} />
                     </div>
                     <span className="row-progress-text">
-                      {progress ? `${progress.stage} · ${formatPercent(progress.percent)}` : "准备下载…"}
+                      {progress
+                        ? `${progress.stage} · ${formatPercent(progress.percent)}`
+                        : t("pages.download.preparing")}
                     </span>
                   </div>
                 ) : null}
@@ -192,32 +205,36 @@ export function DownloadPage() {
 
       {versions !== null && noTypeSelected ? (
         <EmptyState
-          title="未选择任何版本类型"
-          hint="正式版、测试版、远古版都没有勾选，版本列表为空。"
+          title={t("pages.download.noTypeTitle")}
+          hint={t("pages.download.noTypeHint")}
           action={
             <button type="button" className="btn btn-primary" onClick={selectAllTypes}>
-              全部勾选
+              {t("pages.download.selectAll")}
             </button>
           }
         />
       ) : versions !== null && list.length === 0 ? (
         <EmptyState
-          title="没有匹配的版本"
-          hint={query ? `没有版本名包含「${query}」，换个关键词试试。` : "清单为空，试试刷新版本清单。"}
+          title={t("pages.download.noMatchTitle")}
+          hint={query
+            ? t("pages.download.noMatchHintQuery", { query })
+            : t("pages.download.noMatchHintEmpty")}
           action={
             <button type="button" className="btn btn-ghost" onClick={() => setQuery("")}>
-              清空搜索
+              {t("pages.download.clearSearch")}
             </button>
           }
         />
       ) : null}
 
       <div className="hint-card">
-        <h3 className="hint-title">安装过程会做什么？</h3>
+        <h3 className="hint-title">{t("pages.download.hintTitle")}</h3>
         <p className="hint-text">
-          自动下载游戏本体 jar、libraries 依赖与 assets 资源文件，进度显示在右下角任务面板。安装源可在
-          <button type="button" className="link-btn" onClick={() => navigate("settings")}>设置 → 下载源</button>
-          切换为 BMCLAPI 镜像。
+          {t("pages.download.hintBefore")}
+          <button type="button" className="link-btn" onClick={() => navigate("settings")}>
+            {t("pages.download.hintLink")}
+          </button>
+          {t("pages.download.hintAfter")}
         </p>
       </div>
     </section>

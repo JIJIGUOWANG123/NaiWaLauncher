@@ -3,6 +3,7 @@ import { logger, registerSecret } from "../core/logger";
 import { systemFetch } from "../core/netfetch";
 import { getSettings, loadSettings } from "../core/settings";
 import { updateMicrosoftTokens, upsertMicrosoftAccount } from "./accounts";
+import { mt } from "../core/i18n";
 
 const log = logger("microsoft");
 
@@ -18,7 +19,11 @@ const USER_AGENT = "NaiWaLauncher/0.1 (naiwa)";
 const TIMEOUT_MS = 20_000;
 /** 提前 60s 视为过期，避免令牌在请求途中失效。 */
 const EXPIRY_SKEW_MS = 60_000;
-const MISSING_CLIENT_ID = "请先在设置里填写 Azure 应用 client id（XboxLive.signin 权限）";
+
+/** 提示文案随语言变，所以做成函数（模块级常量会在读到设置之前就把语言定格）。 */
+function missingClientIdHint(): string {
+  return mt("auth.ms.missingClientId");
+}
 
 type Json = Record<string, any>;
 
@@ -26,6 +31,17 @@ interface Reply {
   status: number;
   json: Json | null;
   text: string;
+}
+
+interface TokenSet {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number;
+}
+
+interface CachedSession {
+  accessToken: string;
+  expiresAt: number;
 }
 
 function messageOf(err: unknown): string {
@@ -41,13 +57,13 @@ function networkReason(err: unknown): string {
   const code = cause?.code ?? "";
   const detail = cause?.message ?? "";
   if (/CERT|SELF_SIGNED|UNABLE_TO_VERIFY|ERR_TLS/i.test(code + " " + detail)) {
-    return "TLS 证书校验失败（code=" + code + "）——常见于公司/校园网的 HTTPS 拦截或杀毒软件的证书替换；请关闭拦截或把其根证书加入系统信任";
+    return mt("auth.ms.tlsFail", { code });
   }
-  if (/ENOTFOUND|EAI_AGAIN/.test(code)) return "域名解析失败（code=" + code + "）——请检查 DNS 或稍后重试";
+  if (/ENOTFOUND|EAI_AGAIN/.test(code)) return mt("auth.ms.dnsFail", { code });
   if (/ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT/.test(code)) {
-    return "连接被中断或超时（code=" + code + "）——网络抖动或代理不稳定，可直接重试";
+    return mt("auth.ms.connFail", { code });
   }
-  return code ? "网络错误（code=" + code + "）" : "";
+  return code ? mt("auth.ms.netError", { code }) : "";
 }
 
 /** 只对「可重试的网络错误」重试一次：用户手动点登录时不该被一次抖动打败。 */
@@ -90,7 +106,7 @@ async function request(url: string, init: RequestInit, attempt = 0): Promise<Rep
       await new Promise((r) => setTimeout(r, 400));
       return request(url, init, attempt + 1);
     }
-    const reason = aborted ? "请求超时（" + TIMEOUT_MS + "ms）" : [messageOf(err), networkReason(err)].filter(Boolean).join("；");
+    const reason = aborted ? mt("core.requestTimeout", { ms: TIMEOUT_MS }) : [messageOf(err), networkReason(err)].filter(Boolean).join("; ");
     log.warn(`[microsoft] 请求失败：${reason} · ${url}`);
     throw new Error(reason + " · " + url);
   } finally {
@@ -106,7 +122,7 @@ function postForm(url: string, form: Record<string, string>): Promise<Reply> {
   });
 }
 
-function postXbl(url: string, body: unknown): Promise<Reply> {
+function postXbl(url: string, body: Json): Promise<Reply> {
   return request(url, {
     method: "POST",
     headers: { "content-type": "application/json", "x-xbl-contract-version": "1" },
@@ -119,7 +135,7 @@ function aadstsCode(text: string): string {
   return found ? found[0] : "";
 }
 
-/** 把 OAuth / Xbox / Minecraft 三类错误体统一压成一句中文可读的错误。 */
+/** 把 OAuth / Xbox / Minecraft 三类错误体统一压成一句可读的错误。 */
 function describeFailure(reply: Reply): string {
   const body: Json = reply.json ?? {};
   const detail =
@@ -137,42 +153,41 @@ function describeFailure(reply: Reply): string {
   return head + (tail ? " · " + tail : "");
 }
 
-/** AADSTS 错误码 → 用户能自己动手解决的中文提示（码本身必须出现在文案里，便于对照微软文档）。 */
-const AADSTS_HINTS: Record<string, string> = {
-  AADSTS70002:
-    "Azure 应用未开启「允许公共客户端流」：请到 Azure 门户 → 应用注册 → 认证 → 设为「是」（AADSTS70002）",
-  AADSTS700016: "client id 无效或应用未注册：请检查设置里的 Azure 应用 client id（AADSTS700016）",
-  AADSTS700038: "client id 无效或应用未注册：请检查设置里的 Azure 应用 client id（AADSTS700038）",
-  AADSTS7000014: "设备码无效或已过期，请重新开始登录（AADSTS7000014）",
-  AADSTS7000012: "刷新令牌与当前 client id / 租户不匹配，请用这个 client id 重新登录（AADSTS7000012）",
-  AADSTS54005: "设备码已被使用，请重新开始登录（AADSTS54005）",
+/** AADSTS 错误码 → 字典 key（码本身写进文案里，便于对照微软文档）。 */
+const AADSTS_HINT_KEYS: Record<string, string> = {
+  AADSTS70002: "auth.ms.aadsts70002",
+  AADSTS700016: "auth.ms.aadsts700016",
+  AADSTS700038: "auth.ms.aadsts700038",
+  AADSTS7000014: "auth.ms.aadsts7000014",
+  AADSTS7000012: "auth.ms.aadsts7000012",
+  AADSTS54005: "auth.ms.aadsts54005",
 };
 
 /**
- * 拼错误文案：中文可操作提示在前，原始 OAuth 描述（含 AADSTS 码）在后。
+ * 拼错误文案：可操作提示在前，原始 OAuth 描述（含 AADSTS 码）在后。
  * 只要响应里带 AADSTS 码，成文里一定保留它。
  */
 function failureText(prefix: string, reply: Reply): string {
   const detail = describeFailure(reply);
   const code = aadstsCode(detail) || aadstsCode(reply.text);
-  const hint = AADSTS_HINTS[code];
-  if (hint) return prefix + hint + " · " + detail;
+  const hintKey = AADSTS_HINT_KEYS[code];
+  if (hintKey) return prefix + mt(hintKey) + " · " + detail;
   if (code) return prefix + detail;
   return prefix + "HTTP " + reply.status + (detail ? " · " + detail : "");
 }
 
-const XSTS_MESSAGES: Record<number, string> = {
-  2148916233: "该微软账号还没有 Xbox 账号，请先到 xbox.com 创建",
-  2148916238: "该账号未成年，需要家长把它加入 Microsoft 家庭组后才能登录",
-  2148916235: "该账号所在地区不支持 Xbox Live",
+const XSTS_MESSAGE_KEYS: Record<number, string> = {
+  2148916233: "auth.ms.xstsNoXboxAccount",
+  2148916238: "auth.ms.xstsChildAccount",
+  2148916235: "auth.ms.xstsRegionUnsupported",
 };
 
 /** XSTS 的 XErr 翻译成人话；未知码保留原始码便于排查。 */
 export function xstsErrorMessage(xerr: number, detail?: string): string {
-  const known = XSTS_MESSAGES[xerr];
-  if (known) return known;
+  const knownKey = XSTS_MESSAGE_KEYS[xerr];
+  if (knownKey) return mt(knownKey);
   const suffix = detail ? "（" + detail.slice(0, 120) + "）" : "";
-  return "Xbox 授权失败：XErr " + xerr + suffix;
+  return mt("auth.ms.xboxAuthFailed", { code: xerr, detail: suffix });
 }
 
 function xboxFailure(reply: Reply): string {
@@ -183,22 +198,16 @@ function xboxFailure(reply: Reply): string {
     return xstsErrorMessage(xerr, detail);
   }
   // Xbox 对无效 RPS 票据只回一个空体 401，翻译成用户能照做的动作
-  if (reply.status === 401) return "微软凭证已失效，请重新登录该账号";
-  return failureText("Xbox 认证失败：", reply);
+  if (reply.status === 401) return mt("auth.ms.credentialsExpired");
+  return failureText(mt("auth.ms.failXbox"), reply);
 }
 
 async function requireClientId(): Promise<string> {
   // 缓存可能是默认值（未加载过设置），这里强制读盘，避免误报“没填 client id”
   await loadSettings();
   const clientId = getSettings().microsoftClientId.trim();
-  if (!clientId) throw new Error(MISSING_CLIENT_ID);
+  if (!clientId) throw new Error(missingClientIdHint());
   return clientId;
-}
-
-interface TokenSet {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
 }
 
 function tokenSetFrom(body: Json, fallbackRefresh = ""): TokenSet {
@@ -249,13 +258,9 @@ async function loginWithXbox(uhs: string, xstsToken: string): Promise<{ accessTo
     // Minecraft 服务端会校验 Azure 应用是否通过 AppID 审批，未审批的应用统一 403
     const raw = String((body as Json).errorMessage ?? (body as Json).error ?? reply.text ?? "");
     if (reply.status === 403 && /Invalid app registration/i.test(raw)) {
-      throw new Error(
-        "该 Azure 应用还没有获得 Minecraft 服务授权：请用同一 client id 向 Mojang 提交 AppID 审批" +
-          "（https://help.minecraft.net/hc/en-us/articles/16254801392141 ），审批通过前微软账号无法进入正版服务器；" +
-          "离线账号不受影响（403 Invalid app registration）",
-      );
+      throw new Error(mt("auth.ms.appNotApproved"));
     }
-    throw new Error(failureText("Minecraft 登录失败：", reply));
+    throw new Error(failureText(mt("auth.ms.failLogin"), reply));
   }
   registerSecret(accessToken);
   const expiresIn = Number(body.expires_in) || 86_400;
@@ -268,19 +273,14 @@ function requestProfile(accessToken: string): Promise<Reply> {
 
 /** 第 4 环：档案（id/name）。404 表示账号没有 Java 版游戏。 */
 function expectProfile(reply: Reply): { id: string; name: string } {
-  if (reply.status === 404) throw new Error("该账号没有 Minecraft：Java 版（未购买游戏）");
+  if (reply.status === 404) throw new Error(mt("auth.ms.notOwned"));
   const body: Json = reply.json ?? {};
   const id: unknown = body.id;
   const name: unknown = body.name;
   if (reply.status !== 200 || typeof id !== "string" || typeof name !== "string") {
-    throw new Error(failureText("读取 Minecraft 档案失败：", reply));
+    throw new Error(failureText(mt("auth.ms.failProfile"), reply));
   }
   return { id: id.toLowerCase(), name };
-}
-
-interface CachedSession {
-  accessToken: string;
-  expiresAt: number;
 }
 
 /** 进程内缓存 MC token：完整链路每次要打三次 Xbox 接口，没必要重复。 */
@@ -289,7 +289,7 @@ const sessions = new Map<string, CachedSession>();
 async function mintSession(account: Account): Promise<CachedSession> {
   const fresh = await ensureFreshToken(account);
   const ms = fresh.microsoft;
-  if (!ms) throw new Error("该账号不是微软账号，无法获取在线会话");
+  if (!ms) throw new Error(mt("auth.ms.notMicrosoftAccount"));
   const xbl = await authenticateXbl(ms.accessToken);
   const xsts = await authorizeXsts(xbl.token);
   const mc = await loginWithXbox(xbl.uhs, xsts.token);
@@ -300,7 +300,7 @@ async function mintSession(account: Account): Promise<CachedSession> {
 
 async function refreshTokens(account: Account): Promise<Account> {
   const ms = account.microsoft;
-  if (!ms?.refreshToken) throw new Error("该账号没有 refresh token，请重新登录微软账号");
+  if (!ms?.refreshToken) throw new Error(mt("auth.ms.noRefreshToken"));
   const clientId = await requireClientId();
   const reply = await postForm(TOKEN_URL, {
     grant_type: "refresh_token",
@@ -310,7 +310,7 @@ async function refreshTokens(account: Account): Promise<Account> {
   });
   const body: Json = reply.json ?? {};
   if (reply.status !== 200 || typeof body.access_token !== "string") {
-    throw new Error(failureText("微软令牌刷新失败：", reply) + "；请重新登录该账号");
+    throw new Error(failureText(mt("auth.ms.failRefresh"), reply) + mt("auth.ms.signInAgainSuffix"));
   }
   const next = tokenSetFrom(body, ms.refreshToken);
   const updated = await updateMicrosoftTokens(account.id, {
@@ -336,7 +336,7 @@ export async function ensureFreshToken(account: Account): Promise<Account> {
 export async function resolveMinecraftSession(
   account: Account,
 ): Promise<{ accessToken: string; uuid: string; name: string; expiresAt: number }> {
-  if (account.type !== "microsoft" || !account.microsoft) throw new Error("只有微软账号才有在线会话");
+  if (account.type !== "microsoft" || !account.microsoft) throw new Error(mt("auth.ms.onlineOnlyMicrosoft"));
   const cached = sessions.get(account.id);
   if (cached && cached.expiresAt - EXPIRY_SKEW_MS > Date.now()) {
     return { accessToken: cached.accessToken, uuid: account.uuid, name: account.name, expiresAt: cached.expiresAt };
@@ -350,7 +350,6 @@ export async function getMinecraftProfile(account: Account): Promise<{ id: strin
   const session = await resolveMinecraftSession(account);
   const first = await requestProfile(session.accessToken);
   if (first.status !== 401) return expectProfile(first);
-
   sessions.delete(account.id);
   const refreshed = await refreshTokens(account);
   const retried = await mintSession(refreshed);
@@ -364,7 +363,7 @@ export async function beginDeviceCode(): Promise<DeviceCodeChallenge> {
   const body: Json = reply.json ?? {};
   if (reply.status !== 200 || typeof body.device_code !== "string") {
     // 401/400 多半是 Azure 应用配置问题（未开公共客户端流 / client id 无效），必须给可操作提示
-    throw new Error(failureText("申请设备码失败：", reply));
+    throw new Error(failureText(mt("auth.ms.failDeviceCode"), reply));
   }
   log.info("已申请微软设备码，等待用户在浏览器中授权");
   return {
@@ -379,7 +378,7 @@ export async function beginDeviceCode(): Promise<DeviceCodeChallenge> {
 /** 轮询设备码：pending 让界面继续等，ok 已写入 accounts.json，error 给用户看。 */
 export async function pollDeviceCode(deviceCode: string): Promise<MicrosoftLoginState> {
   const code = deviceCode.trim();
-  if (!code) return { status: "error", message: "设备码为空，请重新开始登录" };
+  if (!code) return { status: "error", message: mt("auth.ms.deviceCodeEmpty") };
 
   let clientId: string;
   try {
@@ -405,13 +404,13 @@ export async function pollDeviceCode(deviceCode: string): Promise<MicrosoftLogin
 
     const error = typeof body.error === "string" ? body.error : "";
     if (error === "authorization_pending" || error === "slow_down") return { status: "pending" };
-    if (error === "expired_token") return { status: "error", message: "设备码已过期，请重新开始登录" };
-    if (error === "authorization_declined") return { status: "error", message: "你在浏览器里取消了授权" };
-    if (error === "bad_verification_code") return { status: "error", message: "设备码无效，请重新开始登录" };
+    if (error === "expired_token") return { status: "error", message: mt("auth.ms.deviceCodeExpired") };
+    if (error === "authorization_declined") return { status: "error", message: mt("auth.ms.authDeclined") };
+    if (error === "bad_verification_code") return { status: "error", message: mt("auth.ms.deviceCodeInvalid") };
     if (error === "unauthorized_client" || error === "invalid_client") {
-      return { status: "error", message: failureText("申请设备码失败：", reply) };
+      return { status: "error", message: failureText(mt("auth.ms.failDeviceCode"), reply) };
     }
-    return { status: "error", message: failureText("微软登录失败：", reply) };
+    return { status: "error", message: failureText(mt("auth.ms.failMicrosoftLogin"), reply) };
   } catch (err) {
     return { status: "error", message: messageOf(err) };
   }

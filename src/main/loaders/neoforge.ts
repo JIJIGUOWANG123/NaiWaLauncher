@@ -2,6 +2,7 @@ import type { LoaderVersionInfo } from "../../shared/types";
 import { fetchText } from "../core/http";
 import { logger } from "../core/logger";
 import { installFromInstaller } from "./installer-runner";
+import { mt } from "../core/i18n";
 
 const log = logger("loaders/neoforge");
 
@@ -46,7 +47,7 @@ async function fetchAllVersions(): Promise<string[]> {
   const xml = await fetchText(METADATA_URL, { allowMirror: false });
   const out: string[] = [];
   for (const match of xml.matchAll(/<version>([^<]+)<\/version>/g)) out.push(match[1].trim());
-  if (out.length === 0) throw new Error("NeoForge maven-metadata.xml 没有版本，镜像可能不可用");
+  if (out.length === 0) throw new Error(mt("loader.noMetadata", { loader: "NeoForge" }));
   return out;
 }
 
@@ -58,7 +59,7 @@ export async function listNeoForgeLoaders(mcVersion: string): Promise<LoaderVers
   const prefix = neoVersionPrefix(mcVersion);
   const matched = (await fetchAllVersions()).filter((v) => v.startsWith(prefix));
   if (matched.length === 0) {
-    throw new Error("NeoForge 没有匹配 Minecraft " + mcVersion + " 的版本（期望前缀 " + prefix + "）");
+    throw new Error(mt("loader.noMatch", { loader: "NeoForge", mc: mcVersion, prefix }));
   }
   return matched
     .sort((a, b) => {
@@ -80,7 +81,7 @@ export async function installNeoForgeLoader(
     const list = await listNeoForgeLoaders(mcVersion);
     wanted = list[0]?.version;
   }
-  if (!wanted) throw new Error("NeoForge 没有 Minecraft " + mcVersion + " 的可用版本");
+  if (!wanted) throw new Error(mt("loader.noVersion", { loader: "NeoForge", mc: mcVersion }));
 
   const installerUrl = MIRROR_MAVEN + "/net/neoforged/neoforge/" + wanted + "/neoforge-" + wanted + "-installer.jar";
   // 启动器内部约定 <mc>-neoforge；安装器自己会写成 neoforge-<version>

@@ -13,6 +13,7 @@ import { extname, join } from "node:path";
 import type { WallpaperEntry } from "../../shared/types";
 import { logger } from "../core/logger";
 import { getSettings } from "../core/settings";
+import { mt } from "../core/i18n";
 
 const log = logger("media/wallpaper");
 
@@ -280,8 +281,8 @@ export async function listWallpapers(force = false): Promise<WallpaperEntry[]> {
   if (dirs.length === 0) {
     const configured = (getSettings().wallpaperEngineDir ?? "").trim();
     log.info(
-      "没有找到 Wallpaper Engine 壁纸目录（431960）。" +
-        (configured ? "已按设置指向：" + configured : "已探测常见 Steam 安装位置；可在设置里手动指定目录"),
+      mt("media.wallpaperNotFound") +
+        (configured ? mt("media.wallpaperConfigured", { path: configured }) : mt("media.wallpaperProbed")),
     );
     cache = { at: Date.now(), dirs, entries: [] };
     return [];

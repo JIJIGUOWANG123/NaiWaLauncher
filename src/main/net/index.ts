@@ -1,6 +1,7 @@
 import net from "node:net";
 import { networkInterfaces } from "node:os";
 import type { LanAddress, PortProbeResult } from "../../shared/types";
+import { mt } from "../core/i18n";
 
 /** 虚拟网卡名（VMware / VirtualBox / Hyper-V / vEthernet / Loopback 等）不作为联机地址展示。 */
 const VIRTUAL_ADAPTER = /vmware|virtualbox|vbox|hyper-?v|vethernet|loopback/i;
@@ -16,13 +17,13 @@ function validPort(port: number): boolean {
 /** 把 socket 错误码翻译成用户能看懂的说明。 */
 function describeSocketError(err: NodeJS.ErrnoException): string {
   switch (err.code) {
-    case "ECONNREFUSED": return "连接被拒绝";
-    case "ENOTFOUND": return "无法解析主机名";
-    case "EHOSTUNREACH": return "主机不可达";
-    case "ENETUNREACH": return "网络不可达";
-    case "ETIMEDOUT": return "超时";
-    case "EACCES": return "没有权限";
-    default: return err.message || "连接失败";
+    case "ECONNREFUSED": return mt("net.errRefused");
+    case "ENOTFOUND": return mt("net.errDns");
+    case "EHOSTUNREACH": return mt("net.errHostUnreach");
+    case "ENETUNREACH": return mt("net.errNetUnreach");
+    case "ETIMEDOUT": return mt("net.errTimeout");
+    case "EACCES": return mt("net.errNoPermission");
+    default: return err.message || mt("net.errConnectFailed");
   }
 }
 
@@ -47,8 +48,8 @@ export async function listLanAddresses(): Promise<LanAddress[]> {
  */
 export async function probeTcp(host: string, port: number, timeoutMs = DEFAULT_PROBE_TIMEOUT_MS): Promise<PortProbeResult> {
   const target = String(host ?? "").trim();
-  if (!target) return { ok: false, latencyMs: null, error: "主机地址不能为空" };
-  if (!validPort(port)) return { ok: false, latencyMs: null, error: `端口不合法：${String(port)}（应在 1-65535 之间）` };
+  if (!target) return { ok: false, latencyMs: null, error: mt("net.hostRequired") };
+  if (!validPort(port)) return { ok: false, latencyMs: null, error: mt("net.badPort", { port: String(port) }) };
 
   return await new Promise<PortProbeResult>((resolve) => {
     const socket = new net.Socket();
@@ -64,7 +65,7 @@ export async function probeTcp(host: string, port: number, timeoutMs = DEFAULT_P
 
     socket.setTimeout(Math.max(1, Math.floor(Number(timeoutMs) || DEFAULT_PROBE_TIMEOUT_MS)));
     socket.once("connect", () => finish({ ok: true, latencyMs: Date.now() - startedAt }));
-    socket.once("timeout", () => finish({ ok: false, latencyMs: null, error: "超时" }));
+    socket.once("timeout", () => finish({ ok: false, latencyMs: null, error: mt("net.errTimeout") }));
     socket.once("error", (err: NodeJS.ErrnoException) => finish({ ok: false, latencyMs: null, error: describeSocketError(err) }));
     socket.connect(port, target);
   });

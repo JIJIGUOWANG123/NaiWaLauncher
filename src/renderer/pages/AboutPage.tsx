@@ -6,6 +6,7 @@ import avatarDeepseek from "../assets/team/deepseek.png";
 import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
+import { useT } from "../lib/i18n";
 import { useToast } from "../components/Toast";
 import { ConfirmDialog } from "../components/Modal";
 import {
@@ -38,31 +39,31 @@ const QQ_GROUP_URL = "https://qm.qq.com/q/42ksfWCEw0";
 const RECOMMEND_URL = "https://www.dogfight360.com/blog/18682/";
 
 const CAPABILITIES = [
-  { Icon: IconPackage, title: "支持 Fabric / Forge / NeoForge", desc: "三种主流加载器一键安装，自动补齐对应版本的依赖库。" },
-  { Icon: IconMods, title: "CurseForge 与 Modrinth 模组", desc: "两个平台合并搜索，装模组不用来回切网站。" },
-  { Icon: IconInstances, title: "多实例与存档直进", desc: "每个实例独立配置；选中存档就启动并直接进入世界。" },
-  { Icon: IconSearch, title: "中文搜索与实时翻译", desc: "模组名与简介自动译成中文，用中文关键词也能搜到。" },
-  { Icon: IconJava, title: "BellSoft JDK 自动匹配", desc: "按游戏版本挑 Liberica JDK，缺了就在后台下载。" },
-  { Icon: IconDownload, title: "多线程下载与断点续传", desc: "分片并发拉资源，断线从断点续，镜像自动测速。" },
+  { Icon: IconPackage, titleKey: "about.capability.fabric", descKey: "about.capability.fabricDesc" },
+  { Icon: IconMods, titleKey: "about.capability.mods", descKey: "about.capability.modsDesc" },
+  { Icon: IconInstances, titleKey: "about.capability.instances", descKey: "about.capability.instancesDesc" },
+  { Icon: IconSearch, titleKey: "about.capability.search", descKey: "about.capability.searchDesc" },
+  { Icon: IconJava, titleKey: "about.capability.java", descKey: "about.capability.javaDesc" },
+  { Icon: IconDownload, titleKey: "about.capability.download", descKey: "about.capability.downloadDesc" },
 ];
 
 const LINKS = [
-  { Icon: IconLink, label: "项目主页", hint: "github.com/JIJIGUOWANG123/NaiWaLauncher", url: PROJECT_URL },
-  { Icon: IconMessage, label: "问题反馈", hint: "提交 Issue 或建议（/issues）", url: FEEDBACK_URL },
-  { Icon: IconUser, label: "加入 QQ 群", hint: `群号 ${QQ_GROUP_NO}`, url: QQ_GROUP_URL },
-  { Icon: IconPackage, label: "Modrinth 官网", hint: "modrinth.com", url: "https://modrinth.com/" },
-  { Icon: IconMods, label: "CurseForge 官网", hint: "curseforge.com", url: "https://www.curseforge.com/minecraft" },
-  { Icon: IconZap, label: "MCIM / BMCLAPI 致谢", hint: "镜像与版本元数据来源", url: "https://bmclapi2.bangbang93.com/" },
-  { Icon: IconRocket, label: "推荐：Steamcommunity 302", hint: "羽翼城出品 · 改善 Steam 社区 / GitHub 访问", url: RECOMMEND_URL },
+  { Icon: IconLink, labelKey: "about.link.project", hintKey: "", url: PROJECT_URL },
+  { Icon: IconMessage, labelKey: "about.link.feedback", hintKey: "about.link.feedbackHint", url: FEEDBACK_URL },
+  { Icon: IconUser, labelKey: "about.link.qq", hintKey: "about.link.qqHint", url: QQ_GROUP_URL },
+  { Icon: IconPackage, labelKey: "about.link.modrinth", hintKey: "", url: "https://modrinth.com/" },
+  { Icon: IconMods, labelKey: "about.link.curseforge", hintKey: "", url: "https://www.curseforge.com/minecraft" },
+  { Icon: IconZap, labelKey: "about.link.mirror", hintKey: "about.link.mirrorHint", url: "https://bmclapi2.bangbang93.com/" },
+  { Icon: IconRocket, labelKey: "about.link.steam302", hintKey: "about.link.steam302Hint", url: RECOMMEND_URL },
 ];
 
 
 
 /** 团队头像一律用首字色块占位，不放真人照片。 */
 const TEAM = [
-  { name: "奶龙", role: "主开发者", initial: "奶", avatar: avatarNailong },
-  { name: "小七", role: "协助开发者", initial: "七", avatar: avatarXiaoqi },
-  { name: "DeepSeek", role: "工具提供", initial: "D", avatar: avatarDeepseek },
+  { name: "奶龙", roleKey: "about.role.main", initial: "奶", avatar: avatarNailong },
+  { name: "小七", roleKey: "about.role.co", initial: "七", avatar: avatarXiaoqi },
+  { name: "DeepSeek", roleKey: "about.role.tools", initial: "D", avatar: avatarDeepseek },
 ];
 
 /** 把外壳 .app-bg 上当前铺着的背景图镜像到 Hero：轮播换图时跟着更新。 */
@@ -84,6 +85,7 @@ function useAppBackground(): string {
 }
 
 export function AboutPage() {
+  const tr = useT();
   const { info, update, setUpdate } = useApp();
   const { push } = useToast();
   const heroImage = useAppBackground();
@@ -104,7 +106,7 @@ export function AboutPage() {
   const open = async (url: string, label: string) => {
     try {
       await api.app.openExternal(url);
-      push(`已用外部浏览器打开${label}`, "success");
+      push(tr("about.openedExternal", { label }), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -114,7 +116,7 @@ export function AboutPage() {
     if (!target) return;
     try {
       await api.app.openPath(target);
-      push(`已打开${label}`, "success");
+      push(tr("about.openedDir", { label }), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -125,13 +127,13 @@ export function AboutPage() {
     try {
       const result = await api.app.checkUpdates();
       setUpdate(result);
-      if (result.error) push(`检查更新失败：${result.error}`, "error");
-      else if (result.hasUpdate) push(`发现新版本 v${result.latest}`, "success");
-      else if (result.latest) push(`已是最新版本 v${result.current}`, "success");
+      if (result.error) push(tr("about.checkFailed", { error: result.error }), "error");
+      else if (result.hasUpdate) push(tr("about.foundUpdate", { version: result.latest ?? "" }), "success");
+      else if (result.latest) push(tr("about.upToDate", { version: result.current }), "success");
     } catch (error: unknown) {
       const message = errorMessage(error);
       setUpdate({ current: version, latest: null, hasUpdate: false, channel: "none", error: message });
-      push(`检查更新失败：${message}`, "error");
+      push(tr("about.checkFailed", { error: message }), "error");
     } finally {
       setChecking(false);
     }
@@ -158,7 +160,7 @@ export function AboutPage() {
   const openChangelog = async () => {
     try {
       await api.app.openExternal(CHANGELOG_URL);
-      push("完整更新日志见项目仓库的 CHANGELOG.md", "info");
+      push(tr("about.changelogToast"), "info");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -173,24 +175,24 @@ export function AboutPage() {
       >
         <div className="about-hero-main">
           <img className="about-hero-logo" src={logo} alt="NaiWa Launcher" width={62} height={62} />
-          <h1 className="about-hero-title">关于 NaiWa Launcher</h1>
-          <p className="about-hero-sub">轻量、美观、开源的 Minecraft 启动器</p>
+          <h1 className="about-hero-title">{tr("about.title")}</h1>
+          <p className="about-hero-sub">{tr("about.subtitle")}</p>
         </div>
         <div className="about-hero-side">
           <div className="about-version-row">
             <span className="about-version" data-about-version>v{version}</span>
             {update?.hasUpdate ? (
-              <span className="about-new" data-about-new>有新版本 v{update.latest}</span>
+              <span className="about-new" data-about-new>{tr("about.newVersion", { version: update.latest ?? "" })}</span>
             ) : null}
           </div>
           <div className="about-tags">
             <span className="about-tag">
               <IconZap size={13} />
-              开源项目
+              {tr("about.openSource")}
             </span>
             <span className="about-tag">
               <IconUser size={13} />
-              开发者 奶龙
+              {tr("about.developer")}
             </span>
           </div>
           <button
@@ -201,14 +203,14 @@ export function AboutPage() {
             onClick={() => void runCheck()}
           >
             <IconRefresh size={14} />
-            {checking ? "检查中…" : "检查更新"}
+            {checking ? tr("about.checking") : tr("about.checkUpdate")}
           </button>
           {update?.error ? (
             <div className="about-update-error" data-about-update-error>
-              <span>检查更新失败：{update.error}</span>
-              <button type="button" className="link-btn" data-about-repo onClick={() => void open(RELEASES_URL, "项目仓库")}>
+              <span>{tr("about.checkFailed", { error: update.error })}</span>
+              <button type="button" className="link-btn" data-about-repo onClick={() => void open(RELEASES_URL, tr("about.link.project"))}>
                 <IconLink size={13} />
-                打开仓库
+                {tr("about.openRepo")}
               </button>
             </div>
           ) : null}
@@ -218,8 +220,8 @@ export function AboutPage() {
       {update?.hasUpdate ? (
         <section className="about-update" data-about-update>
           <div className="about-update-head">
-            <span className="about-update-title">发布说明 · v{update.latest}</span>
-            <span className="about-update-meta">当前版本 v{update.current}</span>
+            <span className="about-update-title">{tr("about.releaseNotes", { version: update.latest ?? "" })}</span>
+            <span className="about-update-meta">{tr("about.currentVersion", { version: update.current })}</span>
             <button
               type="button"
               className="btn btn-primary btn-sm"
@@ -227,22 +229,22 @@ export function AboutPage() {
               disabled={installing || !(update.assetUrl || update.setupUrl)}
               title={
                 update.assetUrl || update.setupUrl
-                  ? "下载新版本：免安装版替换自身；安装版会静默装回当前目录（如 D:\minecraft\NW）后自动重启"
-                  : "该版本还没有提供可自动更新的安装包"
+                  ? tr("about.installNote")
+                  : tr("about.noPackage")
               }
               onClick={() => setConfirming(true)}
             >
               <IconRefresh size={14} />
-              {installing ? "正在更新…" : "立即更新"}
+              {installing ? tr("about.updating") : tr("about.updateNow")}
             </button>
             <button
               type="button"
               className={`btn btn-ghost btn-sm${downloadHighlight ? " is-attention" : ""}`}
               data-about-download
-              onClick={() => void open(update.url || RELEASES_URL, "下载页")}
+              onClick={() => void open(update.url || RELEASES_URL, tr("about.goDownload"))}
             >
               <IconDownload size={14} />
-              前往下载
+              {tr("about.goDownload")}
             </button>
           </div>
           <ul className="about-update-notes">
@@ -252,43 +254,48 @@ export function AboutPage() {
           </ul>
           {!(update.assetUrl || update.setupUrl) ? (
             <p className="about-update-hint" data-about-no-asset>
-              该版本还没有提供可自动更新的安装包，请用「前往下载」手动安装。
+              {tr("about.manualInstall")}
             </p>
           ) : null}
           {installing ? (
             <p className="about-update-hint" data-about-installing>
-              下载完成后启动器会自动重启
+              {tr("about.restartHint")}
             </p>
           ) : null}
         </section>
       ) : null}
 
       <div className="about-cards">
-        {CAPABILITIES.map(({ Icon, title, desc }) => (
-          <article className="about-card" data-about-card key={title}>
+        {CAPABILITIES.map(({ Icon, titleKey, descKey }) => {
+          const title = tr(titleKey);
+          return (
+          <article className="about-card" data-about-card key={titleKey}>
             <div className="about-card-head">
               <span className="about-card-icon">
                 <Icon size={17} />
               </span>
               <strong className="about-card-title">{title}</strong>
             </div>
-            <p className="about-card-desc">{desc}</p>
+            <p className="about-card-desc">{tr(descKey)}</p>
           </article>
-        ))}
+          );
+        })}
       </div>
 
       <section className="panel">
         <div className="panel-head">
-          <h2 className="panel-title">链接与致谢</h2>
-          <span className="panel-count">{LINKS.length} 项</span>
+          <h2 className="panel-title">{tr("about.linksTitle")}</h2>
+          <span className="panel-count">{tr("about.linksCount", { count: LINKS.length })}</span>
         </div>
         <div className="about-link-list">
-          {LINKS.map(({ Icon, label, hint, url }) => (
+          {LINKS.map(({ Icon, labelKey, hintKey, url }) => {
+            const label = tr(labelKey);
+            return (
             <button
               type="button"
               className="about-link"
               data-about-link
-              key={label}
+              key={labelKey}
               onClick={() => void open(url, label)}
             >
               <span className="about-link-icon">
@@ -296,11 +303,12 @@ export function AboutPage() {
               </span>
               <span className="about-link-text">
                 <strong>{label}</strong>
-                <small>{hint}</small>
+                {hintKey ? <small>{tr(hintKey, { number: QQ_GROUP_NO })}</small> : null}
               </span>
               <IconChevronRight size={15} className="about-link-arrow" />
             </button>
-          ))}
+            );
+          })}
         </div>
         <div className="about-dirs" data-about-dirs>
           <button
@@ -309,10 +317,10 @@ export function AboutPage() {
             data-about-dir="root"
             title={info?.rootDir}
             disabled={!info}
-            onClick={() => void openDir(info?.rootDir, "启动器目录")}
+            onClick={() => void openDir(info?.rootDir, tr("about.openLauncherDir"))}
           >
             <IconFolder size={14} />
-            打开启动器目录
+            {tr("about.openLauncherDir")}
           </button>
           <button
             type="button"
@@ -320,10 +328,10 @@ export function AboutPage() {
             data-about-dir="game"
             title={info?.gameRoot}
             disabled={!info}
-            onClick={() => void openDir(info?.gameRoot, "游戏目录")}
+            onClick={() => void openDir(info?.gameRoot, tr("about.openGameDir"))}
           >
             <IconFolder size={14} />
-            打开游戏目录
+            {tr("about.openGameDir")}
           </button>
         </div>
       </section>
@@ -332,7 +340,7 @@ export function AboutPage() {
         {/* 核心团队在上、更新日志在下（原来是左右并排） */}
         <section className="panel">
           <div className="panel-head">
-            <h2 className="panel-title">核心团队</h2>
+            <h2 className="panel-title">{tr("about.teamTitle")}</h2>
           </div>
           <ul className="about-team">
             {TEAM.map((member) => (
@@ -342,7 +350,7 @@ export function AboutPage() {
                 </span>
                 <span className="about-member-text">
                   <strong>{member.name}</strong>
-                  <small>{member.role}</small>
+                  <small>{tr(member.roleKey)}</small>
                 </span>
               </li>
             ))}
@@ -353,34 +361,34 @@ export function AboutPage() {
           <div className="panel-head">
             <h2 className="panel-title">
               <IconBook size={15} className="about-title-icon" />
-              更新日志
+              {tr("about.changelogTitle")}
             </h2>
             <button
               type="button"
               className="btn btn-ghost btn-sm"
               data-about-changelog
-              title="历史版本的更新日志在项目仓库的 CHANGELOG.md"
+              title={tr("about.changelogHistoryTitle")}
               onClick={() => void openChangelog()}
             >
-              历史版本
+              {tr("about.changelogHistory")}
               <IconChevronRight size={14} />
             </button>
           </div>
-          {changelog.loading && !changelog.data ? <p className="field-hint">正在读取更新日志…</p> : null}
+          {changelog.loading && !changelog.data ? <p className="field-hint">{tr("about.changelogLoading")}</p> : null}
           {changelog.error ? (
-            <p className="field-hint">读取更新日志失败：{errorMessage(changelog.error)}</p>
+            <p className="field-hint">{tr("about.changelogFailed", { error: errorMessage(changelog.error) })}</p>
           ) : null}
           {changelog.data && changelog.data.length === 0 ? (
-            <p className="field-hint">这个安装包里没有附带 CHANGELOG.md，点右上「查看完整」去仓库看。</p>
+            <p className="field-hint">{tr("about.changelogMissing")}</p>
           ) : null}
           <p className="field-hint" data-changelog-scope>
-            只显示当前版本；更早的更新日志请在仓库的 CHANGELOG.md 查看。
+            {tr("about.changelogScope")}
           </p>
           {(changelog.data ?? []).map((section: { version: string; lines: string[] }, index: number) => (
             <div className="about-log-version" key={section.version} data-changelog-version={section.version}>
               <p className="about-log-version-head">
                 <strong>{section.version === "最新" ? section.version : "v" + section.version}</strong>
-                {index === 0 ? <span className="badge about-log-latest">当前版本线</span> : null}
+                {index === 0 ? <span className="badge about-log-latest">{tr("about.changelogLatest")}</span> : null}
               </p>
               <ul className="about-log">
                 {section.lines
@@ -402,14 +410,14 @@ export function AboutPage() {
       </div>
 
       <p className="about-foot" data-about-foot>
-        Designed with <span className="about-heart" aria-hidden="true">♥</span> by 奶龙 · NaiWa Launcher v{version}
+        {tr("about.footer", { version })}
       </p>
 
       <ConfirmDialog
         open={confirming}
-        title="立即更新"
-        message="将下载新版本并替换当前程序，完成后自动重启。确定现在更新吗？"
-        confirmText="立即更新"
+        title={tr("about.confirmTitle")}
+        message={tr("about.confirmMessage")}
+        confirmText={tr("about.confirmTitle")}
         busy={installing}
         onCancel={() => setConfirming(false)}
         onConfirm={() => void install()}

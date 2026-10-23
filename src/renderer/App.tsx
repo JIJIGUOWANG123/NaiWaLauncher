@@ -69,12 +69,41 @@ function Shell() {
     ? settings?.wallpaperBackgroundIntervalSec ?? 20
     : settings?.backgroundIntervalSec ?? 20;
 
+  // 壁纸引擎来源的播放池：进入该来源时懒加载一次（切换来源不重复请求）。
+  // 以前 sequence/random 只认本地背景目录，壁纸引擎下永远在轮播本地图片（用户反馈的问题）。
+  const [wallpaperPool, setWallpaperPool] = useState<string[]>([]);
+  const wallpaperLoaded = useRef(false);
+  useEffect(() => {
+    if (bgSource !== "wallpaperEngine" || wallpaperLoaded.current) return;
+    wallpaperLoaded.current = true;
+    void api.wallpaper
+      .list()
+      .then((entries) => {
+        // 视频壁纸用视频、静态图壁纸用图片；两者都没有的条目跳过
+        setWallpaperPool(entries.map((item) => item.videoPath || item.imagePath).filter((path) => path.length > 0));
+      })
+      .catch(() => {
+        // 读失败允许下次切回该来源再试；池子为空时自动退回本地行为
+        wallpaperLoaded.current = false;
+      });
+  }, [bgSource]);
+
+  // 「每次启动随机一张」：三套字段互不影响；API 来源不走播放池，单独在下面处理。
+  const startupRandomKey = bgSource === "local"
+    ? (settings?.backgroundStartupRandom === true ? "local" : undefined)
+    : bgSource === "wallpaperEngine"
+      ? (settings?.wallpaperBackgroundStartupRandom === true ? "wallpaperEngine" : undefined)
+      : undefined;
+
   // 背景图播放（单张 / 顺序轮播 / 随机轮播）由设置驱动，改间隔即时生效；关闭时不参与轮播。
+  // 壁纸引擎来源把「壁纸文件列表」当播放池交给 hook，本地来源照旧用背景目录里的文件。
   const playback = useBackgroundPlayback(
     media.data,
     bgActive ? (settings?.backgroundImage ?? "") : "",
     bgActive ? localMode : "single",
     localInterval,
+    bgSource === "wallpaperEngine" ? wallpaperPool : undefined,
+    bgActive ? startupRandomKey : undefined,
   );
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -107,15 +136,25 @@ function Shell() {
     }
   }, []);
 
+  // API 来源的「每次启动随机一张」：本次进程里只在首次进入时拉一张新图，
+  // 之后切走再切回来沿用同一张（不再重随机）；关掉时保持原来的「每次进入都拉一张」。
+  const apiStartupRandom = settings?.apiBackgroundStartupRandom === true;
+  const apiStartupDone = useRef(false);
+
   // 进入 API 模式先拉一张；个性化页的「立即换一张」会把新地址写进 backgroundImage，
   // 这里只把它当刷新信号（API 模式不按 backgroundImage 显示）。
   useEffect(() => {
     if (!apiMode) {
-      setApiBg(null);
+      // 开了启动随机就保留这张图，切回来还是它；没开则清掉，回来时重新拉
+      if (!apiStartupRandom) setApiBg(null);
       return;
     }
+    if (apiStartupRandom) {
+      if (apiStartupDone.current) return;
+      apiStartupDone.current = true;
+    }
     void loadApiBackground();
-  }, [apiMode, loadApiBackground, settings?.backgroundImage]);
+  }, [apiMode, apiStartupRandom, loadApiBackground, settings?.backgroundImage]);
 
   // API 模式轮播：single 只由「立即换一张」驱动，sequence / random 按 apiBackgroundIntervalSec 换新图。
   const apiMode2 = settings?.apiBackgroundMode ?? "single";

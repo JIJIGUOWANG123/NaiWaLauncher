@@ -2,6 +2,7 @@
 import type { LoaderKind, ModContentKind, ModFileInfo, ModProviderId, ModSearchResult } from "../../shared/types";
 import type { ModFilesRequest, ModSearchRequest } from "../../shared/ipc";
 import { fetchJson } from "../core/http";
+import { mt } from "../core/i18n";
 
 /** 来源给出的依赖项（原始形态）：只保留必需关系；名称与安装状态由 dependencies.ts 统一补。 */
 export interface RawDependency {
@@ -321,7 +322,7 @@ export async function apiJson<T>(
     });
   } catch (err) {
     const status = httpStatusOf(err);
-    const wrapped = new Error(`接口请求失败：${messageOf(err)}`) as Error & { status?: number };
+    const wrapped = new Error(mt("mods.requestFailed", { error: messageOf(err) })) as Error & { status?: number };
     // 保留状态码：调用方要区分「未收录(404)」与真正的故障
     if (status !== null) wrapped.status = status;
     throw wrapped;

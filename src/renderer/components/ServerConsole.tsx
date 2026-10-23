@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ServerConsoleLine, ServerEntry, ServerStatus } from "../../shared/types";
 import { api } from "../lib/api";
+import { useT } from "../lib/i18n";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "./Toast";
 import { Drawer } from "./Drawer";
 import { IconPause, IconTrash } from "./icons";
 
-const STATUS_LABEL: Record<ServerStatus, string> = {
-  stopped: "已停止",
-  starting: "启动中",
-  running: "运行中",
-  stopping: "停止中",
-  crashed: "已崩溃",
+const STATUS_KEY: Record<ServerStatus, string> = {
+  stopped: "pages.server.statusStopped",
+  starting: "pages.server.statusStarting",
+  running: "pages.server.statusRunning",
+  stopping: "pages.server.statusStopping",
+  crashed: "pages.server.statusCrashed",
 };
 
 /** 控制台一次最多保留多少行：再多也只是滚屏，界面没必要背着。 */
@@ -36,6 +37,7 @@ export function ServerConsole({
   onClose: () => void;
 }) {
   const { push } = useToast();
+  const t = useT();
   const serverId = server?.meta.id ?? null;
   const [lines, setLines] = useState<ServerConsoleLine[]>([]);
   const [status, setStatus] = useState<ServerStatus>("stopped");
@@ -121,7 +123,7 @@ export function ServerConsole({
     setStopping(true);
     try {
       await api.servers.stop(serverId);
-      push("已发送停止指令，等待世界保存完成", "info");
+      push(t("pages.server.stopSent"), "info");
     } catch (err: unknown) {
       push(errorMessage(err), "error");
     } finally {
@@ -163,8 +165,13 @@ export function ServerConsole({
   return (
     <Drawer
       open={open && server !== null}
-      title={server?.meta.name ?? "控制台"}
-      subtitle={server ? `${server.meta.core} ${server.meta.coreVersion} · Minecraft ${server.meta.mcVersion} · 端口 ${server.meta.port}` : undefined}
+      title={server?.meta.name ?? t("pages.server.console")}
+      subtitle={server
+        ? t("pages.server.subtitleWithPort", {
+          head: `${server.meta.core} ${server.meta.coreVersion} · Minecraft ${server.meta.mcVersion}`,
+          port: String(server.meta.port),
+        })
+        : undefined}
       width={820}
       onClose={onClose}
       footer={(
@@ -175,8 +182,8 @@ export function ServerConsole({
             className="console-input"
             data-console-input
             value={draft}
-            placeholder={canInput ? "输入命令，回车发送（↑ 回看历史）" : "服务端没在运行，先点「启动」"}
-            aria-label="服务端命令"
+            placeholder={canInput ? t("pages.server.consoleHintInput") : t("pages.server.consoleHintIdle")}
+            aria-label={t("pages.server.commandAria")}
             disabled={!canInput || sending}
             onChange={(event) => {
               setDraft(event.target.value);
@@ -191,15 +198,17 @@ export function ServerConsole({
             onClick={() => void send()}
             disabled={!canInput || sending || draft.trim() === ""}
           >
-            发送
+            {t("pages.server.send")}
           </button>
         </div>
       )}
     >
       <div className="console-toolbar">
-        <span className="server-status" data-server-status={status}>{STATUS_LABEL[status]}</span>
+        <span className="server-status" data-server-status={status}>{t(STATUS_KEY[status])}</span>
         <span className="console-hint">
-          {status === "running" ? "已连接：日志实时推送" : status === "crashed" ? "进程已崩溃，看下方的 stderr" : "未运行"}
+          {status === "running"
+            ? t("pages.server.consoleConnected")
+            : status === "crashed" ? t("pages.server.consoleCrashed") : t("pages.server.consoleIdle")}
         </span>
         <div className="console-toolbar-actions">
           <button
@@ -210,23 +219,23 @@ export function ServerConsole({
             disabled={stopping || (status !== "running" && status !== "starting")}
           >
             <IconPause size={14} />
-            {stopping ? "停止中…" : "停止"}
+            {stopping ? t("pages.server.stopping") : t("pages.server.stop")}
           </button>
           <button
             type="button"
             className="btn btn-sm btn-ghost"
             data-action="server-console-clear"
             onClick={() => setLines([])}
-            title="只清界面上的日志，不影响服务端"
+            title={t("pages.server.clearTitle")}
           >
             <IconTrash size={14} />
-            清屏
+            {t("pages.server.clear")}
           </button>
         </div>
       </div>
 
       {error ? <p className="server-form-error">{error}</p> : null}
-      {loading ? <p className="console-hint">正在读取日志…</p> : null}
+      {loading ? <p className="console-hint">{t("pages.server.readingLog")}</p> : null}
 
       <div
         className="console-log"
@@ -238,7 +247,7 @@ export function ServerConsole({
         }}
       >
         {lines.length === 0 && !loading ? (
-          <p className="console-empty">还没有日志：启动服务端后，控制台输出会出现在这里。</p>
+          <p className="console-empty">{t("pages.server.emptyLog")}</p>
         ) : null}
         {lines.map((line, index) => (
           <div

@@ -11,6 +11,7 @@ import {
   writeVersionJson,
   type LibraryItem,
 } from "./installer-runner";
+import { mt } from "../core/i18n";
 
 const log = logger("loaders/liteloader");
 
@@ -73,10 +74,10 @@ function compareMc(a: string, b: string): number {
 /** 元数据里没有 1.13+ 的 LiteLoader，与其发一次请求不如直接判空。 */
 function supportedCheck(mcVersion: string): { ok: boolean; reason?: string } {
   if (compareMc(mcVersion, MAX_MC) > 0) {
-    return { ok: false, reason: "LiteLoader 只支持 1.12.2 及更早版本" };
+    return { ok: false, reason: mt("loader.liteLoaderMax") };
   }
   if (compareMc(mcVersion, MIN_MC) < 0) {
-    return { ok: false, reason: `LiteLoader 只支持 ${MIN_MC} 及更新版本` };
+    return { ok: false, reason: mt("loader.liteLoaderMin", { version: MIN_MC }) };
   }
   return { ok: true };
 }
@@ -84,7 +85,7 @@ function supportedCheck(mcVersion: string): { ok: boolean; reason?: string } {
 /** 供 index 在安装原版之前就给出可读错误，避免白装一个不支持的原版。 */
 export function assertLiteLoaderSupported(mcVersion: string): void {
   const support = supportedCheck(mcVersion);
-  if (!support.ok) throw new Error(support.reason ?? `LiteLoader 不支持 Minecraft ${mcVersion}`);
+  if (!support.ok) throw new Error(support.reason ?? mt("loader.unsupportedMc", { loader: "LiteLoader", mc: mcVersion }));
 }
 
 async function fetchMeta(): Promise<Record<string, LiteVersionData>> {
@@ -182,7 +183,7 @@ export async function installLiteLoader(
   signal?: AbortSignal,
 ): Promise<{ versionId: string; loaderVersion: string }> {
   const support = supportedCheck(mcVersion);
-  if (!support.ok) throw new Error(support.reason ?? `LiteLoader 不支持 Minecraft ${mcVersion}`);
+  if (!support.ok) throw new Error(support.reason ?? mt("loader.unsupportedMc", { loader: "LiteLoader", mc: mcVersion }));
 
   const meta = await fetchMeta();
   const group = pickGroup(meta[mcVersion]);
@@ -191,14 +192,14 @@ export async function installLiteLoader(
   const entry = wanted ? entries.find((e) => e.version === wanted) : entries[0];
   if (!entry) {
     throw new Error(
-      `LiteLoader 没有 Minecraft ${mcVersion} 的${wanted ? `版本 ${wanted}` : "可用构件（元数据缺 " + LITELOADER_KEY + "）"}`,
+      mt("loader.liteLoaderNoBuild", { mc: mcVersion, what: wanted ? mt("loader.liteLoaderBuildVersion", { version: wanted }) : mt("loader.liteLoaderBuildAny", { key: LITELOADER_KEY }) }),
     );
   }
 
   const versionId = `${mcVersion}-liteloader`;
-  const task = createTask("loader", `安装 LiteLoader ${entry.version}`);
+  const task = createTask("loader", mt("loader.installTitle", { name: "LiteLoader", version: entry.version }));
   try {
-    task.update({ stage: "解析 loader 元数据", percent: 0 });
+    task.update({ stage: mt("loader.stage.metadata"), percent: 0 });
 
     const jarUrl = jarUrlOf(entry);
     const jarPath = `${JAR_GROUP_PATH}/${jarDirOf(entry)}/${entry.file}`;
@@ -247,14 +248,14 @@ export async function installLiteLoader(
       json.arguments = { game: ["--tweakClass", tweakClass], jvm: [] };
     }
 
-    task.update({ stage: "写入版本描述" });
+    task.update({ stage: mt("loader.stage.writeVersion") });
     await writeVersionJson(versionId, json);
 
-    task.update({ stage: "下载依赖库" });
+    task.update({ stage: mt("loader.stage.libraries") });
     const items: LibraryItem[] = collectLibraryItems(json);
     const { failed } = await downloadLibraries(items, { task, label: `liteloader ${entry.version}`, signal });
     if (failed.length > 0) {
-      throw new Error(`LiteLoader 依赖下载失败 ${failed.length} 个，首个：${failed[0].url}（${failed[0].error}）`);
+      throw new Error(mt("loader.librariesFailed", { loader: "LiteLoader", count: failed.length, url: failed[0].url, error: failed[0].error }));
     }
 
     task.done({ versionId, loaderVersion: entry.version, libraries: items.length });

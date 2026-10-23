@@ -13,6 +13,7 @@ import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { isCoreId, resolveBuild, type ResolvedBuild } from "./fastmirror";
 import { defaultProperties, editableProperties, writeProperties } from "./properties";
+import { mt } from "../core/i18n";
 
 const log = logger("servers/store");
 
@@ -58,7 +59,7 @@ export function isValidServerId(id: unknown): id is string {
 }
 
 function assertId(id: unknown): string {
-  if (!isValidServerId(id)) throw new Error(`服务端 id 不合法：${String(id)}`);
+  if (!isValidServerId(id)) throw new Error(mt("srv.badId", { id: String(id) }));
   return id;
 }
 
@@ -66,7 +67,7 @@ export function serverDir(id: string): string {
   const safe = assertId(id);
   const dir = join(serversRoot(), safe);
   // 双保险：id 已经受正则约束，这里再确认落点仍在 servers/ 之下
-  if (!dir.startsWith(serversRoot())) throw new Error(`服务端目录越界：${safe}`);
+  if (!dir.startsWith(serversRoot())) throw new Error(mt("srv.dirEscape", { path: safe }));
   return dir;
 }
 
@@ -91,7 +92,7 @@ export function sanitizeName(raw: unknown): string {
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  return (cleaned || "Minecraft 服务器").slice(0, MAX_NAME_LENGTH);
+  return (cleaned || mt("srv.defaultName")).slice(0, MAX_NAME_LENGTH);
 }
 
 function safeJarName(filename: string, core: ServerCoreId, mcVersion: string, coreVersion: string): string {
@@ -103,15 +104,15 @@ function safeJarName(filename: string, core: ServerCoreId, mcVersion: string, co
 }
 
 function normalizeMeta(raw: unknown, dirId: string): ServerMeta {
-  if (!raw || typeof raw !== "object") throw new Error("server.json 内容不是对象");
+  if (!raw || typeof raw !== "object") throw new Error(mt("srv.store.notObject"));
   const obj = raw as Record<string, unknown>;
   const id = typeof obj.id === "string" ? obj.id : dirId;
-  if (!isValidServerId(id)) throw new Error(`server.json 的 id 不合法：${String(obj.id)}`);
+  if (!isValidServerId(id)) throw new Error(mt("srv.store.badId", { id: String(obj.id) }));
   const jarFile = typeof obj.jarFile === "string" ? obj.jarFile : "";
-  if (!jarFile) throw new Error("server.json 缺少 jarFile");
+  if (!jarFile) throw new Error(mt("srv.store.missingJar"));
   const mcVersion = typeof obj.mcVersion === "string" ? obj.mcVersion : "";
-  if (!mcVersion) throw new Error("server.json 缺少 mcVersion");
-  if (!isCoreId(obj.core)) throw new Error(`server.json 的 core 不合法：${String(obj.core)}`);
+  if (!mcVersion) throw new Error(mt("srv.store.missingMcVersion"));
+  if (!isCoreId(obj.core)) throw new Error(mt("srv.store.badCore", { core: String(obj.core) }));
   const meta: ServerMeta = {
     id,
     name: sanitizeName(obj.name),
@@ -137,13 +138,13 @@ export async function readMeta(id: string): Promise<ServerMeta> {
   try {
     text = await readFile(metaFile(dir), "utf8");
   } catch {
-    throw new Error(`服务端 ${id} 不存在（缺少 server.json）`);
+    throw new Error(mt("srv.store.missing", { id }));
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (err) {
-    throw new Error(`服务端 ${id} 的 server.json 损坏：${messageOf(err)}`);
+    throw new Error(mt("srv.store.corrupt", { id, error: messageOf(err) }));
   }
   return normalizeMeta(parsed, id);
 }
@@ -227,7 +228,7 @@ function newId(taken: Iterable<string>): string {
     if (existsSync(join(serversRoot(), id))) continue;
     return id;
   }
-  throw new Error("无法生成唯一的服务端 id（已尝试 200 次）");
+  throw new Error(mt("srv.store.idFailed"));
 }
 
 /** 直接试绑端口：比"探测是否有人监听"更接近服务端真实处境。 */
@@ -245,9 +246,9 @@ function isPortFree(port: number): Promise<boolean> {
 async function pickPort(requested: unknown, used: Set<number>, free: PortProbe): Promise<number> {
   if (requested !== undefined && requested !== null && String(requested).trim() !== "") {
     const port = Number(requested);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`端口不合法：${String(requested)}`);
-    if (used.has(port)) throw new Error(`端口 ${port} 已被其它服务端占用`);
-    if (!(await free(port))) throw new Error(`端口 ${port} 已被占用`);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(mt("srv.badPort", { port: String(requested) }));
+    if (used.has(port)) throw new Error(mt("srv.portTaken", { port }));
+    if (!(await free(port))) throw new Error(mt("srv.portBusy", { port }));
     return port;
   }
   for (let offset = 0; offset < PORT_ATTEMPTS; offset += 1) {
@@ -255,7 +256,7 @@ async function pickPort(requested: unknown, used: Set<number>, free: PortProbe):
     if (used.has(port)) continue;
     if (await free(port)) return port;
   }
-  throw new Error(`端口 ${DEFAULT_PORT}–${DEFAULT_PORT + PORT_ATTEMPTS - 1} 全部被占用，请手动指定端口`);
+  throw new Error(mt("srv.portRangeFull", { from: DEFAULT_PORT, to: DEFAULT_PORT + PORT_ATTEMPTS - 1 }));
 }
 
 /**
@@ -265,11 +266,11 @@ async function pickPort(requested: unknown, used: Set<number>, free: PortProbe):
 export async function createServer(req: ServerCreateRequest, deps: CreateDeps = {}): Promise<ServerMeta> {
   const name = sanitizeName(req?.name);
   const core = req?.core;
-  if (!isCoreId(core)) throw new Error(`不支持的服务端核心：${String(core)}`);
+  if (!isCoreId(core)) throw new Error(mt("srv.unsupportedCore", { core: String(core) }));
   const mcVersion = String(req?.mcVersion ?? "").trim();
   const coreVersion = String(req?.coreVersion ?? "").trim();
-  if (!mcVersion) throw new Error("游戏版本不能为空");
-  if (!coreVersion) throw new Error("核心构建不能为空");
+  if (!mcVersion) throw new Error(mt("srv.versionRequired"));
+  if (!coreVersion) throw new Error(mt("srv.buildRequired"));
 
   const build = await (deps.resolveBuild ?? resolveBuild)(core, mcVersion, coreVersion);
   const download = deps.download ?? ((url, dest, opts) => downloadFile(url, dest, opts));
@@ -277,7 +278,7 @@ export async function createServer(req: ServerCreateRequest, deps: CreateDeps = 
   const id = newId(existing.map((item) => item.id));
   const dir = serverDir(id);
   const jarFile = safeJarName(build.filename, core, mcVersion, coreVersion);
-  const task = deps.task ?? createTask("generic", `服务端 ${name}`);
+  const task = deps.task ?? createTask("generic", mt("srv.taskLabel", { name }));
 
   try {
     await mkdir(dir, { recursive: true });
@@ -291,12 +292,12 @@ export async function createServer(req: ServerCreateRequest, deps: CreateDeps = 
     const eulaAgreed = (req as ServerCreateRequest & { eulaAgreed?: boolean })?.eulaAgreed !== false;
 
     const dest = join(dir, jarFile);
-    task.update({ stage: "下载服务端", percent: null, downloadedBytes: 0, totalBytes: 0 });
+    task.update({ stage: mt("srv.stage.download"), percent: null, downloadedBytes: 0, totalBytes: 0 });
     await download(build.downloadUrl, dest, { expectedSha1: build.sha1, task });
     if (!deps.skipSha1 && build.sha1) {
       const actual = await sha1OfFile(dest).catch(() => "");
       if (actual !== build.sha1.toLowerCase()) {
-        throw new Error(`服务端 jar 校验失败：期望 ${build.sha1}，实际 ${actual || "（读不到文件）"}`);
+        throw new Error(mt("srv.jarChecksum", { expected: build.sha1, actual: actual || "-" }));
       }
     }
 
@@ -344,9 +345,9 @@ export async function updateServer(
   }
   if (patch.port !== undefined) {
     const port = Number(patch.port);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`端口不合法：${String(patch.port)}`);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(mt("srv.badPort", { port: String(patch.port) }));
     const others = (await listServers()).filter((item) => item.id !== meta.id).map((item) => item.port);
-    if (others.includes(port)) throw new Error(`端口 ${port} 已被其它服务端占用`);
+    if (others.includes(port)) throw new Error(mt("srv.portTaken", { port }));
     if (port !== next.port) { next.port = port; touchesProperties = true; }
   }
   if (patch.memoryMb !== undefined) next.memoryMb = clampInt(patch.memoryMb, MIN_MEMORY_MB, MAX_MEMORY_MB, next.memoryMb);

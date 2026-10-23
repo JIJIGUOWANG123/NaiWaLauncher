@@ -3,6 +3,7 @@ import type { Account } from "../../shared/types";
 import { api } from "../lib/api";
 import { copyText } from "../lib/clipboard";
 import { useApp } from "../lib/store";
+import { useT } from "../lib/i18n";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { ConfirmDialog } from "../components/Modal";
 import { Field, Select, TextInput } from "../components/Form";
@@ -14,11 +15,12 @@ import { MicrosoftAccountCard } from "./MicrosoftAccountCard";
 import { YggdrasilLoginDialog } from "./YggdrasilLoginDialog";
 
 const NAME_RULE = /^[A-Za-z0-9_]{3,16}$/;
-const NAME_HINT = "昵称只能包含字母、数字和下划线，长度 3–16 位";
-const EMPTY_TITLE = "还没有添加账号。";
-const EMPTY_HINT = "离线账号可直接开始游戏；微软账号需要先在下方填写 client id。";
 const AVATAR_COLORS = ["#e0a93b", "#6b9ce0", "#9bc53d", "#c07be0", "#e07b5b", "#4fbfa8"];
-const TYPE_LABEL: Record<Account["type"], string> = { offline: "离线", microsoft: "微软正版", yggdrasil: "第三方" };
+const TYPE_KEY: Record<Account["type"], string> = {
+  offline: "pages.accounts.typeOffline",
+  microsoft: "pages.accounts.typeMicrosoft",
+  yggdrasil: "pages.accounts.typeYggdrasil",
+};
 
 /** 首字母头像是占位图：同一个名字始终落到同一个颜色。 */
 function avatarColor(name: string): string {
@@ -28,8 +30,8 @@ function avatarColor(name: string): string {
 }
 
 /** 第三方账号的站点标识：站点名与域名都由 lib/account 统一推导，这里只补一个兜底文案。 */
-function siteOf(account: Account): string {
-  return accountSiteName(account) || "未知站点";
+function siteOf(account: Account, fallback: string): string {
+  return accountSiteName(account) || fallback;
 }
 
 function AccountAvatar({ account }: { account: Account }) {
@@ -50,22 +52,27 @@ function CurrentAccountCard({
   onDelete: () => void;
   onCopy: () => void;
 }) {
+  const t = useT();
   return (
-    <section className="panel account-current" aria-label="当前账号">
+    <section className="panel account-current" aria-label={t("pages.accounts.currentAria")}>
       <div className="account-head">
         <AccountAvatar account={account} />
         <div className="account-titles">
           <h2 className="account-name">{account.name}</h2>
           <div className="account-tags">
-            <span className={`badge account-badge account-${account.type}`}>{TYPE_LABEL[account.type]}</span>
-            {account.type === "yggdrasil" ? <span className="account-site">{siteOf(account)}</span> : null}
-            <span className="account-since">创建于 {new Date(account.createdAt).toLocaleDateString("zh-CN")}</span>
+            <span className={`badge account-badge account-${account.type}`}>{t(TYPE_KEY[account.type])}</span>
+            {account.type === "yggdrasil"
+              ? <span className="account-site">{siteOf(account, t("pages.accounts.unknownSite"))}</span>
+              : null}
+            <span className="account-since">
+              {t("pages.accounts.created", { date: new Date(account.createdAt).toLocaleDateString() })}
+            </span>
           </div>
         </div>
         <div className="account-actions">
-          <button type="button" className="btn btn-ghost btn-danger-ghost btn-icon" onClick={onDelete} title="删除当前账号">
+          <button type="button" className="btn btn-ghost btn-danger-ghost btn-icon" onClick={onDelete} title={t("pages.accounts.deleteCurrentTitle")}>
             <IconTrash size={16} />
-            <span>删除</span>
+            <span>{t("pages.accounts.delete")}</span>
           </button>
         </div>
       </div>
@@ -76,19 +83,22 @@ function CurrentAccountCard({
           <dd className="account-uuid">
             <code data-account-uuid>{account.uuid}</code>
             <button type="button" className="btn btn-ghost btn-sm" onClick={onCopy} data-copy-uuid>
-              复制
+              {t("pages.accounts.copy")}
             </button>
           </dd>
         </div>
         <div>
-          <dt>切换账号</dt>
+          <dt>{t("pages.accounts.switchAccount")}</dt>
           <dd>
             <Select
               value={account.id}
-              ariaLabel="切换账号"
+              ariaLabel={t("pages.accounts.switchAccount")}
               disabled={switching || accounts.length < 2}
               onChange={onSwitch}
-              options={accounts.map((item) => ({ value: item.id, label: `${item.name}（${TYPE_LABEL[item.type]}）` }))}
+              options={accounts.map((item) => ({
+                value: item.id,
+                label: `${item.name} (${t(TYPE_KEY[item.type])})`,
+              }))}
             />
           </dd>
         </div>
@@ -100,6 +110,7 @@ function CurrentAccountCard({
 export function AccountsPage() {
   const { settings, applySettings } = useApp();
   const { push } = useToast();
+  const t = useT();
   const state = useAsync(() => api.accounts.list(), []);
   const accounts = useMemo(() => state.data ?? [], [state.data]);
   const [nickname, setNickname] = useState("");
@@ -129,7 +140,7 @@ export function AccountsPage() {
 
   const copyUuid = async (uuid: string) => {
     const ok = await copyText(uuid);
-    push(ok ? "UUID 已复制" : "复制失败，请手动选择 UUID", ok ? "success" : "error");
+    push(ok ? t("pages.accounts.uuidCopied") : t("pages.accounts.copyFailed"), ok ? "success" : "error");
   };
 
   const switchTo = async (id: string) => {
@@ -138,7 +149,7 @@ export function AccountsPage() {
     try {
       await api.accounts.setActive(id);
       const target = accounts.find((item) => item.id === id);
-      push(`已切换到「${target?.name ?? id}」`, "success");
+      push(t("pages.accounts.switched", { name: target?.name ?? id }), "success");
       await reloadAll();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -150,13 +161,13 @@ export function AccountsPage() {
   const createOffline = async () => {
     const name = nickname.trim();
     if (!NAME_RULE.test(name)) {
-      push(NAME_HINT, "error");
+      push(t("pages.accounts.nameRuleHint"), "error");
       return;
     }
     setCreating(true);
     try {
       const created = await api.accounts.createOffline(name);
-      push(`离线账号「${created.name}」已创建`, "success");
+      push(t("pages.accounts.offlineCreated", { name: created.name }), "success");
       try {
         await api.accounts.setActive(created.id);
       } catch (error: unknown) {
@@ -176,7 +187,7 @@ export function AccountsPage() {
     setBusyDelete(true);
     try {
       await api.accounts.remove(deleting.id);
-      push(`账号「${deleting.name}」已删除`, "success");
+      push(t("pages.accounts.deleted", { name: deleting.name }), "success");
       setDeleting(null);
       await reloadAll();
     } catch (error: unknown) {
@@ -189,7 +200,7 @@ export function AccountsPage() {
   const handleYggdrasilLoggedIn = async (account: Account, temporary: boolean) => {
     setYggOpen(false);
     if (temporary) setTempIds((prev) => (prev.includes(account.id) ? prev : [...prev, account.id]));
-    push(`已登录第三方账号 ${account.name}`, "success");
+    push(t("pages.accounts.yggLoggedIn", { name: account.name }), "success");
     await reloadAll();
   };
 
@@ -203,10 +214,10 @@ export function AccountsPage() {
     try {
       const result = await api.accounts.validateYggdrasil(account.id);
       if (result.ok) {
-        push(`「${account.name}」登录状态有效`, "success");
+        push(t("pages.accounts.valid", { name: account.name }), "success");
         return;
       }
-      const message = (result.error ?? "").trim() || "登录状态已失效";
+      const message = (result.error ?? "").trim() || t("pages.accounts.expired");
       setCheckErrors((prev) => ({ ...prev, [account.id]: message }));
       push(message, "error");
     } catch (error: unknown) {
@@ -229,17 +240,17 @@ export function AccountsPage() {
     <section className="page">
       <header className="page-head">
         <div>
-          <h1 className="page-title">账号</h1>
-          <p className="page-sub">离线账号输入昵称即可开始游戏；微软正版账号走设备码登录；第三方账号用 Yggdrasil 外置登录（LittleSkin 等）。</p>
+          <h1 className="page-title">{t("pages.accounts.title")}</h1>
+          <p className="page-sub">{t("pages.accounts.sub")}</p>
         </div>
         <div className="page-actions">
           <button type="button" className="btn btn-ghost" onClick={() => state.reload()} disabled={state.loading}>
             <IconRefresh size={16} />
-            刷新
+            {t("pages.accounts.refresh")}
           </button>
           <button type="button" className="btn btn-primary" onClick={() => setYggOpen(true)} data-open-yggdrasil>
             <IconLink size={16} />
-            第三方登录
+            {t("pages.accounts.thirdPartyLogin")}
           </button>
         </div>
       </header>
@@ -248,7 +259,9 @@ export function AccountsPage() {
 
       {state.error ? <ErrorState message={state.error} onRetry={() => state.reload()} /> : null}
 
-      {!loading && !state.error && !active ? <EmptyState title={EMPTY_TITLE} hint={EMPTY_HINT} /> : null}
+      {!loading && !state.error && !active ? (
+        <EmptyState title={t("pages.accounts.emptyTitle")} hint={t("pages.accounts.emptyHint")} />
+      ) : null}
 
       {!loading && !state.error && active ? (
         <CurrentAccountCard
@@ -262,10 +275,10 @@ export function AccountsPage() {
       ) : null}
 
       {!loading && !state.error && accounts.length > 0 ? (
-        <section className="panel account-list" aria-label="账号列表">
+        <section className="panel account-list" aria-label={t("pages.accounts.listAria")}>
           <div className="panel-head">
-            <h2 className="panel-title">账号列表</h2>
-            <span className="panel-count">{accounts.length} 个</span>
+            <h2 className="panel-title">{t("pages.accounts.listTitle")}</h2>
+            <span className="panel-count">{t("pages.accounts.count", { count: String(accounts.length) })}</span>
           </div>
           <ul className="account-items">
             {accounts.map((item) => {
@@ -282,18 +295,22 @@ export function AccountsPage() {
                   <div className="account-item-main">
                     <div className="account-tags">
                       <span className="account-item-name">{item.name}</span>
-                      <span className={`badge account-badge account-${item.type}`}>{TYPE_LABEL[item.type]}</span>
+                      <span className={`badge account-badge account-${item.type}`}>{t(TYPE_KEY[item.type])}</span>
                       {ygg ? (
                         <span className="account-site" data-account-site>
-                          {siteOf(item)}
+                          {siteOf(item, t("pages.accounts.unknownSite"))}
                         </span>
                       ) : null}
-                      {tempIds.includes(item.id) ? <span className="badge account-temp">临时</span> : null}
-                      {item.id === active?.id ? <span className="account-current-tag">当前</span> : null}
+                      {tempIds.includes(item.id) ? (
+                        <span className="badge account-temp">{t("pages.accounts.temp")}</span>
+                      ) : null}
+                      {item.id === active?.id ? (
+                        <span className="account-current-tag">{t("pages.accounts.current")}</span>
+                      ) : null}
                     </div>
                     {failed ? (
                       <p className="account-item-error" role="alert" data-account-check-error>
-                        校验失败：{failed}，可点「第三方登录」重新登录。
+                        {t("pages.accounts.checkFailed", { error: failed })}
                       </p>
                     ) : null}
                   </div>
@@ -306,12 +323,12 @@ export function AccountsPage() {
                         disabled={Boolean(checking[item.id])}
                         data-validate-yggdrasil={item.id}
                       >
-                        {checking[item.id] ? "校验中…" : "校验"}
+                        {checking[item.id] ? t("pages.accounts.checking") : t("pages.accounts.check")}
                       </button>
                     ) : null}
                     {item.id === active?.id ? null : (
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => void switchTo(item.id)}>
-                        切换
+                        {t("pages.accounts.switch")}
                       </button>
                     )}
                   </div>
@@ -323,16 +340,21 @@ export function AccountsPage() {
       ) : null}
 
       <div className="account-grid">
-        <section className="panel account-add" aria-label="添加离线账号">
+        <section className="panel account-add" aria-label={t("pages.accounts.addOfflineAria")}>
           <div className="panel-head">
-            <h2 className="panel-title">离线账号</h2>
-            <span className="panel-count">无需联网</span>
+            <h2 className="panel-title">{t("pages.accounts.offlineTitle")}</h2>
+            <span className="panel-count">{t("pages.accounts.offlineBadge")}</span>
           </div>
-          <Field label="昵称" hint={nameInvalid ? NAME_HINT : "3–16 位字母、数字或下划线，创建后自动设为当前账号"}>
+          <Field
+            label={t("pages.accounts.nickname")}
+            hint={nameInvalid
+              ? t("pages.accounts.nameRuleHint")
+              : t("pages.accounts.nicknameHint")}
+          >
             <TextInput
               value={nickname}
-              placeholder="例如 Steve_01"
-              aria-label="离线账号昵称"
+              placeholder={t("pages.accounts.nicknamePlaceholder")}
+              aria-label={t("pages.accounts.nicknameAria")}
               maxLength={16}
               onChange={(event) => setNickname(event.target.value)}
               onKeyDown={(event) => {
@@ -343,7 +365,7 @@ export function AccountsPage() {
           <div className="account-actions">
             <button type="button" className="btn btn-primary" onClick={() => void createOffline()} disabled={creating}>
               <IconPlus size={16} />
-              {creating ? "创建中…" : "创建离线账号"}
+              {creating ? t("pages.accounts.creating") : t("pages.accounts.createOffline")}
             </button>
           </div>
         </section>
@@ -353,9 +375,9 @@ export function AccountsPage() {
 
       <ConfirmDialog
         open={deleting !== null}
-        title="删除账号"
-        message={deleting ? `确定删除账号「${deleting.name}」吗？该账号的登录凭据会一并移除，且无法恢复。` : ""}
-        confirmText="删除"
+        title={t("pages.accounts.deleteTitle")}
+        message={deleting ? t("pages.accounts.deleteMessage", { name: deleting.name }) : ""}
+        confirmText={t("pages.accounts.delete")}
         danger
         busy={busyDelete}
         onCancel={() => setDeleting(null)}

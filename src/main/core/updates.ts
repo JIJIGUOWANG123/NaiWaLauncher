@@ -6,6 +6,7 @@ import { join } from "node:path";
 const APP_VERSION_FALLBACK = "0.1.5";
 import { logger } from "./logger";
 import type { UpdateCheckResult } from "../../shared/types";
+import { mt } from "./i18n";
 
 const log = logger("updates");
 const REPO = "JIJIGUOWANG123/NaiWaLauncher";
@@ -72,14 +73,14 @@ export async function checkAppUpdates(): Promise<UpdateCheckResult> {
   for (const channel of CHANNELS) {
     const { ok, data } = await fetchJson(channel.url);
     if (!ok || !data || typeof data !== "object") {
-      lastError = `${channel.id} 不可用`;
+      lastError = mt("upd.channelUnavailable", { channel: channel.id });
       continue;
     }
     const payload = data as Record<string, unknown>;
     // release 通道：tag_name；jsDelivr 通道：package.json 的 version
     const raw = typeof payload.tag_name === "string" ? payload.tag_name : typeof payload.version === "string" ? payload.version : "";
     if (!raw) {
-      lastError = `${channel.id} 返回内容缺少版本号`;
+      lastError = mt("upd.channelNoVersion", { channel: channel.id });
       continue;
     }
     const latest = raw.replace(/^v/i, "");
@@ -98,5 +99,5 @@ export async function checkAppUpdates(): Promise<UpdateCheckResult> {
     return { current, latest, hasUpdate, url, notes, publishedAt, channel: channel.id, assetUrl, setupUrl };
   }
   log.warn(`[updates] 检查更新失败：${lastError || "所有通道不可用"}`);
-  return { current, latest: null, hasUpdate: false, channel: "none", error: lastError || "无法连接 GitHub（网络受限）" };
+  return { current, latest: null, hasUpdate: false, channel: "none", error: lastError || mt("upd.githubUnreachable") };
 }

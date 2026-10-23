@@ -8,6 +8,7 @@ import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { getSettings } from "../core/settings";
 import { jsonArray, jsonNumber, jsonObject, jsonString, messageOf } from "./provider";
+import { mt } from "../core/i18n";
 
 const log = logger("translate");
 
@@ -292,11 +293,11 @@ async function fetchJsonWithTimeout(url: string, init: RequestInit, timeoutMs = 
     if (!res.ok) {
       // 正文必须读掉，否则连接不释放
       await res.text().catch(() => "");
-      throw httpError(res.status, `${url} 返回 HTTP ${res.status}`);
+      throw httpError(res.status, mt("mods.translateHttp", { url, status: res.status }));
     }
     return (await res.json()) as unknown;
   } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") throw httpError(0, `翻译接口超时（${timeoutMs}ms）`);
+    if (err instanceof Error && err.name === "AbortError") throw httpError(0, mt("mods.translateTimeout", { ms: timeoutMs }));
     throw err;
   } finally {
     clearTimeout(timer);
@@ -311,7 +312,7 @@ async function postUapis(text: string, toLang: string): Promise<string> {
     body: JSON.stringify({ text, to_lang: toLang }),
   });
   const translated = jsonString(jsonObject(body).translate);
-  if (!translated.trim()) throw httpError(0, "uapis.cn 没有返回译文");
+  if (!translated.trim()) throw httpError(0, mt("mods.translateEmpty"));
   return translated;
 }
 
@@ -328,7 +329,7 @@ async function postSuapi(texts: string[], toLang: string): Promise<(string | und
   const payload = jsonObject(body);
   const code = jsonNumber(payload.code);
   // code 不是 200 一律当整批失败：主备切换由上层负责
-  if (code !== 200) throw httpError(0, `suapi.net 返回 code=${jsonString(payload.code) || "?"}`);
+  if (code !== 200) throw httpError(0, mt("mods.translateUnexpectedCode", { code: jsonString(payload.code) || "?" }));
   const data = jsonArray(payload.data).map(jsonObject);
   return texts.map((_, index) => {
     const first = jsonObject(jsonArray(jsonObject(data[index]).translations)[0]);
@@ -340,7 +341,7 @@ async function postSuapi(texts: string[], toLang: string): Promise<(string | und
 /** DeepL：表单编码，多个 text 字段追加；译文按顺序取 translations[i].text。 */
 async function postDeepl(texts: string[], toLang: string): Promise<(string | undefined)[]> {
   const key = deeplKey();
-  if (!key) throw httpError(401, "DeepL Key 未配置");
+  if (!key) throw httpError(401, mt("mods.translateNoKey"));
   const chinese = toLang.toLowerCase().startsWith("zh");
   const form = new URLSearchParams();
   for (const text of texts) form.append("text", text);
@@ -405,7 +406,7 @@ async function callProvider(
  */
 export async function translateBatch(texts: string[], toLang: string): Promise<(string | undefined)[]> {
   const target = String(toLang ?? "").trim();
-  if (!target) throw new Error("缺少目标语言");
+  if (!target) throw new Error(mt("mods.missingTargetLang"));
   const out: (string | undefined)[] = new Array(texts.length).fill(undefined);
   if (texts.length === 0) return out;
   await ensureLoaded();

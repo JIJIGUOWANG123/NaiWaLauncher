@@ -11,6 +11,7 @@ import type {
   WardrobeSkin,
 } from "../../shared/types";
 import { loaderLabel } from "../lib/format";
+import { t } from "../lib/i18n";
 import {
   DEFAULT_SETTINGS, MOCK_ACCOUNTS, MOCK_APP_INFO, MOCK_INSTALLED_JAVA, MOCK_INSTALLED_MODS, MOCK_INSTANCES,
   MOCK_JAVA_RELEASES, MOCK_DATA_ROOT, MOCK_GAME_ROOT, MOCK_CONTENT, MOCK_CONTENT_META, MOCK_MAPS, MOCK_MEDIA,
@@ -1302,7 +1303,7 @@ export function createMockApi(): NaiwaApi {
         if (loader === "vanilla") {
           await sleep(420);
         } else {
-          const label = `安装 ${loaderLabel(loader)} ${loaderVersion ?? ""}`.trim();
+          const label = `安装 ${loaderLabel(loader, t)} ${loaderVersion ?? ""}`.trim();
           await simulateTask("loader", label, "下载加载器依赖", 24_000_000, 1600, 18);
         }
         const next: InstanceMeta = {

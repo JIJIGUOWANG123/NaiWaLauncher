@@ -16,6 +16,7 @@ import {
   type ModProvider, type ResolvedFile,
 } from "./provider";
 import { safeFileName } from "./install";
+import { mt } from "../core/i18n";
 
 const log = logger("modpack");
 
@@ -56,13 +57,13 @@ export function parseModpackIndex(raw: unknown): ModpackIndex {
   const root = jsonObject(raw);
   const deps = jsonObject(root.dependencies);
   const mcVersion = jsonString(deps.minecraft).trim();
-  if (!mcVersion) throw new Error("整合包缺少 dependencies.minecraft，无法确定游戏版本");
+  if (!mcVersion) throw new Error(mt("mods.pack.missingMcVersion"));
 
   const declared = LOADER_KEYS
     .map((entry) => ({ ...entry, version: jsonString(deps[entry.key]).trim() }))
     .filter((entry) => entry.version.length > 0);
   if (declared.length > 1) {
-    throw new Error(`整合包同时声明了多个加载器（${declared.map((entry) => entry.key).join("、")}），无法确定该装哪个`);
+    throw new Error(mt("mods.pack.multiLoader", { loaders: declared.map((entry) => entry.key).join(", ") }));
   }
 
   const files: ModpackFile[] = [];
@@ -93,13 +94,13 @@ export function parseModpackIndex(raw: unknown): ModpackIndex {
 /** 路径分段里不允许出现的东西：绝对路径、盘符、穿越、NUL。 */
 export function safeModpackPath(raw: string): string[] {
   const text = raw.trim().replace(/\\/g, "/");
-  if (!text) throw new Error("路径为空");
-  if (text.includes("\u0000")) throw new Error("路径含控制字符");
-  if (text.startsWith("/")) throw new Error("绝对路径");
-  if (/^[A-Za-z]:/.test(text)) throw new Error("盘符路径");
+  if (!text) throw new Error(mt("core.path.empty"));
+  if (text.includes("\u0000")) throw new Error(mt("core.path.controlChar"));
+  if (text.startsWith("/")) throw new Error(mt("core.path.absolute"));
+  if (/^[A-Za-z]:/.test(text)) throw new Error(mt("core.path.drive"));
   const segments = text.split("/").filter((segment) => segment !== "" && segment !== ".");
-  if (segments.length === 0) throw new Error("路径为空");
-  if (segments.some((segment) => segment === "..")) throw new Error("含目录穿越（..）");
+  if (segments.length === 0) throw new Error(mt("core.path.empty"));
+  if (segments.some((segment) => segment === "..")) throw new Error(mt("core.path.traversal"));
   return segments;
 }
 
@@ -108,7 +109,7 @@ function resolveInside(root: string, segments: string[]): string {
   const dest = join(root, ...segments);
   const base = resolve(root);
   const abs = resolve(dest);
-  if (abs !== base && !abs.startsWith(base + sep)) throw new Error(`路径越界：${segments.join("/")}`);
+  if (abs !== base && !abs.startsWith(base + sep)) throw new Error(mt("core.path.escape", { path: segments.join("/") }));
   return dest;
 }
 
@@ -144,7 +145,7 @@ export function planModpackFetches(files: ModpackFile[], root: string): ModpackP
 export function cleanInstanceName(raw: string): string {
   const name = raw.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/[\\/:*?"<>|]/g, "-").trim();
   // 先按字符截断再收尾：把截断处的空格与点去掉，避免名字以空格结尾
-  return name.slice(0, MAX_INSTANCE_NAME).replace(/[ .]+$/, "") || "整合包";
+  return name.slice(0, MAX_INSTANCE_NAME).replace(/[ .]+$/, "") || mt("mods.pack.defaultName");
 }
 
 /** 重名自动追加 " (2)"（3、4…）：追加后仍不超过 32 字符。 */
@@ -158,7 +159,7 @@ export function uniqueInstanceName(desired: string, taken: Iterable<string>): st
     const candidate = base.slice(0, MAX_INSTANCE_NAME - suffix.length).replace(/[ .]+$/, "") + suffix;
     if (!used.has(candidate)) return candidate;
   }
-  throw new Error(`实例名「${base}」的重名序号已用尽，请换个名字`);
+  throw new Error(mt("share.nameExhausted", { name: base }));
 }
 
 /** 实例游戏目录里现有的实例名（重名判定用）。 */
@@ -178,7 +179,7 @@ async function pickModpackFile(provider: ModProvider, projectId: string, fileId?
   if (fileId) {
     const resolved = await provider.getFile(projectId, fileId);
     if (!/\.mrpack$/i.test(resolved.info.fileName)) {
-      throw new Error(`所选文件不是 .mrpack（${resolved.info.fileName}），无法一键安装`);
+      throw new Error(mt("mods.pack.notMrpack", { file: resolved.info.fileName }));
     }
     if (!/\.mrpack$/i.test(resolved.info.downloadUrl)) log.warn(`文件 ${resolved.info.fileName} 的下载地址不以 .mrpack 结尾，仍按整合包解析`);
     return resolved;
@@ -187,10 +188,10 @@ async function pickModpackFile(provider: ModProvider, projectId: string, fileId?
   const files = await provider.listFiles({ provider: provider.id, projectId, kind: "modpack", limit: FILE_LIMIT_MAX });
   const packs = files.filter((file) => /\.mrpack$/i.test(file.fileName));
   if (packs.length === 0) {
-    throw new Error(`整合包 ${projectId} 没有 .mrpack 文件（Modrinth 整合包格式），无法一键安装`);
+    throw new Error(mt("mods.pack.noMrpack", { project: projectId }));
   }
   const best = bestFile(packs);
-  if (!best) throw new Error(`整合包 ${projectId} 的文件列表为空`);
+  if (!best) throw new Error(mt("mods.pack.emptyFileList", { project: projectId }));
   log.info(`整合包 ${projectId} 选中文件 ${best.fileName}（${best.fileId}）`);
   return provider.getFile(projectId, best.fileId);
 }
@@ -199,11 +200,11 @@ async function pickModpackFile(provider: ModProvider, projectId: string, fileId?
 function readIndex(mrpackPath: string): unknown {
   const zip = new AdmZip(mrpackPath);
   const entry = zip.getEntry(INDEX_NAME);
-  if (!entry) throw new Error(`${INDEX_NAME} 缺失：这不是有效的 .mrpack 整合包`);
+  if (!entry) throw new Error(mt("mods.pack.indexMissing", { file: INDEX_NAME }));
   try {
     return JSON.parse(entry.getData().toString("utf8"));
   } catch (err) {
-    throw new Error(`${INDEX_NAME} 不是合法 JSON：${messageOf(err)}`);
+    throw new Error(mt("mods.pack.indexBadJson", { file: INDEX_NAME, error: messageOf(err) }));
   }
 }
 
@@ -255,7 +256,7 @@ async function extractOverrides(
         }
       }
       done += 1;
-      task.update({ stage: `解压 overrides ${done}/${total}`, filesDone: done, filesTotal: total });
+      task.update({ stage: mt("mods.pack.stage.unpackOverrides", { done, total }), filesDone: done, filesTotal: total });
     }
   };
 
@@ -291,7 +292,7 @@ export async function installModpackEntities(
   const settings = getSettings();
   const total = plan.jobs.length;
   const pathByDest = new Map(plan.jobs.map((job) => [job.dest, job.path] as const));
-  task.update({ stage: `下载整合包模组 0/${total}`, filesDone: 0, filesTotal: total, percent: null });
+  task.update({ stage: mt("mods.pack.stage.downloadMods", { done: 0, total }), filesDone: 0, filesTotal: total, percent: null });
 
   // 池子只报 filesDone/filesTotal，而任务面板显示的是 stage 文本：把「已完成/总数」写回 stage，
   // 界面上的进度仍是「下载整合包模组 n/总数」，且不是每个文件一个任务。
@@ -301,7 +302,7 @@ export async function installModpackEntities(
       const totalFiles = patch.filesTotal ?? total;
       const withStage =
         typeof patch.filesDone === "number" && totalFiles > 0
-          ? { ...patch, stage: `下载整合包模组 ${patch.filesDone}/${totalFiles}` }
+          ? { ...patch, stage: mt("mods.pack.stage.downloadMods", { done: patch.filesDone, total: totalFiles }) }
           : patch;
       task.update(withStage);
     },
@@ -312,7 +313,7 @@ export async function installModpackEntities(
     plan.jobs.map((job) => ({ url: job.url, dest: job.dest, ...(job.sha1 ? { sha1: job.sha1 } : {}) })),
     {
       task: poolTask,
-      label: "下载整合包模组",
+      label: mt("mods.pack.downloadLabel"),
       concurrent: settings.concurrentDownloads,
       connections: settings.connectionsPerFile,
       ...(signal ? { signal } : {}),
@@ -323,7 +324,7 @@ export async function installModpackEntities(
   for (const item of failed) log.warn(`整合包文件下载失败：${item.path} · ${item.reason}`);
   const downloaded = Math.max(0, total - failed.length);
 
-  task.update({ stage: `解压 overrides（${downloaded}/${total} 个文件已下载）`, percent: null });
+  task.update({ stage: mt("mods.pack.stage.unpackOverridesDownloaded", { done: downloaded, total }), percent: null });
   const overrides = await extractOverrides(mrpackPath, root, task, settings.concurrentDownloads);
   return {
     downloaded,
@@ -369,10 +370,10 @@ export async function installModpackFrom(
   const desired = req.instanceName?.trim() || project?.title?.trim() || req.projectId;
   const name = uniqueInstanceName(desired, await takenInstanceNames());
 
-  const task = createTask("mod", `安装整合包 ${name}`);
+  const task = createTask("mod", mt("mods.pack.installTitle", { name }));
   let instance: InstanceMeta | undefined;
   try {
-    task.update({ stage: "下载整合包", percent: null });
+    task.update({ stage: mt("mods.pack.stage.download"), percent: null });
     const fileName = modpackFileName(resolved.info.fileName);
     const mrpackPath = join(getPaths().downloads, fileName);
     await mkdir(getPaths().downloads, { recursive: true });
@@ -384,19 +385,19 @@ export async function installModpackFrom(
       signal,
     });
 
-    task.update({ stage: "解析整合包索引", percent: null });
+    task.update({ stage: mt("mods.pack.stage.parseIndex"), percent: null });
     const index = parseModpackIndex(readIndex(mrpackPath));
     log.info(
-      `整合包 ${name}：Minecraft ${index.mcVersion} / ${index.loader}${index.loaderVersion ? " " + index.loaderVersion : ""} · ${index.files.length} 个文件`,
+      mt("mods.pack.summary", { name, mc: index.mcVersion, loader: index.loader + (index.loaderVersion ? " " + index.loaderVersion : ""), count: index.files.length }),
     );
 
-    task.update({ stage: `安装原版 ${index.mcVersion}`, percent: null });
+    task.update({ stage: mt("mods.pack.stage.installVanilla", { version: index.mcVersion }), percent: null });
     await installVersion(index.mcVersion, signal);
 
     let versionId = index.mcVersion;
     let loaderVersion = index.loaderVersion;
     if (index.loader !== "vanilla") {
-      task.update({ stage: `安装加载器 ${index.loader}${index.loaderVersion ? " " + index.loaderVersion : ""}`, percent: null });
+      task.update({ stage: mt("mods.pack.stage.installLoader", { loader: index.loader + (index.loaderVersion ? " " + index.loaderVersion : "") }), percent: null });
       const installed = await installLoader({
         mcVersion: index.mcVersion,
         loader: index.loader,
@@ -418,11 +419,11 @@ export async function installModpackFrom(
     const stats = await installModpackEntities(instance, index, mrpackPath, task, signal);
     if (stats.failed.length > 0) {
       log.warn(
-        `整合包 ${name} 有 ${stats.failed.length} 个文件没下完：${stats.failed.map((item) => item.path).join("、")}；实例已建好，可稍后重装补齐`,
+        mt("mods.pack.partialDownload", { name, count: stats.failed.length, list: stats.failed.map((item) => item.path).join("、") }),
       );
     }
     if (index.files.length > 0 && stats.downloaded === 0) {
-      throw new Error(`整合包里 ${index.files.length} 个文件全部下载失败（${stats.failed[0]?.reason ?? "未知原因"}）`);
+      throw new Error(mt("mods.pack.allDownloadsFailed", { count: index.files.length, reason: stats.failed[0]?.reason ?? mt("common.unknownReason") }));
     }
 
     const result: ModpackInstallResult = {
@@ -440,13 +441,13 @@ export async function installModpackFrom(
     };
     task.done(result);
     log.info(
-      `整合包 ${name} 安装完成：实例 ${instance.id} · 文件 ${stats.downloaded}/${index.files.length} · overrides ${stats.overridesWritten} 个`,
+      mt("mods.pack.done", { name, id: instance.id, done: stats.downloaded, total: index.files.length, overrides: stats.overridesWritten }),
     );
     return result;
   } catch (err) {
     const reason = messageOf(err);
     task.fail(err);
-    const kept = instance ? `实例「${instance.name}」（${instance.id}）已创建，可在列表里继续使用；` : "";
-    throw new Error(`整合包安装失败：${reason}（${kept}已下载的 .mrpack 保留在 NaiWa\\downloads）`);
+    const kept = instance ? mt("mods.pack.instanceKept", { name: instance.name, id: instance.id }) : "";
+    throw new Error(mt("mods.pack.installFailed", { reason, kept }));
   }
 }

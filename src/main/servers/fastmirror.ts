@@ -1,6 +1,7 @@
 import type { ServerBuildInfo, ServerCoreId, ServerCoreInfo } from "../../shared/types";
 import { fetchJson } from "../core/http";
 import { logger } from "../core/logger";
+import { mt } from "../core/i18n";
 
 const log = logger("servers/fastmirror");
 
@@ -84,15 +85,15 @@ function text(value: unknown): string {
 /** 信封校验：失败包成可读错误（FastMirror 的 message 通常是英文短句）。 */
 function unwrap<T>(payload: unknown, what: string): T {
   if (!payload || typeof payload !== "object") {
-    throw new Error(`FastMirror ${what}返回格式异常：不是 JSON 对象`);
+    throw new Error(mt("srv.fm.notObject", { what }));
   }
   const envelope = payload as Envelope<T>;
   if (envelope.success === false) {
-    const reason = text(envelope.message) || text(envelope.code) || "未知原因";
-    throw new Error(`FastMirror ${what}失败：${reason}`);
+    const reason = text(envelope.message) || text(envelope.code) || mt("common.unknownReason");
+    throw new Error(mt("srv.fm.requestFailed", { what, error: reason }));
   }
   if (envelope.data === null || envelope.data === undefined) {
-    throw new Error(`FastMirror ${what}未返回数据`);
+    throw new Error(mt("srv.fm.noData", { what }));
   }
   return envelope.data;
 }
@@ -111,8 +112,8 @@ function coreOrder(core: ServerCoreId): number {
 
 /** 纯解析：/api/v3 的核心数组，只留 8 个 Java 核心。 */
 export function parseCores(payload: unknown): ServerCoreInfo[] {
-  const data = unwrap<unknown>(payload, "核心清单");
-  if (!Array.isArray(data)) throw new Error("FastMirror 核心清单返回格式异常：data 不是数组");
+  const data = unwrap<unknown>(payload, mt("srv.fm.whatCores"));
+  if (!Array.isArray(data)) throw new Error(mt("srv.fm.coresBadShape"));
 
   const seen = new Set<string>();
   const out: ServerCoreInfo[] = [];
@@ -139,9 +140,9 @@ export function parseCores(payload: unknown): ServerCoreInfo[] {
 
 /** 纯解析：/{core}/{mcVersion} 的 builds 数组。 */
 export function parseBuilds(payload: unknown, core: ServerCoreId, mcVersion: string): ServerBuildInfo[] {
-  const data = unwrap<unknown>(payload, `${core} ${mcVersion} 的构建列表`);
+  const data = unwrap<unknown>(payload, mt("srv.fm.whatBuilds", { core, mc: mcVersion }));
   const builds = (data as { builds?: unknown }).builds;
-  if (!Array.isArray(builds)) throw new Error("FastMirror 构建列表返回格式异常：data.builds 不是数组");
+  if (!Array.isArray(builds)) throw new Error(mt("srv.fm.buildsBadShape"));
 
   const out: ServerBuildInfo[] = [];
   for (const raw of builds as RawBuild[]) {
@@ -161,13 +162,13 @@ export function parseBuilds(payload: unknown, core: ServerCoreId, mcVersion: str
 
 /** 纯解析：/{core}/{mcVersion}/{coreVersion} 的单条构建，拿到 jar 文件名与下载地址。 */
 export function parseBuild(payload: unknown, core: ServerCoreId, mcVersion: string, coreVersion: string): ResolvedBuild {
-  const data = unwrap<unknown>(payload, `${core} ${coreVersion} 的构建详情`);
+  const data = unwrap<unknown>(payload, mt("srv.fm.whatDetail", { core, version: coreVersion }));
   const raw = data as RawResolve;
-  if (!raw || typeof raw !== "object") throw new Error("FastMirror 构建详情返回格式异常");
+  if (!raw || typeof raw !== "object") throw new Error(mt("srv.fm.detailBadShape"));
   const downloadUrl = text(raw.download_url);
-  if (!downloadUrl) throw new Error(`FastMirror 未返回 ${core} ${coreVersion} 的下载地址`);
+  if (!downloadUrl) throw new Error(mt("srv.fm.noDownloadUrl", { core, version: coreVersion }));
   const sha1 = text(raw.sha1);
-  if (!sha1) throw new Error(`FastMirror 未返回 ${core} ${coreVersion} 的 SHA1，无法校验下载`);
+  if (!sha1) throw new Error(mt("srv.fm.noSha1", { core, version: coreVersion }));
   return {
     core,
     mcVersion: text(raw.mc_version) || mcVersion,
@@ -192,20 +193,20 @@ export async function listCores(): Promise<ServerCoreInfo[]> {
 }
 
 export async function listBuilds(core: ServerCoreId, mcVersion: string): Promise<ServerBuildInfo[]> {
-  if (!isCoreId(core)) throw new Error(`不支持的服务端核心：${String(core)}`);
+  if (!isCoreId(core)) throw new Error(mt("srv.unsupportedCore", { core: String(core) }));
   const version = text(mcVersion);
-  if (!version) throw new Error("游戏版本不能为空");
+  if (!version) throw new Error(mt("srv.versionRequired"));
   return await cached(`builds:${core}:${version}`, async () =>
     parseBuilds(await api<unknown>(`/api/v3/${core}/${encodeURIComponent(version)}?offset=0&limit=25`), core, version),
   );
 }
 
 export async function resolveBuild(core: ServerCoreId, mcVersion: string, coreVersion: string): Promise<ResolvedBuild> {
-  if (!isCoreId(core)) throw new Error(`不支持的服务端核心：${String(core)}`);
+  if (!isCoreId(core)) throw new Error(mt("srv.unsupportedCore", { core: String(core) }));
   const version = text(mcVersion);
   const build = text(coreVersion);
-  if (!version) throw new Error("游戏版本不能为空");
-  if (!build) throw new Error("核心构建不能为空");
+  if (!version) throw new Error(mt("srv.versionRequired"));
+  if (!build) throw new Error(mt("srv.buildRequired"));
   return await cached(`build:${core}:${version}:${build}`, async () =>
     parseBuild(
       await api<unknown>(`/api/v3/${core}/${encodeURIComponent(version)}/${encodeURIComponent(build)}`),

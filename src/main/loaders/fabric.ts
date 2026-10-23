@@ -9,6 +9,7 @@ import {
   writeVersionJson,
   type LibraryItem,
 } from "./installer-runner";
+import { mt } from "../core/i18n";
 
 const log = logger("loaders/fabric");
 
@@ -42,7 +43,7 @@ async function fetchLoaderEntries(mcVersion: string): Promise<FabricLoaderEntry[
   try {
     return await fetchJson<FabricLoaderEntry[]>(`${META}/versions/loader/${mcVersion}`, { allowMirror: false });
   } catch (err) {
-    throw new Error(`Fabric 没有 Minecraft ${mcVersion} 的 loader 列表：${(err as Error).message}`);
+    throw new Error(mt("loader.noList", { loader: "Fabric", mc: mcVersion, error: (err as Error).message }));
   }
 }
 
@@ -120,13 +121,13 @@ export async function installFabricLoader(
     ? entries.find((e) => e.loader.version === wanted)
     : entries[0];
   if (!entry) {
-    throw new Error(`Fabric 没有 Minecraft ${mcVersion} 的 loader ${wanted ?? "(默认)"}`);
+    throw new Error(mt("loader.noLoader", { loader: "Fabric", mc: mcVersion, version: wanted ?? mt("common.default") }));
   }
 
   const versionId = `${mcVersion}-fabric`;
-  const task = createTask("loader", `安装 Fabric ${entry.loader.version}`);
+  const task = createTask("loader", mt("loader.installTitle", { name: "Fabric", version: entry.loader.version }));
   try {
-    task.update({ stage: "解析 loader 元数据", percent: 0 });
+    task.update({ stage: mt("loader.stage.metadata"), percent: 0 });
 
     // 官方 profile 提供 arguments/mainClass 等细节；拿不到就退回内置常量
     let profile: any | undefined;
@@ -149,14 +150,14 @@ export async function installFabricLoader(
       libraries,
     };
 
-    task.update({ stage: "写入版本描述" });
+    task.update({ stage: mt("loader.stage.writeVersion") });
     await writeVersionJson(versionId, json);
 
-    task.update({ stage: "下载依赖库" });
+    task.update({ stage: mt("loader.stage.libraries") });
     const items: LibraryItem[] = collectLibraryItems(json);
     const { failed } = await downloadLibraries(items, { task, label: `fabric ${entry.loader.version}`, signal });
     if (failed.length > 0) {
-      throw new Error(`Fabric 依赖库下载失败 ${failed.length} 个，首个：${failed[0].url}（${failed[0].error}）`);
+      throw new Error(mt("loader.librariesFailed", { loader: "Fabric", count: failed.length, url: failed[0].url, error: failed[0].error }));
     }
 
     task.done({ versionId, loaderVersion: entry.loader.version, libraries: items.length });

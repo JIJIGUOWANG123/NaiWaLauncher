@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { useT } from "../lib/i18n";
 import { IconClose } from "./icons";
 
 export function Drawer({
@@ -13,6 +14,7 @@ export function Drawer({
   /** 内容较多的抽屉（如实例详情）可加宽，默认沿用样式表里的 560px。 */
   width?: number;
 }) {
+  const t = useT();
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -44,7 +46,7 @@ export function Drawer({
             <h2 className="modal-title">{title}</h2>
             {subtitle ? <p className="modal-sub">{subtitle}</p> : null}
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭">
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={t("pages.common.close")}>
             <IconClose size={18} />
           </button>
         </header>

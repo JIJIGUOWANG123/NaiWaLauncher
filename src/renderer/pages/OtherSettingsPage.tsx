@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DownloadSourceId, Settings } from "../../shared/types";
 import { api } from "../lib/api";
+import { useT } from "../lib/i18n";
 import { usePersist } from "../lib/persist";
 import { useApp } from "../lib/store";
 import { useSliderDraft } from "../lib/useSliderDraft";
@@ -11,29 +12,45 @@ import { useToast } from "../components/Toast";
 import { IconEye, IconEyeOff, IconFolder } from "../components/icons";
 
 /** 文件下载源：游戏本体 / 资源 / 依赖库都用它，含两个社区镜像。 */
-const FILE_SOURCE_OPTIONS = [
-  { value: "official", label: "官方源（Mojang）" },
-  { value: "bmclapi", label: "BMCLAPI 镜像" },
-  { value: "sjtu", label: "上海交大镜像（仅依赖库）", title: "mirror.sjtu.edu.cn：只镜像 libraries，本体与资源仍走主源" },
-  { value: "auto", label: "自动测速" },
+type Translator = (key: string, vars?: Record<string, string | number>) => string;
+
+/** 选项文案存 key，渲染时再翻：模块级常量在切换语言后不会自己更新。 */
+type OptionKey<T extends string> = { value: T; labelKey: string; titleKey?: string };
+
+function localize<T extends string>(
+  options: Array<OptionKey<T>>,
+  tr: Translator,
+): Array<{ value: T; label: string; title?: string }> {
+  return options.map(({ value, labelKey, titleKey }) => ({
+    value,
+    label: tr(labelKey),
+    title: titleKey ? tr(titleKey) : undefined,
+  }));
+}
+
+const FILE_SOURCE_OPTIONS: Array<OptionKey<DownloadSourceId>> = [
+  { value: "official", labelKey: "pages.otherSettings.srcOfficial" },
+  { value: "bmclapi", labelKey: "pages.otherSettings.srcBmclapi" },
+  { value: "sjtu", labelKey: "pages.otherSettings.srcSjtu", titleKey: "pages.otherSettings.srcSjtuTitle" },
+  { value: "auto", labelKey: "pages.otherSettings.srcAuto" },
 ];
 
 /** 版本清单源只有官方/镜像/自动三种（VersionListSource 没有社区镜像）。 */
-const VERSION_SOURCE_OPTIONS = [
-  { value: "official", label: "官方源（Mojang）" },
-  { value: "bmclapi", label: "BMCLAPI 镜像" },
-  { value: "auto", label: "自动测速" },
+const VERSION_SOURCE_OPTIONS: Array<OptionKey<Settings["versionListSource"]>> = [
+  { value: "official", labelKey: "pages.otherSettings.srcOfficial" },
+  { value: "bmclapi", labelKey: "pages.otherSettings.srcBmclapi" },
+  { value: "auto", labelKey: "pages.otherSettings.srcAuto" },
 ];
 
-const COMMUNITY_SOURCE_OPTIONS = [
-  { value: "official", label: "尽量使用官方源" },
-  { value: "bmclapi", label: "优先镜像" },
-  { value: "auto", label: "自动测速（跟随下载源）" },
+const COMMUNITY_SOURCE_OPTIONS: Array<OptionKey<DownloadSourceId>> = [
+  { value: "official", labelKey: "pages.otherSettings.communityOfficial" },
+  { value: "bmclapi", labelKey: "pages.otherSettings.communityMirror" },
+  { value: "auto", labelKey: "pages.otherSettings.communityAuto" },
 ];
 
-const DISPLAY_OPTIONS = [
-  { value: "title", label: "标题显示译名，详情显示文件名" },
-  { value: "filename", label: "直接显示文件名" },
+const DISPLAY_OPTIONS: Array<OptionKey<Settings["modDisplayStyle"]>> = [
+  { value: "title", labelKey: "pages.otherSettings.displayTitle" },
+  { value: "filename", labelKey: "pages.otherSettings.displayFilename" },
 ];
 
 const SAMPLE = { name: "钠 · Sodium", slug: "sodium", version: "0.6.13", loader: "fabric", mc: "1.21.4" };
@@ -48,14 +65,15 @@ function fileNamePreview(template: string): string {
 
 export function OtherSettingsPage() {
   const { settings, settingsError } = useApp();
+  const tr = useT();
 
   if (!settings) {
     return (
       <section className="page">
         <header className="page-head">
-          <h1 className="page-title">其它</h1>
+          <h1 className="page-title">{tr("pages.otherSettings.pageTitle")}</h1>
         </header>
-        <LoadingState label="读取其它设置…" />
+        <LoadingState label={tr("pages.otherSettings.loading")} />
       </section>
     );
   }
@@ -64,8 +82,8 @@ export function OtherSettingsPage() {
     <section className="page">
       <header className="page-head">
         <div>
-          <h1 className="page-title">其它</h1>
-          <p className="page-sub">仿 PCL2 的其它设置：下载、社区资源与辅助功能</p>
+          <h1 className="page-title">{tr("pages.otherSettings.pageTitle")}</h1>
+          <p className="page-sub">{tr("pages.otherSettings.sub")}</p>
         </div>
       </header>
 
@@ -84,15 +102,16 @@ function DownloadCard({ settings }: { settings: Settings }) {
   const { info } = useApp();
   const persist = usePersist();
   const { push } = useToast();
+  const tr = useT();
 
   const [connections, setConnections] = useSliderDraft(settings.connectionsPerFile, (value) => {
-    void persist({ connectionsPerFile: value }, "单文件分片连接数");
+    void persist({ connectionsPerFile: value }, tr("pages.otherSettings.persistConnections"));
   });
   const [threads, setThreads] = useSliderDraft(settings.concurrentDownloads, (value) => {
-    void persist({ concurrentDownloads: value }, "多线程下载（文件并发数）");
+    void persist({ concurrentDownloads: value }, tr("pages.otherSettings.persistThreads"));
   });
   const [speed, setSpeed] = useSliderDraft(settings.speedLimitKbps, (value) => {
-    void persist({ speedLimitKbps: value }, "速度限制");
+    void persist({ speedLimitKbps: value }, tr("pages.otherSettings.persistSpeed"));
   });
 
   const dataRoot = info ? `${info.rootDir.replace(/[\\/]+$/, "")}\\NaiWa` : "";
@@ -101,7 +120,7 @@ function DownloadCard({ settings }: { settings: Settings }) {
     if (!target) return;
     try {
       await api.app.openPath(target);
-      push(`已打开${label}：${target}`, "success");
+      push(tr("pages.otherSettings.openedPath", { label, path: target }), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -110,88 +129,96 @@ function DownloadCard({ settings }: { settings: Settings }) {
   return (
     <div className="panel" data-card="download">
       <div className="panel-head">
-        <h2 className="panel-title">下载</h2>
-        <span className="panel-count">与设置页共用同一批字段</span>
+        <h2 className="panel-title">{tr("pages.otherSettings.downloadTitle")}</h2>
+        <span className="panel-count">{tr("pages.otherSettings.downloadCount")}</span>
       </div>
 
       <div className="form-grid">
         <Field
-          label="文件下载源"
-          hint="游戏本体、资源与依赖库走这里；与「设置 → 下载源」是同一个字段。上海交大仅镜像依赖库，本体与资源仍走主源"
+          label={tr("pages.otherSettings.fileSourceLabel")}
+          hint={tr("pages.otherSettings.fileSourceHint")}
         >
           <Select
             value={settings.downloadSource}
-            options={FILE_SOURCE_OPTIONS}
-            ariaLabel="文件下载源"
-            onChange={(value) => void persist({ downloadSource: value as DownloadSourceId }, "下载源")}
+            options={localize(FILE_SOURCE_OPTIONS, tr)}
+            ariaLabel={tr("pages.otherSettings.fileSourceLabel")}
+            onChange={(value) => void persist({ downloadSource: value as DownloadSourceId }, tr("pages.otherSettings.persistDownloadSource"))}
           />
         </Field>
 
-        <Field label="版本列表源" hint="版本清单可以单独指定来源，官方源不稳时切镜像">
+        <Field label={tr("pages.otherSettings.versionSourceLabel")} hint={tr("pages.otherSettings.versionSourceHint")}>
           <Select
             value={settings.versionListSource}
-            options={VERSION_SOURCE_OPTIONS}
-            ariaLabel="版本列表源"
-            onChange={(value) => void persist({ versionListSource: value as Settings["versionListSource"] }, "版本列表源")}
+            options={localize(VERSION_SOURCE_OPTIONS, tr)}
+            ariaLabel={tr("pages.otherSettings.versionSourceLabel")}
+            onChange={(value) => void persist({ versionListSource: value as Settings["versionListSource"] }, tr("pages.otherSettings.persistVersionSource"))}
           />
         </Field>
 
-        <Field label="单文件分片连接数" hint="一个大文件用几条连接并行拉（1–16，默认 4）">
+        <Field label={tr("pages.otherSettings.connectionsLabel")} hint={tr("pages.otherSettings.connectionsHint")}>
           <Slider
             value={connections}
             min={1}
             max={16}
             onChange={setConnections}
-            format={(value) => `${value} 条`}
+            format={(value) => tr("pages.otherSettings.connectionsFormat", { value })}
           />
         </Field>
 
-        <Field label="多线程下载（文件并发数）" hint="多个文件同时下载（1–32，默认 12），安装整合包/资源时提速明显">
+        <Field label={tr("pages.otherSettings.threadsLabel")} hint={tr("pages.otherSettings.threadsHint")}>
           <Slider
             value={threads}
             min={1}
             max={32}
             onChange={setThreads}
-            format={(value) => `${value} 个`}
+            format={(value) => tr("pages.otherSettings.threadsFormat", { value })}
           />
         </Field>
 
         <p className="field-hint dl-parallel-note" data-dl-parallel-note>
-          文件并发数 × 单文件分片数 = 理论最大连接数，过高可能被 CDN 限速
+          {tr("pages.otherSettings.parallelNote")}
         </p>
 
-        <Field label="速度限制" hint="0 表示不限速，改动即时生效">
+        <Field label={tr("pages.otherSettings.speedLabel")} hint={tr("pages.otherSettings.speedHint")}>
           <Slider
             value={speed}
             min={0}
             max={10240}
             step={64}
             onChange={setSpeed}
-            format={(value) => (value === 0 ? "不限速" : `${value} KB/s`)}
+            format={(value) => (value === 0 ? tr("pages.otherSettings.unlimited") : `${value} KB/s`)}
           />
         </Field>
       </div>
 
       <div className="ext-paths">
         <div className="ext-path">
-          <span className="ext-path-label">游戏与模组</span>
-          <span className="mono" title={info?.gameRoot}>{info?.gameRoot ?? "读取中…"}</span>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void openPath(info?.gameRoot ?? "", "游戏目录")} disabled={!info}>
+          <span className="ext-path-label">{tr("pages.otherSettings.gameAndMods")}</span>
+          <span className="mono" title={info?.gameRoot}>{info?.gameRoot ?? tr("pages.otherSettings.readingPath")}</span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => void openPath(info?.gameRoot ?? "", tr("pages.otherSettings.gameDir"))}
+            disabled={!info}
+          >
             <IconFolder size={14} />
-            打开
+            {tr("pages.otherSettings.open")}
           </button>
         </div>
         <div className="ext-path">
-          <span className="ext-path-label">配置与 Java</span>
-          <span className="mono" title={dataRoot}>{dataRoot || "读取中…"}</span>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void openPath(dataRoot, "数据目录")} disabled={!info}>
+          <span className="ext-path-label">{tr("pages.otherSettings.configAndJava")}</span>
+          <span className="mono" title={dataRoot}>{dataRoot || tr("pages.otherSettings.readingPath")}</span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => void openPath(dataRoot, tr("pages.otherSettings.dataDir"))}
+            disabled={!info}
+          >
             <IconFolder size={14} />
-            打开
+            {tr("pages.otherSettings.open")}
           </button>
         </div>
-        <p className="ext-note">
-          游戏与模组在 &lt;gameRoot&gt;，配置、日志、缓存与 Java 在 &lt;root&gt;/NaiWa。
-        </p>
+        <p className="ext-note">{tr("pages.otherSettings.pathsNote")}</p>
       </div>
     </div>
   );
@@ -199,6 +226,7 @@ function DownloadCard({ settings }: { settings: Settings }) {
 
 function CommunityCard({ settings }: { settings: Settings }) {
   const persist = usePersist();
+  const tr = useT();
   const [template, setTemplate] = useState(settings.modFileNameTemplate);
 
   useEffect(() => setTemplate(settings.modFileNameTemplate), [settings.modFileNameTemplate]);
@@ -208,30 +236,30 @@ function CommunityCard({ settings }: { settings: Settings }) {
   const commitTemplate = () => {
     const next = template.trim() || "[{name}] {slug}-{version}";
     if (next === settings.modFileNameTemplate) return;
-    void persist({ modFileNameTemplate: next }, "文件名格式");
+    void persist({ modFileNameTemplate: next }, tr("pages.otherSettings.persistFileNameTemplate"));
   };
 
   return (
     <div className="panel" data-card="community">
       <div className="panel-head">
-        <h2 className="panel-title">社区资源</h2>
-        <span className="panel-count">模组下载与列表显示</span>
+        <h2 className="panel-title">{tr("pages.otherSettings.communityTitle")}</h2>
+        <span className="panel-count">{tr("pages.otherSettings.communityCount")}</span>
       </div>
 
       <div className="form-grid">
-        <Field label="来源" hint="资源站偏好；与「下载源」是同一个字段 downloadSource，改哪边都一样">
+        <Field label={tr("pages.otherSettings.sourceLabel")} hint={tr("pages.otherSettings.sourceHint")}>
           <Select
             value={settings.downloadSource}
-            options={COMMUNITY_SOURCE_OPTIONS}
-            ariaLabel="社区资源来源"
-            onChange={(value) => void persist({ downloadSource: value as DownloadSourceId }, "社区资源来源")}
+            options={localize(COMMUNITY_SOURCE_OPTIONS, tr)}
+            ariaLabel={tr("pages.otherSettings.communitySourceAria")}
+            onChange={(value) => void persist({ downloadSource: value as DownloadSourceId }, tr("pages.otherSettings.persistCommunitySource"))}
           />
         </Field>
 
-        <Field label="文件名格式" hint="可用占位符 {name} {slug} {version} {loader} {mc}；改动即时预览文件名">
+        <Field label={tr("pages.otherSettings.fileNameTemplateLabel")} hint={tr("pages.otherSettings.fileNameTemplateHint")}>
           <TextInput
             value={template}
-            aria-label="文件名格式"
+            aria-label={tr("pages.otherSettings.fileNameTemplateLabel")}
             placeholder="[{name}] {slug}-{version}"
             onChange={(event) => setTemplate(event.target.value)}
             onBlur={commitTemplate}
@@ -245,12 +273,12 @@ function CommunityCard({ settings }: { settings: Settings }) {
           </span>
         </Field>
 
-        <Field label="Mod 管理样式" hint="影响实例详情里的模组列表显示">
+        <Field label={tr("pages.otherSettings.modDisplayLabel")} hint={tr("pages.otherSettings.modDisplayHint")}>
           <Select
             value={settings.modDisplayStyle}
-            options={DISPLAY_OPTIONS}
-            ariaLabel="Mod 管理样式"
-            onChange={(value) => void persist({ modDisplayStyle: value as Settings["modDisplayStyle"] }, "Mod 管理样式")}
+            options={localize(DISPLAY_OPTIONS, tr)}
+            ariaLabel={tr("pages.otherSettings.modDisplayLabel")}
+            onChange={(value) => void persist({ modDisplayStyle: value as Settings["modDisplayStyle"] }, tr("pages.otherSettings.persistModDisplay"))}
           />
         </Field>
       </div>
@@ -261,6 +289,7 @@ function CommunityCard({ settings }: { settings: Settings }) {
 function AssistCard({ settings }: { settings: Settings }) {
   const persist = usePersist();
   const { push } = useToast();
+  const tr = useT();
   const [keyDraft, setKeyDraft] = useState(settings.deeplApiKey);
   const [showKey, setShowKey] = useState(false);
   const [savingKey, setSavingKey] = useState(false);
@@ -272,16 +301,16 @@ function AssistCard({ settings }: { settings: Settings }) {
   const saveKey = async () => {
     const next = keyDraft.trim();
     setSavingKey(true);
-    const ok = await persist({ deeplApiKey: next }, "DeepL Key ");
+    const ok = await persist({ deeplApiKey: next }, tr("pages.otherSettings.persistDeepLKey"));
     setSavingKey(false);
-    if (ok && next === "") push("已清空 DeepL Key，改回免费接口", "success");
+    if (ok && next === "") push(tr("pages.otherSettings.deeplCleared"), "success");
   };
 
   return (
     <div className="panel" data-card="assist">
       <div className="panel-head">
-        <h2 className="panel-title">辅助功能</h2>
-        <span className="panel-count">提示与语言</span>
+        <h2 className="panel-title">{tr("pages.otherSettings.assistTitle")}</h2>
+        <span className="panel-count">{tr("pages.otherSettings.assistCount")}</span>
       </div>
 
       <div className="checkline-stack">
@@ -289,62 +318,62 @@ function AssistCard({ settings }: { settings: Settings }) {
           <input
             type="checkbox"
             checked={settings.notifyGameUpdates}
-            onChange={(event) => void persist({ notifyGameUpdates: event.target.checked }, "正式版更新提示")}
+            onChange={(event) => void persist({ notifyGameUpdates: event.target.checked }, tr("pages.otherSettings.persistNotify"))}
           />
-          正式版更新提示
+          {tr("pages.otherSettings.notifyLabel")}
         </label>
-        <span className="field-hint">游戏本体的正式版有新版本时，在启动器内提示。</span>
+        <span className="field-hint">{tr("pages.otherSettings.notifyHint")}</span>
 
         <label className="checkline">
           <input
             type="checkbox"
             checked={settings.showSnapshot}
-            onChange={(event) => void persist({ showSnapshot: event.target.checked }, "测试版（快照）显示设置")}
+            onChange={(event) => void persist({ showSnapshot: event.target.checked }, tr("pages.otherSettings.persistShowSnapshot"))}
           />
-          显示测试版（快照）版本
+          {tr("pages.otherSettings.showSnapshotLabel")}
         </label>
-        <span className="field-hint">复用现有字段 showSnapshot，与设置页、下载页的「测试版」勾选是同一项。</span>
+        <span className="field-hint">{tr("pages.otherSettings.showSnapshotHint")}</span>
 
         <label className="checkline">
           <input
             type="checkbox"
             checked={settings.forceChinese}
-            onChange={(event) => void persist({ forceChinese: event.target.checked }, "游戏语言")}
+            onChange={(event) => void persist({ forceChinese: event.target.checked }, tr("pages.otherSettings.persistGameLanguage"))}
           />
-          游戏语言：自动设置为中文
+          {tr("pages.otherSettings.forceChineseLabel")}
         </label>
-        <span className="field-hint">启动前把实例的 options.txt 语言强制写成简体中文。</span>
+        <span className="field-hint">{tr("pages.otherSettings.forceChineseHint")}</span>
 
         <label className="checkline">
           <input
             type="checkbox"
             checked={settings.translateMods}
-            onChange={(event) => void persist({ translateMods: event.target.checked }, "模组列表实时翻译")}
+            onChange={(event) => void persist({ translateMods: event.target.checked }, tr("pages.otherSettings.persistTranslateMods"))}
           />
-          模组列表实时翻译
+          {tr("pages.otherSettings.translateModsLabel")}
         </label>
-        <span className="field-hint">标题与简介译为简体中文，走 uapis.cn 免费接口，需要联网。</span>
+        <span className="field-hint">{tr("pages.otherSettings.translateModsHint")}</span>
 
         <label className="checkline">
           <input
             type="checkbox"
             checked={settings.translateSearch}
-            onChange={(event) => void persist({ translateSearch: event.target.checked }, "中文搜索")}
+            onChange={(event) => void persist({ translateSearch: event.target.checked }, tr("pages.otherSettings.persistChineseSearch"))}
           />
-          中文搜索
+          {tr("pages.otherSettings.chineseSearchLabel")}
         </label>
-        <span className="field-hint">输入中文时先译为英文再检索。</span>
+        <span className="field-hint">{tr("pages.otherSettings.chineseSearchHint")}</span>
 
         <Field
           label="DeepL API Key"
-          hint="默认已内置一把免费 Key；填自己的会覆盖，清空则改回免费接口 uapis.cn / suapi.net。"
+          hint={tr("pages.otherSettings.deeplHint")}
         >
           <div className="key-row">
             <TextInput
               type={showKey ? "text" : "password"}
               value={keyDraft}
               aria-label="DeepL API Key"
-              placeholder="以 :fx 结尾为免费版"
+              placeholder={tr("pages.otherSettings.deeplPlaceholder")}
               onChange={(event) => setKeyDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") void saveKey();
@@ -356,7 +385,7 @@ function AssistCard({ settings }: { settings: Settings }) {
               type="button"
               className="btn btn-ghost btn-icon"
               onClick={() => setShowKey((value) => !value)}
-              aria-label={showKey ? "隐藏 DeepL Key" : "显示 DeepL Key"}
+              aria-label={showKey ? tr("pages.otherSettings.hideKey") : tr("pages.otherSettings.showKey")}
               data-action="toggle-deepl-key"
             >
               {showKey ? <IconEyeOff size={16} /> : <IconEye size={16} />}
@@ -368,7 +397,7 @@ function AssistCard({ settings }: { settings: Settings }) {
               disabled={savingKey}
               data-action="save-deepl-key"
             >
-              {savingKey ? "保存中…" : "保存"}
+              {savingKey ? tr("pages.common.saving") : tr("pages.common.save")}
             </button>
           </div>
         </Field>

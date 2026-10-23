@@ -9,6 +9,7 @@ import { logger, registerSecret } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { getAccount, updateYggdrasilProfile } from "./accounts";
 import { resolveMinecraftSession } from "./microsoft";
+import { mt } from "../core/i18n";
 
 const log = logger("skin");
 
@@ -20,13 +21,27 @@ const MC_PROFILE_URL = "https://api.minecraftservices.com/minecraft/profile";
 const MC_SKIN_URL = MC_PROFILE_URL + "/skins";
 const MC_ACTIVE_SKIN_URL = MC_SKIN_URL + "/active";
 
-const NO_SKIN_SERVICE = "离线账号没有皮肤服务";
-const TOKEN_EXPIRED = "登录已过期，请重新登录该账号";
-const APP_UNAUTHORIZED = "该微软应用尚未获得 Minecraft 服务授权，暂时无法编辑皮肤";
-const BAD_IMAGE = "皮肤图片必须是 64×64（或 64×32）的 PNG";
-const NO_TEXTURE_API = "该皮肤站没有提供材质上传接口（authlib-injector 材质上传），请到皮肤站网页上传";
-const NO_RESET_API = "该皮肤站没有提供材质上传接口（authlib-injector 材质上传），请到皮肤站网页恢复默认皮肤";
-const NO_SWITCHABLE_PROFILE = "该账号没有可切换的角色";
+function noSkinService(): string {
+  return mt("auth.skin.noService");
+}
+function tokenExpired(): string {
+  return mt("auth.skin.tokenExpired");
+}
+function appUnauthorized(): string {
+  return mt("auth.skin.appUnauthorized");
+}
+function badImage(): string {
+  return mt("auth.skin.badImage");
+}
+function noTextureApi(): string {
+  return mt("auth.skin.noTextureApi");
+}
+function noResetApi(): string {
+  return mt("auth.skin.noResetApi");
+}
+function noSwitchableProfile(): string {
+  return mt("auth.skin.noSwitchableProfile");
+}
 
 export type SkinModel = "classic" | "slim";
 
@@ -82,7 +97,7 @@ async function request(url: string, init: RequestInit = {}, timeoutMs = REQUEST_
     }
     return { status: res.status, json, text, contentType: res.headers.get("content-type") ?? "" };
   } catch (err) {
-    const reason = err instanceof Error && err.name === "AbortError" ? "请求超时（" + timeoutMs + "ms）" : describe(err);
+    const reason = err instanceof Error && err.name === "AbortError" ? mt("core.requestTimeout", { ms: timeoutMs }) : describe(err);
     throw new Error(reason + " · " + url);
   } finally {
     clearTimeout(timer);
@@ -135,7 +150,7 @@ async function readSessionServerSkin(apiUrl: string, uuid: string): Promise<Skin
   const reply = await request(sessionServerUrl(apiUrl, uuid), { method: "GET" });
   // 204 = 该角色没有皮肤档案（authlib-injector 的约定）
   if (reply.status === 204) return {};
-  if (reply.status !== 200 || !reply.json) throw new Error(failureText("读取皮肤信息失败：", reply));
+  if (reply.status !== 200 || !reply.json) throw new Error(failureText(mt("auth.skin.failRead"), reply));
 
   const properties = Array.isArray(reply.json.properties) ? (reply.json.properties as Json[]) : [];
   const texturesProperty = properties.find((item) => item && item.name === "textures");
@@ -146,7 +161,7 @@ async function readSessionServerSkin(apiUrl: string, uuid: string): Promise<Skin
   try {
     decoded = JSON.parse(Buffer.from(value, "base64").toString("utf8")) as Json;
   } catch {
-    throw new Error("皮肤站返回的 textures 数据无法解析");
+    throw new Error(mt("auth.skin.texturesUnparsable"));
   }
   const textures = decoded.textures && typeof decoded.textures === "object" ? (decoded.textures as Json) : {};
   const skin = textures.SKIN && typeof textures.SKIN === "object" ? (textures.SKIN as Json) : {};
@@ -178,7 +193,7 @@ async function minecraftToken(account: Account): Promise<string> {
 
 async function yggdrasilSkin(account: Account): Promise<SkinInfo> {
   const ygg = account.yggdrasil;
-  if (!ygg?.apiUrl) return { source: "yggdrasil", canUpload: false, error: "该账号缺少第三方站点地址，请重新登录" };
+  if (!ygg?.apiUrl) return { source: "yggdrasil", canUpload: false, error: mt("auth.skin.missingApiUrl") };
   try {
     const site = await readSiteSkin(ygg.apiUrl, account.uuid);
     const detail = site ?? (await readSessionServerSkin(ygg.apiUrl, account.uuid));
@@ -195,7 +210,7 @@ async function mojangSkin(account: Account): Promise<SkinInfo> {
     accessToken = await minecraftToken(account);
   } catch (err) {
     const message = describe(err);
-    if (isUnauthorizedApp(message)) return { source: "mojang", canUpload: false, error: APP_UNAUTHORIZED };
+    if (isUnauthorizedApp(message)) return { source: "mojang", canUpload: false, error: appUnauthorized() };
     log.warn("读取微软皮肤失败（会话铸造）：" + account.name + " · " + message);
     return { source: "mojang", canUpload: true, error: message };
   }
@@ -207,10 +222,10 @@ async function mojangSkin(account: Account): Promise<SkinInfo> {
     return { source: "mojang", canUpload: true, error: reply.text };
   }
   if (reply.status === 401 || reply.status === 403) {
-    return { source: "mojang", canUpload: false, error: TOKEN_EXPIRED };
+    return { source: "mojang", canUpload: false, error: tokenExpired() };
   }
   if (reply.status !== 200 || !reply.json) {
-    return { source: "mojang", canUpload: true, error: failureText("读取皮肤信息失败：", reply) };
+    return { source: "mojang", canUpload: true, error: failureText(mt("auth.skin.failRead"), reply) };
   }
 
   const skins = Array.isArray(reply.json.skins) ? (reply.json.skins as Json[]) : [];
@@ -232,8 +247,8 @@ async function mojangSkin(account: Account): Promise<SkinInfo> {
 /** IPC skins:get：读该账号当前的皮肤/披风。任何失败都落成可展示的 error，不抛给渲染进程。 */
 export async function getSkin(accountId: string): Promise<SkinInfo> {
   const account = await getAccount(accountId);
-  if (!account) return { source: "none", canUpload: false, error: "账号不存在：" + accountId };
-  if (account.type === "offline") return { source: "none", canUpload: false, error: NO_SKIN_SERVICE };
+  if (!account) return { source: "none", canUpload: false, error: mt("auth.account.notFound", { id: accountId }) };
+  if (account.type === "offline") return { source: "none", canUpload: false, error: noSkinService() };
   if (account.type === "yggdrasil") return yggdrasilSkin(account);
   return mojangSkin(account);
 }
@@ -241,19 +256,19 @@ export async function getSkin(accountId: string): Promise<SkinInfo> {
 /** 读 IHDR 校验：必须是 64×64 或 64×32 的 PNG（1.8 之前的老格式仍可用）。 */
 async function readSkinPng(filePath: string): Promise<Buffer> {
   const path = (filePath ?? "").trim();
-  if (!path) throw new Error("请先选择皮肤图片");
+  if (!path) throw new Error(mt("auth.skin.pickFileFirst"));
   let bytes: Buffer;
   try {
     bytes = await readFile(path);
   } catch (err) {
-    throw new Error("无法读取皮肤文件：" + path + " · " + describe(err));
+    throw new Error(mt("auth.skin.readFailed", { path, error: describe(err) }));
   }
-  if (bytes.length < PNG_MIN_HEADER || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) throw new Error(BAD_IMAGE);
-  if (bytes.toString("latin1", 12, 16) !== "IHDR") throw new Error(BAD_IMAGE);
+  if (bytes.length < PNG_MIN_HEADER || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) throw new Error(badImage());
+  if (bytes.toString("latin1", 12, 16) !== "IHDR") throw new Error(badImage());
   const width = bytes.readUInt32BE(16);
   const height = bytes.readUInt32BE(20);
   const supported = width === 64 && (height === 64 || height === 32);
-  if (!supported) throw new Error(BAD_IMAGE);
+  if (!supported) throw new Error(badImage());
   return bytes;
 }
 
@@ -263,9 +278,9 @@ function skinBlob(bytes: Buffer): Blob {
 
 /** 上传结果统一判定：401/403 是令牌问题，404 是站点没实现这个接口。 */
 function acceptSkinWrite(reply: Reply, missingMessage: string): void {
-  if (reply.status === 401 || reply.status === 403) throw new Error(TOKEN_EXPIRED);
+  if (reply.status === 401 || reply.status === 403) throw new Error(tokenExpired());
   if (reply.status === 404) throw new Error(missingMessage);
-  if (reply.status !== 200 && reply.status !== 204) throw new Error(failureText("上传皮肤失败：", reply));
+  if (reply.status !== 200 && reply.status !== 204) throw new Error(failureText(mt("auth.skin.failUpload"), reply));
 }
 
 function yggForm(bytes: Buffer, model: "slim" | "classic"): FormData {
@@ -277,17 +292,17 @@ function yggForm(bytes: Buffer, model: "slim" | "classic"): FormData {
 
 async function uploadYggdrasilSkin(account: Account, bytes: Buffer, model: "slim" | "classic"): Promise<void> {
   const ygg = account.yggdrasil;
-  if (!ygg?.apiUrl || !ygg.accessToken) throw new Error(TOKEN_EXPIRED);
+  if (!ygg?.apiUrl || !ygg.accessToken) throw new Error(tokenExpired());
   const url = profileSkinUrl(ygg.apiUrl, account.uuid);
   const headers = { authorization: "Bearer " + ygg.accessToken };
   // authlib-injector 的材质上传是 PUT + model 查询参数；model 同时作为表单字段发一份，兼容只读表单的实现
   const put = await request(url + "?model=" + model, { method: "PUT", headers, body: yggForm(bytes, model) }, UPLOAD_TIMEOUT_MS);
   if (put.status !== 404 && put.status !== 405) {
-    acceptSkinWrite(put, NO_TEXTURE_API);
+    acceptSkinWrite(put, noTextureApi());
     return;
   }
   const post = await request(url, { method: "POST", headers, body: yggForm(bytes, model) }, UPLOAD_TIMEOUT_MS);
-  acceptSkinWrite(post, NO_TEXTURE_API);
+  acceptSkinWrite(post, noTextureApi());
 }
 
 async function uploadMojangSkin(account: Account, bytes: Buffer, model: "slim" | "classic"): Promise<void> {
@@ -296,7 +311,7 @@ async function uploadMojangSkin(account: Account, bytes: Buffer, model: "slim" |
     accessToken = await minecraftToken(account);
   } catch (err) {
     const message = describe(err);
-    throw new Error(isUnauthorizedApp(message) ? APP_UNAUTHORIZED : message);
+    throw new Error(isUnauthorizedApp(message) ? appUnauthorized() : message);
   }
   const form = new FormData();
   form.append("variant", model);
@@ -306,15 +321,15 @@ async function uploadMojangSkin(account: Account, bytes: Buffer, model: "slim" |
     { method: "POST", headers: { authorization: "Bearer " + accessToken }, body: form },
     UPLOAD_TIMEOUT_MS,
   );
-  if (reply.status === 401 || reply.status === 403) throw new Error(TOKEN_EXPIRED);
-  if (reply.status !== 200 && reply.status !== 204) throw new Error(failureText("上传皮肤失败：", reply));
+  if (reply.status === 401 || reply.status === 403) throw new Error(tokenExpired());
+  if (reply.status !== 200 && reply.status !== 204) throw new Error(failureText(mt("auth.skin.failUpload"), reply));
 }
 
 /** IPC skins:upload：校验图片后按账号类型上传（失败抛可读文案，由 IPC 层转给界面）。 */
 export async function uploadSkin(accountId: string, filePath: string, model: SkinModel): Promise<void> {
   const account = await getAccount(accountId);
-  if (!account) throw new Error("账号不存在：" + accountId);
-  if (account.type === "offline") throw new Error(NO_SKIN_SERVICE);
+  if (!account) throw new Error(mt("auth.account.notFound", { id: accountId }));
+  if (account.type === "offline") throw new Error(noSkinService());
   const bytes = await readSkinPng(filePath);
   const variant = variantOf(model);
   if (account.type === "yggdrasil") await uploadYggdrasilSkin(account, bytes, variant);
@@ -324,15 +339,15 @@ export async function uploadSkin(accountId: string, filePath: string, model: Ski
 
 async function resetYggdrasilSkin(account: Account): Promise<void> {
   const ygg = account.yggdrasil;
-  if (!ygg?.apiUrl || !ygg.accessToken) throw new Error(TOKEN_EXPIRED);
+  if (!ygg?.apiUrl || !ygg.accessToken) throw new Error(tokenExpired());
   const reply = await request(profileSkinUrl(ygg.apiUrl, account.uuid), {
     method: "DELETE",
     headers: { authorization: "Bearer " + ygg.accessToken },
   });
-  if (reply.status === 401 || reply.status === 403) throw new Error(TOKEN_EXPIRED);
+  if (reply.status === 401 || reply.status === 403) throw new Error(tokenExpired());
   // 404 = 站点没有这个接口（规范里清除材质成功是 204），不能当成「已经恢复」
-  if (reply.status === 404) throw new Error(NO_RESET_API);
-  if (reply.status !== 200 && reply.status !== 204) throw new Error(failureText("恢复默认皮肤失败：", reply));
+  if (reply.status === 404) throw new Error(noResetApi());
+  if (reply.status !== 200 && reply.status !== 204) throw new Error(failureText(mt("auth.skin.failReset"), reply));
 }
 
 async function resetMojangSkin(account: Account): Promise<void> {
@@ -341,20 +356,20 @@ async function resetMojangSkin(account: Account): Promise<void> {
     accessToken = await minecraftToken(account);
   } catch (err) {
     const message = describe(err);
-    throw new Error(isUnauthorizedApp(message) ? APP_UNAUTHORIZED : message);
+    throw new Error(isUnauthorizedApp(message) ? appUnauthorized() : message);
   }
   const reply = await request(MC_ACTIVE_SKIN_URL, { method: "DELETE", headers: { authorization: "Bearer " + accessToken } });
-  if (reply.status === 401 || reply.status === 403) throw new Error(TOKEN_EXPIRED);
+  if (reply.status === 401 || reply.status === 403) throw new Error(tokenExpired());
   if (reply.status !== 200 && reply.status !== 204 && reply.status !== 404) {
-    throw new Error(failureText("恢复默认皮肤失败：", reply));
+    throw new Error(failureText(mt("auth.skin.failReset"), reply));
   }
 }
 
 /** IPC skins:reset：删掉当前皮肤，回到默认（Steve/Alex）。 */
 export async function resetSkin(accountId: string): Promise<void> {
   const account = await getAccount(accountId);
-  if (!account) throw new Error("账号不存在：" + accountId);
-  if (account.type === "offline") throw new Error(NO_SKIN_SERVICE);
+  if (!account) throw new Error(mt("auth.account.notFound", { id: accountId }));
+  if (account.type === "offline") throw new Error(noSkinService());
   if (account.type === "yggdrasil") await resetYggdrasilSkin(account);
   else await resetMojangSkin(account);
   log.info("已恢复默认皮肤：" + account.name);
@@ -363,9 +378,9 @@ export async function resetSkin(accountId: string): Promise<void> {
 /** IPC skins:pickFile：让用户选一张 PNG，取消返回 null。 */
 export async function pickSkinFile(): Promise<string | null> {
   const picked = await dialog.showOpenDialog({
-    title: "选择皮肤图片",
+    title: mt("auth.skin.pickTitle"),
     properties: ["openFile"],
-    filters: [{ name: "皮肤图片", extensions: ["png"] }],
+    filters: [{ name: mt("auth.skin.filterName"), extensions: ["png"] }],
   });
   if (picked.canceled || picked.filePaths.length === 0) return null;
   return picked.filePaths[0];
@@ -438,15 +453,15 @@ export async function addToWardrobe(filePath: string): Promise<string> {
 /** 衣柜内的绝对路径；任何路径分隔符 / ".." 都当成穿越攻击直接拒绝。 */
 function wardrobePath(name: string): string {
   const raw = (name ?? "").trim();
-  if (raw.length === 0) throw new Error("请指定要删除的衣柜文件");
+  if (raw.length === 0) throw new Error(mt("auth.skin.wardrobePickFirst"));
   if (raw.includes("..") || raw.includes("/") || raw.includes("\\") || raw !== basename(raw)) {
-    throw new Error("不能删除衣柜以外的文件：" + raw);
+    throw new Error(mt("auth.skin.wardrobeOutside", { name: raw }));
   }
-  if (!raw.toLowerCase().endsWith(".png")) throw new Error("衣柜里只有 PNG 皮肤：" + raw);
+  if (!raw.toLowerCase().endsWith(".png")) throw new Error(mt("auth.skin.wardrobePngOnly", { name: raw }));
   const dir = skinsDir();
   const target = join(dir, raw);
   // 双保险：解析后的父目录必须就是衣柜目录
-  if (resolve(target, "..") !== resolve(dir)) throw new Error("不能删除衣柜以外的文件：" + raw);
+  if (resolve(target, "..") !== resolve(dir)) throw new Error(mt("auth.skin.wardrobeOutside", { name: raw }));
   return target;
 }
 
@@ -458,7 +473,7 @@ export async function removeFromWardrobe(name: string): Promise<void> {
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT" || code === "ENOTDIR") return;
-    throw new Error("删除衣柜文件失败：" + basename(target) + " · " + describe(err));
+    throw new Error(mt("auth.skin.deleteFailed", { name: basename(target), error: describe(err) }));
   }
   log.info("已从衣柜删除：" + basename(target));
 }
@@ -473,7 +488,7 @@ function uuidKey(raw: unknown): string {
 /** IPC skins:profiles：第三方账号回存下的角色列表，微软只有当前档案，离线没有。 */
 export async function listSkinProfiles(accountId: string): Promise<SkinProfile[]> {
   const account = await getAccount(accountId);
-  if (!account) throw new Error("账号不存在：" + accountId);
+  if (!account) throw new Error(mt("auth.account.notFound", { id: accountId }));
   if (account.type === "offline") return [];
   if (account.type === "microsoft") return [{ id: account.uuid, name: account.name, active: true }];
   const current = uuidKey(account.uuid);
@@ -497,14 +512,14 @@ function refreshFailure(reply: Reply): string {
  */
 export async function selectProfile(accountId: string, profileId: string): Promise<void> {
   const account = await getAccount(accountId);
-  if (!account) throw new Error("账号不存在：" + accountId);
+  if (!account) throw new Error(mt("auth.account.notFound", { id: accountId }));
   const ygg = account.yggdrasil;
-  if (account.type !== "yggdrasil" || !ygg?.apiUrl) throw new Error(NO_SWITCHABLE_PROFILE);
+  if (account.type !== "yggdrasil" || !ygg?.apiUrl) throw new Error(noSwitchableProfile());
 
   const wanted = uuidKey(profileId);
   const profiles = ygg.profiles ?? [];
   const target = profiles.find((item) => uuidKey(item.id) === wanted);
-  if (!target) throw new Error("切换角色失败：该账号下没有角色 " + (profileId ?? ""));
+  if (!target) throw new Error(mt("auth.skin.profileMissing", { id: profileId ?? "" }));
 
   try {
     const reply = await request(ygg.apiUrl.replace(/\/+$/, "") + "/authserver/refresh", {
@@ -522,7 +537,7 @@ export async function selectProfile(accountId: string, profileId: string): Promi
     const body: Json = reply.json ?? {};
     const accessToken = str(body.accessToken);
     // 不换令牌的话注入后仍是旧角色，等同没切
-    if (accessToken.length === 0) throw new Error("续期响应缺少 accessToken");
+    if (accessToken.length === 0) throw new Error(mt("auth.skin.refreshNoToken"));
     registerSecret(accessToken);
     const fresh: Json = body.selectedProfile && typeof body.selectedProfile === "object" ? (body.selectedProfile as Json) : {};
     const name = str(fresh.name) || target.name;
@@ -536,6 +551,6 @@ export async function selectProfile(accountId: string, profileId: string): Promi
     });
     log.info("已切换角色：" + name + " · " + ygg.apiUrl);
   } catch (err) {
-    throw new Error("切换角色失败：" + describe(err));
+    throw new Error(mt("auth.skin.switchFailed", { error: describe(err) }));
   }
 }

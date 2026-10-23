@@ -6,12 +6,13 @@ import type {
 import { api } from "../lib/api";
 import { formatAgo, formatCount, formatDate, loaderLabel } from "../lib/format";
 import {
-  KIND_BADGE, KIND_DIR, KIND_EMPTY_HINT, KIND_FILE_ACTION, KIND_INSTALL_LABEL, KIND_PLACEHOLDER, KIND_TABS,
-  MAPS_NOTICE, MAPS_WEB_URL, SORT_OPTIONS, SOURCE_BADGE, isBackendKind, kindLabel, loaderOptionLabel,
+  KIND_BADGE_KEY, KIND_DIR, KIND_EMPTY_HINT_KEY, KIND_FILE_ACTION_KEY, KIND_INSTALL_LABEL_KEY, KIND_PLACEHOLDER_KEY,
+  KIND_TABS, MAPS_NOTICE_KEY, MAPS_WEB_URL, SORT_OPTIONS_KEY, isBackendKind, kindLabel, loaderOptionLabel, sourceBadge,
   showsLoader, showsResolution,
   type KindFilesRequest, type KindInstallRequest, type KindSearchRequest, type ModSort,
   type UiContentKind,
 } from "../lib/modKind";
+import { useT } from "../lib/i18n";
 import { perfNow, perfSince } from "../lib/perf";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
@@ -49,10 +50,10 @@ const DEFAULT_FILTERS: StoredFilters = { version: "", loader: "", resolution: ""
  * 一级「来源」与它支持的二级「类型」。
  * 数据包没有后端接口，继续以 disabled 的占位标签出现（与改造前一致）。
  */
-const SOURCE_TABS: Array<{ value: ModProviderId; label: string; kinds: UiContentKind[] }> = [
-  { value: "modrinth", label: "Modrinth", kinds: ["modpack", "mod", "resourcepack", "datapack", "shader"] },
-  { value: "minekuai", label: "麦块社区", kinds: ["modpack", "mod", "resourcepack", "shader", "map"] },
-  { value: "curseforge", label: "CurseForge", kinds: ["modpack", "mod"] },
+const SOURCE_TABS: Array<{ value: ModProviderId; labelKey: string; kinds: UiContentKind[] }> = [
+  { value: "modrinth", labelKey: "pages.mods.sourceModrinth", kinds: ["modpack", "mod", "resourcepack", "datapack", "shader"] },
+  { value: "minekuai", labelKey: "pages.mods.sourceMinekuai", kinds: ["modpack", "mod", "resourcepack", "shader", "map"] },
+  { value: "curseforge", labelKey: "pages.mods.sourceCurseforge", kinds: ["modpack", "mod"] },
 ];
 
 /** 某来源支持的二级类型：按 KIND_TABS 的顺序过滤，保证按钮顺序稳定。 */
@@ -284,6 +285,7 @@ export function ModsPage() {
     window.requestAnimationFrame(() => perfSince("mods-page-first-render", mountedAt.current));
   }, []);
   const { push } = useToast();
+  const tr = useT();
   /** 二级「类型」：默认模组；数据包因后端缺口禁用（是否出现由来源决定）。 */
   const [kind, setKind] = useState<UiContentKind>("mod");
   /** 一级「来源」：三个站点单选（不再有「所有来源」合并）。 */
@@ -337,13 +339,13 @@ export function ModsPage() {
   /** 左侧「当前实例」：第一项是空选择，允许不选实例只浏览。 */
   const instanceOptions = useMemo(
     () => [
-      { value: "", label: "不选择实例（仅浏览）" },
+      { value: "", label: tr("pages.mods.browseOnlyOption") },
       ...instances.map((item) => ({
         value: item.id,
-        label: `${item.name} · ${item.mcVersion} ${loaderLabel(item.loader)}`,
+        label: `${item.name} · ${item.mcVersion} ${loaderLabel(item.loader, tr)}`,
       })),
     ],
-    [instances],
+    [instances, tr],
   );
 
   const patch = (next: Partial<StoredFilters>) => {
@@ -400,7 +402,7 @@ export function ModsPage() {
     // 关键词也是「筛选」的一部分：只清版本/分类而留着关键词，用户会看到空态点了没反应。
     setQuery("");
     setSubmitted("");
-    push("已清空筛选与关键词：不再限制版本、加载器、分类与分辨率", "info");
+    push(tr("pages.mods.filtersCleared"), "info");
   };
 
   const toggleCategory = (id: string) => {
@@ -444,7 +446,7 @@ export function ModsPage() {
     const next = { ...filters, categories: kept };
     setFilters(next);
     writeFilters(kind, next);
-    push(`已清掉 ${filters.categories.length - kept.length} 个当前来源不支持的分类筛选`, "info");
+    push(tr("pages.mods.categoriesPruned", { count: filters.categories.length - kept.length }), "info");
   }, [categoryList.loading, categoryList.error, categoryList.data, filters, kind, push]);
 
   // 存过 CurseForge 但 Key 被清掉：退回 Modrinth，避免停在一个点不动的来源上。
@@ -773,7 +775,7 @@ export function ModsPage() {
         refs = await api.mods.installedContent(instanceId);
       } catch {
         // 不静默吞：用户要知道这次为什么没有重复提示。
-        push("重复检查失败，本次未做重复提示", "info");
+        push(tr("pages.mods.dedupeFailed"), "info");
         return EMPTY_MATCH;
       }
     }
@@ -804,7 +806,7 @@ export function ModsPage() {
       // 带上 kind：光影的必需前置由主进程按内置规则补充，资源包也可能声明前置。
       deps = await api.mods.dependencies(mod.provider, mod.projectId, instance.id, file?.fileId, kind);
     } catch {
-      push("前置检查失败，将只安装本体", "info");
+      push(tr("pages.mods.depsCheckFailed"), "info");
       return false;
     }
     const required = deps.filter((dep) => dep.required);
@@ -822,7 +824,7 @@ export function ModsPage() {
     // 请求都不发），覆盖才继续原流程。弱命中同样要问，只是文案不一样。
     const dupes = await duplicatesIn(instance.id, mod, kind);
     if (dupes.strong.length > 0 || dupes.weak.length > 0) {
-      const overwrite = await askDuplicate(mod, dupes, file?.fileName ?? "启动器挑选的最佳版本");
+      const overwrite = await askDuplicate(mod, dupes, file?.fileName ?? tr("pages.mods.bestPick"));
       if (!overwrite) return;
     }
     setInstalling({ projectId: mod.projectId, fileId: file?.fileId ?? null });
@@ -840,10 +842,18 @@ export function ModsPage() {
         installDependencies,
       };
       const result = await api.mods.install(request);
-      const extra = result.installedDependencies.length > 0
-        ? `，并安装了前置：${result.installedDependencies.join("、")}`
-        : "";
-      push(`${result.fileName} 已安装到「${instance.name}」的 ${KIND_DIR[kind]} 目录${extra}`, "success");
+      push(
+        tr(
+          result.installedDependencies.length > 0 ? "pages.mods.installedWithDeps" : "pages.mods.installedNoDeps",
+          {
+            name: result.fileName,
+            instance: instance.name,
+            dir: KIND_DIR[kind],
+            deps: result.installedDependencies.join(", "),
+          },
+        ),
+        "success",
+      );
       // 先标记缓存失效（下一次点安装不会用旧快照判定），再重查一次让角标跟着变。
       setInstalledStale(true);
       installedRefs.reload();
@@ -896,7 +906,7 @@ export function ModsPage() {
    * 关闭详情面板 + 滚到该卡片 + 展开它的实例浮层。
    */
   const nudgeToPickInstance = (mod: ModSearchResult) => {
-    push("请先选择要安装到的实例", "info");
+    push(tr("pages.mods.pickInstanceFirst"), "info");
     setSelected(null);
     const anchor = pickerAnchors.current.get(keyOf(mod));
     if (!anchor) return;
@@ -911,7 +921,7 @@ export function ModsPage() {
     setPackBusy({ key: keyOf(mod), fileId: fileId ?? null });
     try {
       const result = await api.mods.installModpack(mod.provider, mod.projectId, fileId);
-      push(`已创建实例「${result.name}」并开始安装`, "success");
+      push(tr("pages.mods.modpackCreated", { name: result.name }), "success");
       await reloadInstances();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -931,7 +941,7 @@ export function ModsPage() {
     if (!entry.downloadUrl) return;
     try {
       await api.app.openExternal(entry.downloadUrl);
-      push("已在系统浏览器中打开地图下载链接", "success");
+      push(tr("pages.mods.mapLinkOpened"), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -940,50 +950,71 @@ export function ModsPage() {
   const openMapsWeb = async () => {
     try {
       await api.app.openExternal(MAPS_WEB_URL);
-      push("已在系统浏览器中打开麦块社区地图页", "success");
+      push(tr("pages.mods.mapsPageOpened"), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
   };
 
   const versionOptions = useMemo(
-    () => [{ value: "", label: "全部版本" }, ...(filterOptions.data?.versions ?? []).map((value) => ({ value, label: value }))],
-    [filterOptions.data],
+    () => [
+      { value: "", label: tr("pages.mods.allVersions") },
+      ...(filterOptions.data?.versions ?? []).map((value) => ({ value, label: value })),
+    ],
+    [filterOptions.data, tr],
   );
   const loaderOptions = useMemo(
-    () => [{ value: "", label: "全部加载器" }, ...(filterOptions.data?.loaders ?? []).map((value) => ({ value, label: loaderOptionLabel(value) }))],
-    [filterOptions.data],
+    () => [
+      { value: "", label: tr("pages.mods.allLoaders") },
+      ...(filterOptions.data?.loaders ?? []).map((value) => ({ value, label: loaderOptionLabel(value, tr) })),
+    ],
+    [filterOptions.data, tr],
   );
   const resolutionOptions = useMemo(
-    () => [{ value: "", label: "全部分辨率" }, ...(filterOptions.data?.resolutions ?? []).map((value) => ({ value, label: value }))],
-    [filterOptions.data],
+    () => [
+      { value: "", label: tr("pages.mods.allResolutions") },
+      ...(filterOptions.data?.resolutions ?? []).map((value) => ({ value, label: value })),
+    ],
+    [filterOptions.data, tr],
   );
-  const sortOptions = useMemo(() => SORT_OPTIONS.map((item) => ({ value: item.value, label: item.label })), []);
+  const sortOptions = useMemo(
+    () => SORT_OPTIONS_KEY.map((item) => ({ value: item.value, label: tr(item.labelKey) })),
+    [tr],
+  );
   /** 空态要写清楚的「当前筛选」：来源 + 版本 + 加载器 + 分辨率 + 分类。 */
   const activeFilterText = useMemo(() => {
     const parts: string[] = [];
-    const sourceLabel = SOURCE_TABS.find((item) => item.value === source)?.label ?? source;
-    parts.push(`来源 ${sourceLabel}`);
+    const sourceLabel = SOURCE_TABS.find((item) => item.value === source)?.labelKey ?? source;
+    parts.push(tr("pages.mods.filterSource", { label: tr(sourceLabel) }));
     if (!isMap) {
-      if (effectiveVersion) parts.push(`版本 ${effectiveVersion}`);
-      if (effectiveLoader) parts.push(`加载器 ${loaderOptionLabel(effectiveLoader)}`);
-      if (filters.resolution) parts.push(`分辨率 ${filters.resolution}`);
+      if (effectiveVersion) parts.push(tr("pages.mods.filterVersion", { version: effectiveVersion }));
+      if (effectiveLoader) parts.push(tr("pages.mods.filterLoader", { loader: loaderOptionLabel(effectiveLoader, tr) }));
+      if (filters.resolution) parts.push(tr("pages.mods.filterResolution", { resolution: filters.resolution }));
       if (filters.categories.length > 0) {
         const ids = new Set((categoryList.data ?? []).map((item) => item.id));
-        parts.push(`分类 ${filters.categories.map((id) => (ids.has(id) ? categoryName(id) : id)).join("、")}`);
+        parts.push(
+          tr("pages.mods.filterCategories", {
+            names: filters.categories.map((id) => (ids.has(id) ? categoryName(id) : id)).join(", "),
+          }),
+        );
       }
     }
     return parts.join(" · ");
-  }, [source, isMap, effectiveVersion, effectiveLoader, filters.resolution, filters.categories, categoryList.data]);
+  }, [source, isMap, effectiveVersion, effectiveLoader, filters.resolution, filters.categories, categoryList.data, tr]);
 
 
   const subtitle = isMap
     ? (currentInstance
-      ? `地图按「${currentInstance.name}」的 Minecraft ${currentInstance.mcVersion} 标注适配性`
-      : "地图不依赖实例，直接浏览；下载需登录麦块社区")
+      ? tr("pages.mods.mapSubtitleWithInstance", { name: currentInstance.name, mc: currentInstance.mcVersion })
+      : tr("pages.mods.mapSubtitleNoInstance"))
     : (currentInstance
-      ? `${kindLabel(kind)}可安装到「${currentInstance.name}」· Minecraft ${currentInstance.mcVersion} · ${loaderLabel(currentInstance.loader)}`
-      : "未选择实例：可以照常浏览；安装时在卡片上选目标实例，整合包则直接新建实例");
+      ? tr("pages.mods.subtitleInstance", {
+        kind: kindLabel(kind, tr),
+        name: currentInstance.name,
+        mc: currentInstance.mcVersion,
+        loader: loaderLabel(currentInstance.loader, tr),
+      })
+      : tr("pages.mods.subtitleNoInstance"));
 
   const resultCount = isMap ? (maps.data ?? []).length : results.length;
 
@@ -991,20 +1022,20 @@ export function ModsPage() {
     <section className="page">
       <header className="page-head">
         <div>
-          <h1 className="page-title">资源</h1>
+          <h1 className="page-title">{tr("pages.mods.pageTitle")}</h1>
           <p className="page-sub">{subtitle}</p>
         </div>
         <div className="page-actions">
           <button type="button" className="btn btn-ghost" onClick={hardRefresh} disabled={isMap ? maps.loading : search.loading}>
             <IconRefresh size={16} />
-            刷新
+            {tr("pages.common.refresh")}
           </button>
         </div>
       </header>
 
       <div className="res-switcher">
         {/* 一级：来源单选。没配 Key 的 CurseForge 直接禁用，并在 title 里说明原因。 */}
-        <div className="source-tabs" role="tablist" aria-label="资源来源">
+        <div className="source-tabs" role="tablist" aria-label={tr("pages.mods.sourceTabsAria")}>
           {SOURCE_TABS.map((tab) => {
             const disabled = tab.value === "curseforge" && !curseforgeReady;
             const kindCount = tab.kinds.filter((item) => item !== "datapack").length;
@@ -1019,27 +1050,29 @@ export function ModsPage() {
                 data-source-tab={tab.value}
                 data-source-disabled={disabled ? "1" : undefined}
                 title={disabled
-                  ? "CurseForge 需要 API Key：请到「设置 → 联网与下载」填写后再用"
-                  : `只看 ${tab.label} 的资源`}
+                  ? tr("pages.mods.cfKeyTabTitle")
+                  : tr("pages.mods.sourceTabTitle", { label: tr(tab.labelKey) })}
                 disabled={disabled}
                 onClick={() => selectSource(tab.value)}
               >
-                {tab.label}
-                <span className="source-tab-count" data-source-kinds={kindCount}>{kindCount} 类</span>
+                {tr(tab.labelKey)}
+                <span className="source-tab-count" data-source-kinds={kindCount}>
+                  {tr("pages.mods.kindCount", { count: kindCount })}
+                </span>
               </button>
             );
           })}
           <span className="source-hint" data-source-hint>
             {source === "minekuai"
-              ? "中文来源：卡片带译名与中文简介"
+              ? tr("pages.mods.sourceHintZh")
               : source === "curseforge"
-                ? "英文源：搜索接口需要 API Key"
-                : "英文源：卡片显示原文，可开启实时翻译"}
+                ? tr("pages.mods.sourceHintCf")
+                : tr("pages.mods.sourceHintEn")}
           </span>
         </div>
 
         {/* 二级：类型，只列当前来源支持的那几个（数据包在支持它的来源下仍是禁用占位）。 */}
-        <div className="kind-tabs" role="tablist" aria-label="内容类型">
+        <div className="kind-tabs" role="tablist" aria-label={tr("pages.mods.kindTabsAria")}>
           {kindTabs.map((tab) => (
             <button
               key={tab.value}
@@ -1050,11 +1083,11 @@ export function ModsPage() {
               className={`kind-tab ${tab.value === kind ? "active" : ""} ${tab.disabled ? "is-disabled" : ""}`.trim()}
               data-kind-tab={tab.value}
               data-kind-disabled={tab.disabled ? "1" : undefined}
-              title={tab.hint}
+              title={tab.hintKey ? tr(tab.hintKey) : undefined}
               disabled={tab.disabled}
               onClick={() => changeKind(tab.value)}
             >
-              {tab.label}
+              {tr(tab.labelKey)}
             </button>
           ))}
         </div>
@@ -1065,45 +1098,45 @@ export function ModsPage() {
           {!isMap ? (
             <>
               <div className="aside-block">
-                <span className="field-label">版本</span>
+                <span className="field-label">{tr("pages.mods.versionLabel")}</span>
                 <Select
                   value={filters.version}
                   options={versionOptions}
                   onChange={(value) => patch({ version: value })}
                   keepEmpty
-                  ariaLabel="版本"
+                  ariaLabel={tr("pages.mods.versionLabel")}
                 />
               </div>
 
               {showsLoader(kind) ? (
                 <div className="aside-block">
-                  <span className="field-label">加载器</span>
+                  <span className="field-label">{tr("pages.mods.loaderLabelText")}</span>
                   <Select
                     value={filters.loader}
                     options={loaderOptions}
                     onChange={(value) => patch({ loader: value })}
                     keepEmpty
-                    ariaLabel="加载器"
+                    ariaLabel={tr("pages.mods.loaderLabelText")}
                   />
                 </div>
               ) : null}
 
               {showsResolution(kind) ? (
                 <div className="aside-block">
-                  <span className="field-label">分辨率</span>
+                  <span className="field-label">{tr("pages.mods.resolutionLabel")}</span>
                   <Select
                     value={filters.resolution}
                     options={resolutionOptions}
                     onChange={(value) => patch({ resolution: value })}
                     keepEmpty
-                    ariaLabel="分辨率"
+                    ariaLabel={tr("pages.mods.resolutionLabel")}
                   />
                 </div>
               ) : null}
 
               <div className="aside-block">
-                <span className="field-label">类别</span>
-                {categoryList.loading ? <p className="aside-hint">读取分类…</p> : null}
+                <span className="field-label">{tr("pages.mods.categoryLabel")}</span>
+                {categoryList.loading ? <p className="aside-hint">{tr("pages.mods.readingCategories")}</p> : null}
                 {categoryList.error ? <p className="aside-hint">{categoryList.error}</p> : null}
                 <div className="cat-list" data-cat-list>
                   {(categoryList.data ?? []).map((category) => {
@@ -1123,7 +1156,7 @@ export function ModsPage() {
                     );
                   })}
                   {!categoryList.loading && (categoryList.data ?? []).length === 0 ? (
-                    <p className="aside-hint">这个来源下没有分类</p>
+                    <p className="aside-hint">{tr("pages.mods.noCategories")}</p>
                   ) : null}
                 </div>
               </div>
@@ -1131,26 +1164,28 @@ export function ModsPage() {
           ) : null}
 
           <div className="aside-block">
-            <span className="field-label">当前实例</span>
+            <span className="field-label">{tr("pages.mods.currentInstanceLabel")}</span>
             <Select
               value={currentInstance?.id ?? ""}
               options={instanceOptions}
               onChange={(value) => setCurrentInstanceId(value === "" ? null : value)}
               keepEmpty
-              ariaLabel="当前实例"
+              ariaLabel={tr("pages.mods.currentInstanceLabel")}
             />
             {currentInstance ? (
               <p className="aside-hint">
-                {isMap ? "地图按这个实例的版本标注适配性" : `${kindLabel(kind)}默认装进这个实例`}
+                {isMap
+                  ? tr("pages.mods.mapInstanceHint")
+                  : tr("pages.mods.kindInstanceHint", { kind: kindLabel(kind, tr) })}
               </p>
             ) : (
               <p className="aside-hint" data-instance-empty-hint>
-                {noInstance ? "还没有实例：可以照常浏览，安装时先在卡片上建一个" : "未选择实例：可以照常浏览，安装时在卡片上选目标实例"}
+                {noInstance ? tr("pages.mods.noInstancesBrowse") : tr("pages.mods.noInstanceChosen")}
               </p>
             )}
             {noInstance ? (
               <button type="button" className="link-btn" onClick={() => navigate("instances")}>
-                去创建实例
+                {tr("pages.mods.createInstanceLink")}
               </button>
             ) : null}
           </div>
@@ -1163,7 +1198,7 @@ export function ModsPage() {
               <input
                 className="input search-input"
                 value={query}
-                placeholder={KIND_PLACEHOLDER[kind]}
+                placeholder={tr(KIND_PLACEHOLDER_KEY[kind])}
                 data-res-search
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={(event) => {
@@ -1172,27 +1207,29 @@ export function ModsPage() {
               />
             </div>
             <button type="button" className="btn btn-primary btn-sm" onClick={submitSearch}>
-              搜索
+              {tr("pages.mods.searchAction")}
             </button>
             <span className="res-count" data-res-count>
               {isMap
-                ? (maps.loading ? "搜索中…" : `${resultCount} 个结果`)
-                : (search.loading && results.length === 0 ? "搜索中…" : `${resultCount} 个结果`)}
+                ? (maps.loading ? tr("pages.mods.searching") : tr("pages.mods.resultCount", { count: resultCount }))
+                : (search.loading && results.length === 0
+                  ? tr("pages.mods.searching")
+                  : tr("pages.mods.resultCount", { count: resultCount }))}
             </span>
             <div className="res-sort">
-              <span className="res-sort-label">排序</span>
+              <span className="res-sort-label">{tr("pages.mods.sortLabel")}</span>
               <Select
                 value={sort}
                 options={sortOptions}
                 onChange={(value) => setSort(value as ModSort)}
-                ariaLabel="排序"
+                ariaLabel={tr("pages.mods.sortLabel")}
               />
             </div>
           </div>
 
           {!isMap && filters.categories.length > 0 ? (
             <div className="res-chips" data-res-chips>
-              <span className="res-chips-label">已选分类</span>
+              <span className="res-chips-label">{tr("pages.mods.selectedCategories")}</span>
               {filters.categories.map((id) => (
                 <button
                   key={id}
@@ -1200,7 +1237,7 @@ export function ModsPage() {
                   className="chip chip-active"
                   data-cat-chip={id}
                   onClick={() => toggleCategory(id)}
-                  title="点掉这个分类"
+                  title={tr("pages.mods.removeCategoryTitle")}
                 >
                   {categoryName(id)}
                   <IconClose size={12} />
@@ -1211,22 +1248,22 @@ export function ModsPage() {
 
           {isDatapack ? (
             <EmptyState
-              title="数据包暂不支持"
-              hint="后端还没有数据包接口，先看看模组、资源包或整合包吧。"
+              title={tr("pages.mods.datapackUnsupportedTitle")}
+              hint={tr("pages.mods.datapackUnsupportedHint")}
             />
           ) : null}
 
           {isMap ? (
             <>
-              <p className="kind-notice" data-maps-notice>{MAPS_NOTICE}</p>
+              <p className="kind-notice" data-maps-notice>{tr(MAPS_NOTICE_KEY)}</p>
 
               {maps.loading ? <SkeletonRows count={4} /> : null}
               {maps.error ? <ErrorState message={maps.error} onRetry={maps.reload} /> : null}
 
               {!maps.loading && !maps.error && allMaps.length === 0 ? (
                 <EmptyState
-                  title="没有搜到地图"
-                  hint={submitted ? `「${submitted}」没有结果，换个关键词试试。` : KIND_EMPTY_HINT.map}
+                  title={tr("pages.mods.noMapsTitle")}
+                  hint={submitted ? tr("pages.mods.noMapsHint", { query: submitted }) : tr(KIND_EMPTY_HINT_KEY.map)}
                 />
               ) : null}
 
@@ -1250,10 +1287,10 @@ export function ModsPage() {
                     onClick={() => void loadMoreMaps()}
                   >
                     {mapsLoadingMore
-                      ? "正在加载更多…"
+                      ? tr("pages.mods.loadingMore")
                       : mapsHasMore
-                        ? `加载更多（已加载 ${allMaps.length} 条）`
-                        : `已全部加载（${allMaps.length} 条）`}
+                        ? tr("pages.mods.loadMoreCount", { count: allMaps.length })
+                        : tr("pages.mods.allLoadedCount", { count: allMaps.length })}
                   </button>
                   <div ref={mapsSentinelRef} className="load-more-sentinel" aria-hidden="true" />
                 </div>
@@ -1263,16 +1300,14 @@ export function ModsPage() {
 
           {!isMap && noKey ? (
             <div className="guide-card">
-              <h3 className="hint-title">CurseForge 需要 API Key</h3>
-              <p className="hint-text">
-                CurseForge 官方接口要求携带 API Key。请到设置页填写后返回，或者先切到 Modrinth / 麦块社区继续浏览。
-              </p>
+              <h3 className="hint-title">{tr("pages.mods.cfKeyTitle")}</h3>
+              <p className="hint-text">{tr("pages.mods.cfGuideText")}</p>
               <div className="guide-actions">
                 <button type="button" className="btn btn-primary" onClick={() => navigate("settings")}>
-                  去设置填写 Key
+                  {tr("pages.mods.goSettingsKey")}
                 </button>
                 <button type="button" className="btn btn-ghost" data-action="switch-source-modrinth" onClick={() => selectSource("modrinth")}>
-                  改用 Modrinth
+                  {tr("pages.mods.switchModrinth")}
                 </button>
               </div>
             </div>
@@ -1283,17 +1318,22 @@ export function ModsPage() {
 
           {!isMap && !isDatapack && !noKey && !search.loading && !search.error && results.length === 0 ? (
             <EmptyState
-              title={submitted ? "没有匹配的结果" : `没有搜到${kindLabel(kind)}`}
-              hint={`当前筛选：${activeFilterText}${submitted ? ` · 关键词「${submitted}」` : ""}。换个关键词、换个子类型，或点右侧「清空筛选」放宽条件`}
+              title={
+                submitted ? tr("pages.mods.noMatchTitle") : tr("pages.mods.noResultForKind", { kind: kindLabel(kind, tr) })
+              }
+              hint={tr("pages.mods.noMatchHint", {
+                filters: activeFilterText,
+                keyword: submitted ? tr("pages.mods.keywordSuffix", { keyword: submitted }) : "",
+              })}
               action={(
                 <button
                   type="button"
                   className="btn btn-ghost"
                   data-action="clear-filters"
                   onClick={clearFilters}
-                  title="清空版本、加载器、分辨率与分类，并忽略实例版本"
+                  title={tr("pages.mods.clearFiltersTitle")}
                 >
-                  清空筛选
+                  {tr("pages.mods.clearFilters")}
                 </button>
               )}
             />
@@ -1309,7 +1349,7 @@ export function ModsPage() {
                 const open = picker !== null && keyOf(picker.mod) === key;
                 const creating = packBusy?.key === key;
                 const updatedAt = updatedAtOf(mod);
-                const badge = isBackendKind(kind) ? KIND_BADGE[kind] : null;
+                const badgeKey = isBackendKind(kind) ? KIND_BADGE_KEY[kind] : null;
                 // 项目级判定：索引命中=已安装，扫描兜底命中=疑似已安装（可能只是同名）。
                 const installedMatch = isBackendKind(kind)
                   ? matchInstalled(kind, { projectId: mod.projectId, slug: mod.slug, title: mod.title })
@@ -1330,17 +1370,19 @@ export function ModsPage() {
                         <div className="res-card-headline">
                           {/* 有译名时中文做主标题，英文原名降为副标。 */}
                           <h3 className="res-card-title" title={mod.title}>{titleZh ?? mod.title}</h3>
-                          {badge ? <span className="badge kind-badge" data-kind-badge>{badge}</span> : null}
+                          {badgeKey ? <span className="badge kind-badge" data-kind-badge>{tr(badgeKey)}</span> : null}
                           <span className={`badge res-source res-source-${mod.provider}`} data-res-source={mod.provider}>
-                            {SOURCE_BADGE[mod.provider]}
+                            {sourceBadge(mod.provider, tr)}
                           </span>
                           {installedGrade ? (
                             <span
                               className={`badge res-installed ${installedGrade === "scan" ? "is-scan" : ""}`.trim()}
                               data-res-installed={installedGrade}
-                              title={`${installedGrade === "index" ? "已安装" : "疑似已安装"}：${hitFileNames(installedMatch)}`}
+                              title={tr(installedGrade === "index" ? "pages.mods.installedTitle" : "pages.mods.maybeInstalledTitle", {
+                                files: hitFileNames(installedMatch),
+                              })}
                             >
-                              {installedGrade === "index" ? "已安装" : "疑似已安装"}
+                              {installedGrade === "index" ? tr("pages.mods.installed") : tr("pages.mods.maybeInstalled")}
                             </span>
                           ) : null}
                         </div>
@@ -1354,11 +1396,13 @@ export function ModsPage() {
                         <div className="res-card-stats">
                           <span className="res-stat" data-res-downloads>
                             <IconDownload size={14} />
-                            {formatCount(mod.downloads)}
+                            {formatCount(mod.downloads, tr)}
                           </span>
                           <span className="res-stat" title={mod.author}>{mod.author}</span>
                           {updatedAt ? (
-                            <span className="res-stat" data-res-updated>更新于 {formatAgo(updatedAt)}</span>
+                            <span className="res-stat" data-res-updated>
+                              {tr("pages.mods.updatedAt", { ago: formatAgo(updatedAt, tr) })}
+                            </span>
                           ) : null}
                         </div>
                       </div>
@@ -1370,8 +1414,8 @@ export function ModsPage() {
                         className={`fav-btn ${favorite ? "on" : ""}`.trim()}
                         data-res-fav={key}
                         aria-pressed={favorite}
-                        aria-label={favorite ? "取消收藏" : "收藏"}
-                        title={favorite ? "取消收藏（本地记忆）" : "收藏（本地记忆）"}
+                        aria-label={favorite ? tr("pages.mods.unfavorite") : tr("pages.mods.favorite")}
+                        title={favorite ? tr("pages.mods.unfavoriteTitle") : tr("pages.mods.favoriteTitle")}
                         onClick={() => toggleFavorite(key)}
                       >
                         <IconStar filled={favorite} />
@@ -1386,7 +1430,7 @@ export function ModsPage() {
                           disabled={packBusy !== null}
                           onClick={() => setPackConfirm(mod)}
                         >
-                          {creating ? "正在创建实例…" : "安装并创建实例"}
+                          {creating ? tr("pages.mods.creatingInstance") : tr("pages.mods.installAndCreate")}
                         </button>
                       ) : (
                         <button
@@ -1404,14 +1448,14 @@ export function ModsPage() {
                             else openPicker(mod, event.currentTarget);
                           }}
                         >
-                          {noInstance ? "无实例" : "选择实例"}
+                          {noInstance ? tr("pages.mods.noInstanceShort") : tr("pages.mods.selectInstance")}
                           <IconChevronDown size={14} />
                         </button>
                       )}
 
                       {noInstance && !isModpack ? (
                         <button type="button" className="link-btn res-create" data-res-create onClick={() => navigate("instances")}>
-                          去创建实例
+                          {tr("pages.mods.createInstanceLink")}
                         </button>
                       ) : null}
                     </div>
@@ -1434,10 +1478,10 @@ export function ModsPage() {
                 onClick={() => void loadMore()}
               >
                 {loadingMore
-                  ? "正在加载更多…"
+                  ? tr("pages.mods.loadingMore")
                   : hasMore
-                    ? `加载更多（已加载 ${results.length} 条）`
-                    : `已全部加载（${results.length} 条）`}
+                    ? tr("pages.mods.loadMoreCount", { count: results.length })
+                    : tr("pages.mods.allLoadedCount", { count: results.length })}
               </button>
               <div ref={sentinelRef} className="load-more-sentinel" aria-hidden="true" />
             </div>
@@ -1450,10 +1494,10 @@ export function ModsPage() {
         <AnchoredMenu
           anchor={picker.anchor}
           onClose={closePicker}
-          ariaLabel="安装到哪个实例"
+          ariaLabel={tr("pages.mods.pickerAria")}
           menuKey={keyOf(picker.mod)}
         >
-          <span className="res-menu-title">{noInstance ? "还没有可用实例" : "安装到哪个实例"}</span>
+          <span className="res-menu-title">{noInstance ? tr("pages.mods.noUsableInstances") : tr("pages.mods.pickerAria")}</span>
           {instances.map((instance) => (
             <button
               key={instance.id}
@@ -1465,7 +1509,7 @@ export function ModsPage() {
               onClick={() => void installInto(picker.mod, instance)}
             >
               <span className="res-menu-name">{instance.name}</span>
-              <span className="res-menu-meta">{instance.mcVersion} · {loaderLabel(instance.loader)}</span>
+              <span className="res-menu-meta">{instance.mcVersion} · {loaderLabel(instance.loader, tr)}</span>
             </button>
           ))}
           <button
@@ -1475,8 +1519,8 @@ export function ModsPage() {
             data-menu-browse
             onClick={() => browseOnly(picker.mod)}
           >
-            <span className="res-menu-name">不安装，仅浏览</span>
-            <span className="res-menu-meta">打开详情看介绍</span>
+            <span className="res-menu-name">{tr("pages.mods.browseOnly")}</span>
+            <span className="res-menu-meta">{tr("pages.mods.openDetailHint")}</span>
           </button>
           {noInstance ? (
             <button
@@ -1489,7 +1533,7 @@ export function ModsPage() {
                 navigate("instances");
               }}
             >
-              <span className="res-menu-name">去创建实例</span>
+              <span className="res-menu-name">{tr("pages.mods.createInstanceLink")}</span>
             </button>
           ) : null}
         </AnchoredMenu>
@@ -1503,7 +1547,7 @@ export function ModsPage() {
           fallbackTitle={selected.title}
           titleZh={translateMods ? selected.titleZh : undefined}
           summaryZh={translateMods ? selected.summaryZh : undefined}
-          installLabel={selectedGrade ? "重新安装" : KIND_INSTALL_LABEL[detailKind]}
+          installLabel={selectedGrade ? tr("pages.mods.reinstall") : tr(KIND_INSTALL_LABEL_KEY[detailKind])}
           onClose={() => setSelected(null)}
           onInstall={() => {
             // 整合包：新建实例，不需要选实例。
@@ -1519,27 +1563,32 @@ export function ModsPage() {
             void installContent(selected, currentInstance, sortedFiles[0] ?? null);
           }}
           installing={panelInstalling || (detailKind === "modpack" && packBusy?.key === keyOf(selected) && packBusy.fileId === null)}
-          installingLabel={detailKind === "modpack" ? "正在创建实例…" : undefined}
+          installingLabel={detailKind === "modpack" ? tr("pages.mods.creatingInstance") : undefined}
           instanceName={currentInstance?.name}
           installHint={detailKind === "modpack"
-            ? `将新建实例「${titleOf(selected)}」并安装，可能需要几分钟`
+            ? tr("pages.mods.modpackInstallHint", { name: titleOf(selected) })
             : selectedGrade === "index"
-              ? "该实例里已装过这个资源，继续会再装一份"
+              ? tr("pages.mods.alreadyInstalledHint")
               : selectedGrade === "scan"
-                ? `实例里疑似已装过（${hitFileNames(selectedMatch)}），继续会再装一份`
+                ? tr("pages.mods.maybeInstalledHint", { files: hitFileNames(selectedMatch) })
                 : undefined}
           noInstance={detailKind !== "modpack" && !currentInstance}
           filesSlot={
             <>
               {detailKind === "mod" && currentInstance?.loader === "vanilla" ? (
-                <p className="hint-inline">
-                  当前实例是原版，安装的模组不会生效。请把「当前实例」切换到 Fabric / Forge / NeoForge 实例。
-                </p>
+                <p className="hint-inline">{tr("pages.mods.vanillaWarning")}</p>
               ) : null}
 
               <div className="drawer-section-head">
-                <span className="field-label">可用文件</span>
-                <span className="muted-text">{currentInstance ? `高亮项匹配 ${currentInstance.mcVersion} ${loaderLabel(currentInstance.loader)}` : ""}</span>
+                <span className="field-label">{tr("pages.mods.availableFiles")}</span>
+                <span className="muted-text">
+                  {currentInstance
+                    ? tr("pages.mods.highlightMatch", {
+                      mc: currentInstance.mcVersion,
+                      loader: loaderLabel(currentInstance.loader, tr),
+                    })
+                    : ""}
+                </span>
               </div>
 
               {files.loading ? <SkeletonRows count={4} /> : null}
@@ -1558,21 +1607,25 @@ export function ModsPage() {
                             <span className="file-name" title={file.fileName}>{file.fileName}</span>
                             <MatchTag exact={file.exactMatch} />
                             {isInstalledFile(detailKind, file.fileName) ? (
-                              <span className="badge res-installed" data-file-installed="same">已装此版本</span>
+                              <span className="badge res-installed" data-file-installed="same">
+                                {tr("pages.mods.fileInstalledSame")}
+                              </span>
                             ) : selectedMatch.strong.length > 0 ? (
-                              <span className="badge res-installed" data-file-installed="other">已装其它版本</span>
+                              <span className="badge res-installed" data-file-installed="other">
+                                {tr("pages.mods.fileInstalledOther")}
+                              </span>
                             ) : selectedMatch.weak.length > 0 ? (
                               <span className="badge res-installed is-scan" data-file-installed="other-scan">
-                                疑似已装其它版本
+                                {tr("pages.mods.fileInstalledOtherScan")}
                               </span>
                             ) : null}
                           </div>
                           <div className="file-meta">
                             <ReleaseTypeTag type={file.releaseType} />
                             <span>{file.gameVersions.join(" / ")}</span>
-                            <span>{file.loaders.join(" / ") || "通用"}</span>
+                            <span>{file.loaders.join(" / ") || tr("pages.mods.universal")}</span>
                             <span>{formatDate(file.publishedAt)}</span>
-                            <span>{formatCount(file.downloads)} 次下载</span>
+                            <span>{tr("pages.mods.downloadCount", { count: formatCount(file.downloads, tr) })}</span>
                           </div>
                         </div>
                         <button
@@ -1593,7 +1646,7 @@ export function ModsPage() {
                           disabled={installing !== null || packBusy !== null}
                         >
                           <IconDownload size={15} />
-                          {busy ? "安装中…" : KIND_FILE_ACTION[detailKind]}
+                          {busy ? tr("pages.mods.installing") : tr(KIND_FILE_ACTION_KEY[detailKind])}
                         </button>
                       </li>
                     );
@@ -1614,25 +1667,26 @@ export function ModsPage() {
       {dupPrompt ? (
         <Modal
           open
-          title={dupGrade === "index" ? "该实例已安装这个资源" : "实例里已存在看起来相同的资源"}
-          subtitle={dupGrade === "index"
-            ? `实例「${currentInstance?.name ?? ""}」里已经有「${titleOf(dupPrompt.mod)}」，继续会再装一份`
-            : `没在安装索引里找到「${titleOf(dupPrompt.mod)}」，但磁盘上有名字相近的文件，继续会再装一份`}
+          title={tr(dupGrade === "index" ? "pages.mods.dupIndexTitle" : "pages.mods.dupScanTitle")}
+          subtitle={tr(dupGrade === "index" ? "pages.mods.dupIndexSubtitle" : "pages.mods.dupScanSubtitle", {
+            instance: currentInstance?.name ?? "",
+            name: titleOf(dupPrompt.mod),
+          })}
           width={460}
           onClose={() => resolveDuplicate(false)}
           footer={
             <>
               <button type="button" className="btn btn-ghost" onClick={() => resolveDuplicate(false)} data-action="dup-cancel">
-                取消
+                {tr("pages.common.cancel")}
               </button>
               <button type="button" className="btn btn-primary" onClick={() => resolveDuplicate(true)} data-action="dup-overwrite">
-                覆盖安装
+                {tr("pages.mods.overwriteInstall")}
               </button>
             </>
           }
         >
           <p className="confirm-text">
-            {dupGrade === "index" ? "索引里已装的记录：" : "磁盘上匹配到的文件："}
+            {tr(dupGrade === "index" ? "pages.mods.dupIndexRecords" : "pages.mods.dupDiskFiles")}
           </p>
           <ul className="dep-list" data-dup-list>
             {dupHits.map((hit) => (
@@ -1640,31 +1694,31 @@ export function ModsPage() {
                 <div className="dep-main">
                   <span className="dep-name">{hit.fileName}</span>
                   {hit.versionId ? (
-                    <span className="dep-file">版本 {hit.versionId}</span>
+                    <span className="dep-file">{tr("pages.mods.versionLabelShort", { version: hit.versionId })}</span>
                   ) : hit.name ? (
                     <span className="dep-file">{hit.name}</span>
                   ) : null}
                 </div>
                 <span className={`badge ${dupGrade === "index" ? "dep-badge-ok" : "dep-badge-builtin"}`}>
-                  {dupGrade === "index" ? "已安装" : "疑似同款"}
+                  {dupGrade === "index" ? tr("pages.mods.installed") : tr("pages.mods.maybeSame")}
                 </span>
               </li>
             ))}
           </ul>
           <p className="dep-hint">
-            {dupGrade === "index"
-              ? `覆盖安装会写入 ${dupPrompt.incoming}；同名文件直接覆盖，旧版本文件不会自动删除。`
-              : `这些文件只是名字/元数据相近，可能并不是同一个资源；覆盖安装会写入 ${dupPrompt.incoming}，旧文件不会自动删除。`}
+            {tr(dupGrade === "index" ? "pages.mods.dupIndexNote" : "pages.mods.dupScanNote", {
+              file: dupPrompt.incoming,
+            })}
           </p>
         </Modal>
       ) : null}
 
       <ConfirmDialog
         open={packConfirm !== null}
-        title="安装整合包"
-        confirmText="安装并创建实例"
+        title={tr("pages.mods.modpackConfirmTitle")}
+        confirmText={tr("pages.mods.installAndCreate")}
         busy={packBusy !== null}
-        message={packConfirm ? `将新建实例「${titleOf(packConfirm)}」并安装，可能需要几分钟` : ""}
+        message={packConfirm ? tr("pages.mods.modpackInstallHint", { name: titleOf(packConfirm) }) : ""}
         onCancel={() => setPackConfirm(null)}
         onConfirm={() => {
           if (packConfirm) void installModpackAndCreate(packConfirm);

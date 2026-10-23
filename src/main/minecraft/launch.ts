@@ -22,6 +22,7 @@ import { applyToInstance, selectedLocalSkin } from "../skins/local";
 import { registerOfflineProfile, startSkinApi } from "../skins/localapi";
 import { getInstance, updateInstance } from "./instances";
 import { getVersionJson, resolveBaseVersionId } from "./manifest";
+import { mt } from "../core/i18n";
 
 const log = logger("launch");
 
@@ -40,12 +41,12 @@ const runningGames = new Map<string, { child: ChildProcess; name: string }>();
  */
 function assertGameSlot(instanceId: string, instanceName: string, limit: "one" | "unlimited"): void {
   const same = runningGames.get(instanceId);
-  if (same) throw new Error("该实例已经在运行：" + same.name + "（pid " + String(same.child.pid ?? 0) + "）");
+  if (same) throw new Error(mt("launch.alreadyRunning", { name: same.name, pid: String(same.child.pid ?? 0) }));
   if (limit !== "one") return;
   const other = runningGames.values().next();
   if (other.done || !other.value) return;
   throw new Error(
-    "已经有一个游戏在运行（实例：" + other.value.name + "）。可在设置里把「同时运行实例」改成「无限」后再开第二个。",
+    mt("launch.oneGameOnly", { name: other.value.name }),
   );
 }
 
@@ -140,7 +141,7 @@ async function resolveIdentity(instance: InstanceMeta): Promise<LaunchIdentity> 
     // 先确保微软令牌新鲜，再换成 Minecraft services token：游戏要的是后者，不是微软 access token
     const fresh = await ensureFreshToken(account);
     const session = await resolveMinecraftSession(fresh);
-    if (!session.accessToken) throw new Error("微软账号的 Minecraft 令牌为空，请重新登录账号");
+    if (!session.accessToken) throw new Error(mt("launch.emptyToken"));
     return {
       name: session.name || fresh.name,
       uuid: formatUuid(session.uuid || fresh.uuid),
@@ -207,8 +208,8 @@ async function offlineLocalSkinInjection(instance: InstanceMeta, identity: Launc
     const supported = authlibInjectorSupported(instance.mcVersion);
     if (supported === false) {
       log.warn(
-        "该版本（" + instance.mcVersion + "）低于 1.7.10，authlib-injector 无法注入：本地皮肤/披风不会生效；" +
-          "可以改用「一键安装 CustomSkinLoader」的方式",
+        mt("launch.authlibSkipOld", { version: instance.mcVersion }) + "" +
+          ""
       );
       return [];
     }
@@ -225,7 +226,7 @@ async function offlineLocalSkinInjection(instance: InstanceMeta, identity: Launc
       jar = (await ensureAuthlibInjector()).path;
     } catch (err) {
       log.warn(
-        "下载 authlib-injector 失败，已回退到「装 CustomSkinLoader」的方式（皮肤/披风本次不生效）：" + messageOfLaunch(err),
+        mt("launch.authlibFallback", { error: messageOfLaunch(err) }),
       );
       return [];
     }
@@ -382,7 +383,7 @@ export async function buildLaunchArgs(instance: InstanceMeta): Promise<{ exe: st
   const json = await getVersionJson(versionId);
   const baseVersionId = await resolveBaseVersionId(versionId);
   const clientJar = join(versionDir(baseVersionId), baseVersionId + ".jar");
-  if (!existsSync(clientJar)) throw new Error("缺少客户端 jar：" + clientJar + "，请先安装该版本");
+  if (!existsSync(clientJar)) throw new Error(mt("launch.missingClientJar", { path: clientJar }));
 
   const classpath = [...classpathEntries(json), clientJar];
   const nativesDir = await resolveNativesDir(versionId, baseVersionId);
@@ -471,8 +472,8 @@ export async function buildLaunchArgs(instance: InstanceMeta): Promise<{ exe: st
       // 不注入也不报错中断：注入一个跑不起来的 javaagent 会直接让 JVM 崩在 premain，
       // 而按原版启动至少还能进离线服，所以这里只 warn 并跳过（版本判断见 authlibInjectorSupported）
       log.warn(
-        "该版本（" + instance.mcVersion + "）低于 1.7.10，authlib-injector 无法注入，已跳过：第三方账号只能进离线服；" +
-          "需要联机请改用 1.7.10 及以上版本",
+        mt("launch.authlibSkipNoOnline", { version: instance.mcVersion }) + "" +
+          ""
       );
     } else {
       if (supported === null) log.warn("无法判断版本 " + instance.mcVersion + " 是否支持 authlib-injector，按支持处理");
@@ -481,7 +482,7 @@ export async function buildLaunchArgs(instance: InstanceMeta): Promise<{ exe: st
         jar = (await ensureAuthlibInjector()).path;
       } catch (err) {
         // 静默降级会让玩家以为自己在用第三方账号，实际进服必失败，所以这里直接中断
-        throw new Error("下载 authlib-injector 失败，第三方账号无法登录：" + (err instanceof Error ? err.message : String(err)));
+        throw new Error(mt("launch.authlibDownloadFailed", { error: err instanceof Error ? err.message : String(err) }));
       }
       injectorArgs.push(authlibInjectorArg(jar, identity.yggdrasilApiUrl));
       log.info("已注入 authlib-injector：" + jar + " → API " + identity.yggdrasilApiUrl);
@@ -520,7 +521,7 @@ export async function buildLaunchArgs(instance: InstanceMeta): Promise<{ exe: st
   }
 
   const mainClass = typeof json.mainClass === "string" ? json.mainClass : "";
-  if (mainClass.length === 0) throw new Error("版本 JSON 缺少 mainClass：" + versionId);
+  if (mainClass.length === 0) throw new Error(mt("launch.missingMainClass", { version: versionId }));
 
   const exe = await resolveExecutable(instance);
   return { exe, args: [...jvm, mainClass, ...gameArgs] };
@@ -532,9 +533,9 @@ export async function buildLaunchArgs(instance: InstanceMeta): Promise<{ exe: st
  */
 function assertLevelId(raw: string): string {
   const level = raw.trim();
-  if (level.length === 0) throw new Error("存档名不能为空");
+  if (level.length === 0) throw new Error(mt("launch.emptyWorldName"));
   if (/[\\/:*?"<>|]/.test(level) || level.includes("..") || level === ".") {
-    throw new Error('非法存档名「' + raw + '」：不能包含 / \\ : * ? " < > | 或 .. 等路径成分');
+    throw new Error(mt("launch.badWorldName", { name: raw }));
   }
   return level;
 }
@@ -559,7 +560,7 @@ function quickPlayArgs(instance: InstanceMeta, quickPlayLevel: string): string[]
   const level = requested === QUICK_PLAY_NEW ? NEW_LEVEL_PREFIX + Date.now() : assertLevelId(requested);
 
   const supported = versionSupportsQuickPlay(instance.mcVersion);
-  if (supported === false) throw new Error("该版本不支持直接进入存档（需要 1.20+）");
+  if (supported === false) throw new Error(mt("launch.quickPlayUnsupported"));
   if (supported === null) {
     log.warn("无法判断版本 " + instance.mcVersion + " 是否支持 --quickPlaySingleplayer，按支持处理");
   }
@@ -577,13 +578,13 @@ async function resolveExecutable(instance: InstanceMeta): Promise<string> {
   const configured = (instance.javaPath ?? "").trim();
   if (configured.length > 0) {
     if (!existsSync(configured)) {
-      throw new Error("实例指定的 Java 不存在：" + configured + "，请到实例设置里重新选择");
+      throw new Error(mt("launch.javaMissing", { path: configured }));
     }
     log.info("使用实例指定 Java：" + configured);
     return configured;
   }
   if (!getSettings().javaAutoMatch) {
-    throw new Error("该实例未指定 Java，且已在设置里关闭「自动匹配 Java」，请到实例设置里选择");
+    throw new Error(mt("launch.javaNotSet"));
   }
   return resolveJavaFor(instance.mcVersion);
 }
@@ -743,7 +744,7 @@ async function applyProcessSettings(pid: number, priority: ProcessPriority, titl
  */
 export async function launchInstance(id: string, quickPlayLevel?: string): Promise<void> {
   const instance = await getInstance(id);
-  if (!instance) throw new Error("实例不存在：" + id);
+  if (!instance) throw new Error(mt("inst.notFound", { id }));
   const settings = getSettings();
   // 并发上限要在解析 Java/建目录之前就判掉，否则用户会等半天才看到错误
   assertGameSlot(instance.id, instance.name, settings.gameInstanceLimit ?? "one");

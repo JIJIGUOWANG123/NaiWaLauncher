@@ -31,6 +31,7 @@ import { getInstance } from "../minecraft/instances";
 import { installMod } from "../mods/index";
 import { scanInstalledContent, type ScannedMod } from "../mods/installed";
 import { decodePng, detectSkinModel, readPngSize } from "./png";
+import { mt } from "../core/i18n";
 
 const log = logger("skins");
 
@@ -129,9 +130,9 @@ const BAD_NAME_CHARS = /[\\/:*?"<>|\u0000-\u001f\u007f]/g;
 function safeSkinName(raw: string): string {
   const name = basename(String(raw ?? "").trim().replace(/\\/g, "/"));
   if (!name || name === "." || name === ".." || name.includes("\u0000")) {
-    throw new Error("皮肤文件名无效：" + String(raw));
+    throw new Error(mt("skin.invalidName", { name: String(raw) }));
   }
-  if (!/\.png$/i.test(name)) throw new Error("只能处理 .png 皮肤文件：" + name);
+  if (!/\.png$/i.test(name)) throw new Error(mt("skin.pngOnly", { name }));
   return name;
 }
 
@@ -226,12 +227,12 @@ async function locateSkin(
     const bytes = await readFile(path);
     const size = readPngSize(bytes);
     if (!size || !VALID_SIZES.has(sizeKey(size.width, size.height))) {
-      throw new Error("皮肤尺寸无效（只支持 64x64 / 64x32 / 128x128）：" + name);
+      throw new Error(mt("skin.badSize", { name }));
     }
     const image = decodePng(bytes);
     return { source, path, model: image ? detectSkinModel(image) : "classic" };
   }
-  throw new Error("本地皮肤不存在：" + name);
+  throw new Error(mt("skin.localNotFound", { name }));
 }
 
 // ---------- 对外：皮肤库 ----------
@@ -345,9 +346,9 @@ export async function importLocalSkins(paths: string[]): Promise<{ imported: str
 /** 删除用户导入的皮肤；官方内置的直接报错。 */
 export async function removeLocalSkin(fileName: string): Promise<LocalSkin[]> {
   const name = safeSkinName(fileName);
-  if (await isFile(join(officialDir(), name))) throw new Error("官方内置皮肤不能删除：" + name);
+  if (await isFile(join(officialDir(), name))) throw new Error(mt("skin.builtinNotDeletable", { name }));
   const target = join(userDir(), name);
-  if (!(await isFile(target))) throw new Error("皮肤不存在：" + name);
+  if (!(await isFile(target))) throw new Error(mt("skin.notFound", { name }));
   await unlink(target);
 
   // 选择记录指向已删文件会变成悬空指针：顺手清掉
@@ -367,7 +368,7 @@ export async function removeLocalSkin(fileName: string): Promise<LocalSkin[]> {
 /** 选中/取消选中某账号的本地皮肤（传 null 表示跟随账号原皮肤）。 */
 export async function selectLocalSkin(accountId: string, fileName: string | null): Promise<LocalSkin[]> {
   const account = String(accountId ?? "").trim();
-  if (!account) throw new Error("账号 id 不能为空");
+  if (!account) throw new Error(mt("skin.accountRequired"));
   const selections = await readSelections();
   const name = fileName === null || fileName === undefined ? "" : safeSkinName(fileName);
   if (!name) {
@@ -420,16 +421,16 @@ async function mergeLoadlist(configPath: string, model: "classic" | "slim"): Pro
   const text = await readFile(configPath, "utf8").catch(() => undefined);
   if (text === undefined) {
     // 不新建：CSL 首次启动会用默认 profile 生成配置（含 LocalSkin），我们抢先写一份会顶掉 Mojang 等默认来源
-    return "实例还没有 CustomSkinLoader 配置，首次启动会由模组生成（含 LocalSkin）；细臂模型会在下一次应用时写入";
+    return mt("skin.noteNoConfig");
   }
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch {
-    return "CustomSkinLoader.json 无法解析，已跳过配置合并（皮肤文件已就位）";
+    return mt("skin.noteUnparsable");
   }
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    return "CustomSkinLoader.json 结构异常，已跳过配置合并（皮肤文件已就位）";
+    return mt("skin.noteBadShape");
   }
   const config = raw as Record<string, unknown>;
   const list = Array.isArray(config.loadlist) ? config.loadlist : [];
@@ -452,9 +453,9 @@ async function mergeLoadlist(configPath: string, model: "classic" | "slim"): Pro
   if (index > 0) list.splice(0, 0, list.splice(index, 1)[0]);
   await writeFileAtomic(configPath, Buffer.from(JSON.stringify(config, null, 2) + "\n", "utf8"));
   log.info(
-    "已调整 " + configPath + " 的 loadlist：LocalSkin 置顶" + (modelChanged ? "，model 改为 " + wanted : ""),
+    mt("skin.noteLoadlist", { path: configPath, model: modelChanged ? mt("skin.noteModelChanged", { model: wanted }) : "" }),
   );
-  return "已把本地皮肤来源提到第一位，避免被 TLauncher/LittleSkin 等在线来源抢先";
+  return mt("skin.noteLoadlistOrder");
 }
 
 /**
@@ -464,12 +465,12 @@ async function mergeLoadlist(configPath: string, model: "classic" | "slim"): Pro
  */
 export async function applyToInstance(instanceId: string, accountId: string): Promise<SkinApplyResult> {
   const instance = await getInstance(instanceId);
-  if (!instance) throw new Error("实例不存在：" + instanceId);
+  if (!instance) throw new Error(mt("inst.notFound", { id: instanceId }));
   const modInstalled = await hasCustomSkinLoader(instanceId);
 
   const selections = await readSelections();
   const selection = selections[accountId];
-  if (!selection) return { applied: false, modInstalled, message: "该账号还没有选用本地皮肤" };
+  if (!selection) return { applied: false, modInstalled, message: mt("skin.msgNoSelection") };
 
   let skin: { source: "official" | "user"; path: string; model: "classic" | "slim" };
   try {
@@ -480,7 +481,7 @@ export async function applyToInstance(instanceId: string, accountId: string): Pr
 
   const account = await getAccount(accountId);
   const playerName = (account?.name ?? "").trim();
-  if (!playerName) return { applied: false, modInstalled, message: "账号没有游戏名，无法确定皮肤文件名" };
+  if (!playerName) return { applied: false, modInstalled, message: mt("skin.msgNoPlayerName") };
 
   const bytes = await readFile(skin.path);
   const skinDir = join(gameDirOf(instance), CSL_DIR, CSL_LOCAL_SKINS);
@@ -490,10 +491,10 @@ export async function applyToInstance(instanceId: string, accountId: string): Pr
   const notes: string[] = [];
   const configNote = await mergeLoadlist(join(gameDirOf(instance), CSL_DIR, CSL_CONFIG), skin.model).catch((err) => {
     log.warn("CustomSkinLoader 配置合并失败（皮肤文件已写入）：" + messageOf(err));
-    return "配置合并失败：" + messageOf(err);
+    return mt("skin.noteMergeFailed", { error: messageOf(err) });
   });
   if (configNote) notes.push(configNote);
-  if (!modInstalled) notes.push("实例里还没有 CustomSkinLoader，装上一键安装的模组后皮肤才会生效");
+  if (!modInstalled) notes.push(mt("skin.noteNoMod"));
 
   log.info("已把本地皮肤 " + selection.fileName + " 写入 " + join(skinDir, skinFile) + "（modInstalled=" + modInstalled + "）");
   return {
@@ -509,15 +510,15 @@ export async function ensureMod(
   instanceId: string,
 ): Promise<{ installed: boolean; fileName?: string; message?: string }> {
   const instance = await getInstance(instanceId);
-  if (!instance) throw new Error("实例不存在：" + instanceId);
+  if (!instance) throw new Error(mt("inst.notFound", { id: instanceId }));
   const existing = (await scanInstalledContent(instanceId, "mod")).find(isCustomSkinLoader);
-  if (existing) return { installed: true, fileName: existing.fileName, message: "实例里已有 CustomSkinLoader" };
+  if (existing) return { installed: true, fileName: existing.fileName, message: mt("skin.msgAlreadyInstalled") };
   try {
     const result = await installMod({ provider: "modrinth", projectId: CSL_PROJECT, instanceId, kind: "mod" });
     log.info("已安装 CustomSkinLoader：" + result.fileName + " → " + result.path);
     return { installed: true, fileName: result.fileName };
   } catch (err) {
     log.warn("安装 CustomSkinLoader 失败：" + messageOf(err));
-    return { installed: false, message: "安装 CustomSkinLoader 失败：" + messageOf(err) };
+    return { installed: false, message: mt("skin.msgInstallFailed", { error: messageOf(err) }) };
   }
 }

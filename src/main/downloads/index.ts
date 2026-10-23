@@ -4,13 +4,14 @@ import { dirname, join } from "node:path";
 import type { ModContentKind, ModProviderId } from "../../shared/types";
 import type { ModInstallRequest } from "../../shared/ipc";
 import type { DownloadJob, LoaderKind, TaskKind, TaskProgress, TaskResult } from "../../shared/types";
-import { CANCELLED_MESSAGE, isCancelledError } from "../core/http";
+import { cancelledMessage, isCancelledError } from "../core/http";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { installJava } from "../java/index";
 import { installLoader } from "../loaders/index";
 import { installVersion } from "../minecraft/install";
 import { installMod } from "../mods/index";
+import { mt } from "../core/i18n";
 
 const log = logger("downloads");
 
@@ -271,7 +272,7 @@ async function loadFromDisk(): Promise<DownloadJob[]> {
     if (job.status !== "running") continue;
     // 上次进程里它还 running → 说明启动器被强杀，重启后一律视为中断可继续
     job.status = "interrupted";
-    if (!job.message) job.message = "启动器关闭时任务未完成";
+    if (!job.message) job.message = mt("dl.messageIncomplete");
     job.updatedAt = now();
     repaired += 1;
   }
@@ -435,13 +436,13 @@ export function trackResult(result: TaskResult): void {
     touch(job, { status: "done", progress: 100, message: undefined });
     return;
   }
-  const message = result.error && result.error.trim() ? result.error : "下载失败";
+  const message = result.error && result.error.trim() ? result.error : mt("dl.messageFailed");
   touch(job, { status: "failed", message });
 }
 
 function requireJob(id: string): DownloadJob {
   const job = jobs.find((item) => item.id === id);
-  if (!job) throw new Error(`找不到下载记录：${id}`);
+  if (!job) throw new Error(mt("dl.recordNotFound", { id }));
   return job;
 }
 
@@ -464,17 +465,17 @@ export async function cancel(id: string): Promise<void> {
   controller?.abort();
   for (const item of bound.length > 0 ? bound : [job]) {
     if (item.status === "done" || item.status === "cancelled") continue;
-    touch(item, { status: "cancelled", message: "已取消" });
+    touch(item, { status: "cancelled", message: mt("dl.messageCancelled") });
   }
   // 映射刻意保留：取消后陆续到达的进度帧要落回这条记录并被丢弃，
   // 删掉反而会让它们按 label 建出一条新记录。
-  log.info(`已终止下载（${CANCELLED_MESSAGE}）：${job.title}`);
+  log.info(`已终止下载（${cancelledMessage()}）：${job.title}`);
   await flushPersist();
 }
 
 export async function remove(id: string): Promise<void> {
   const index = jobs.findIndex((job) => job.id === id);
-  if (index < 0) throw new Error(`找不到下载记录：${id}`);
+  if (index < 0) throw new Error(mt("dl.recordNotFound", { id }));
   jobs.splice(index, 1);
   controllers.delete(id);
   forgetTasks(id);
@@ -497,22 +498,22 @@ export async function clearFinished(): Promise<void> {
 
 function readParams(job: DownloadJob): Record<string, unknown> {
   const raw = (job.resume ?? "").trim();
-  if (!raw) throw new Error("该记录缺少重试参数，无法继续");
+  if (!raw) throw new Error(mt("dl.retryMissingParams"));
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error("该记录的重试参数不是合法 JSON，无法继续");
+    throw new Error(mt("dl.retryBadJson"));
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("该记录的重试参数格式不正确，无法继续");
+    throw new Error(mt("dl.retryBadShape"));
   }
   return parsed as Record<string, unknown>;
 }
 
 function requireString(params: Record<string, unknown>, key: string, label: string): string {
   const value = params[key];
-  if (typeof value !== "string" || !value.trim()) throw new Error(`该记录的重试参数缺少 ${label}，无法继续`);
+  if (typeof value !== "string" || !value.trim()) throw new Error(mt("dl.retryMissingField", { field: label }));
   return value;
 }
 
@@ -525,20 +526,20 @@ function optionalString(params: Record<string, unknown>, key: string): string | 
 async function replay(job: DownloadJob, params: Record<string, unknown>, signal?: AbortSignal): Promise<void> {
   switch (job.kind) {
     case "version": {
-      const mcVersion = requireString(params, "mcVersion", "mcVersion（游戏版本）");
+      const mcVersion = requireString(params, "mcVersion", mt("dl.param.mcVersion"));
       await installVersion(mcVersion, signal);
       return;
     }
     case "loader": {
-      const mcVersion = requireString(params, "mcVersion", "mcVersion（游戏版本）");
+      const mcVersion = requireString(params, "mcVersion", mt("dl.param.mcVersion"));
       const loader = pickEnum(optionalString(params, "loader"), LOADER_KINDS, "vanilla");
       await installLoader({ mcVersion, loader, loaderVersion: optionalString(params, "loaderVersion"), signal });
       return;
     }
     case "java": {
       const major = Number(params.major);
-      if (!Number.isInteger(major) || major <= 0) throw new Error("该记录的重试参数缺少 major（JDK 大版本），无法继续");
-      const version = requireString(params, "version", "version（JDK 版本）");
+      if (!Number.isInteger(major) || major <= 0) throw new Error(mt("dl.retryMissingMajor"));
+      const version = requireString(params, "version", mt("dl.param.version"));
       // 第 3 个参数是下载源（缺省取设置），重试任务沿用设置里的源
       await installJava(major, version, undefined, signal);
       return;
@@ -546,8 +547,8 @@ async function replay(job: DownloadJob, params: Record<string, unknown>, signal?
     case "content": {
       const req: ModInstallRequest = {
         provider: pickEnum(optionalString(params, "provider"), PROVIDER_IDS, "modrinth"),
-        projectId: requireString(params, "projectId", "projectId（模组项目 id）"),
-        instanceId: requireString(params, "instanceId", "instanceId（目标实例）"),
+        projectId: requireString(params, "projectId", mt("dl.param.projectId")),
+        instanceId: requireString(params, "instanceId", mt("dl.param.instanceId")),
       };
       const fileId = optionalString(params, "fileId");
       if (fileId) req.fileId = fileId;
@@ -558,7 +559,7 @@ async function replay(job: DownloadJob, params: Record<string, unknown>, signal?
       return;
     }
     default:
-      throw new Error(`未知的下载任务类型：${String(job.kind)}`);
+      throw new Error(mt("dl.unknownKind", { kind: String(job.kind) }));
   }
 }
 
@@ -579,7 +580,7 @@ export async function resume(id: string): Promise<void> {
     touch(job, { status: "done", progress: 100, message: undefined });
   } catch (err) {
     if (controller.signal.aborted || isCancelledError(err)) {
-      log.info(`${CANCELLED_MESSAGE}：${job.title}（记录保持可继续）`);
+      log.info(`${cancelledMessage()}：${job.title}（记录保持可继续）`);
       return;
     }
     const message = err instanceof Error ? err.message : String(err);

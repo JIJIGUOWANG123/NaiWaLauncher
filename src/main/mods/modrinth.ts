@@ -6,6 +6,7 @@ import {
   type ModProjectInfo, type ModProvider, type RawDependency, type ResolvedFile, type Sha1Lookup,
   SEARCH_LIMIT_DEFAULT, FILE_LIMIT_DEFAULT, FILE_LIMIT_MAX,
 } from "./provider";
+import { mt } from "../core/i18n";
 
 // Modrinth 要求的 User-Agent 由 core/http 统一发送（NaiWaLauncher/0.1 (naiwa)）。
 const BASE = "https://api.modrinth.com/v2";
@@ -161,13 +162,13 @@ async function getProjectType(projectId: string): Promise<ModContentKind | undef
 async function getFile(projectId: string, fileId: string): Promise<ResolvedFile> {
   const body = await apiJson<unknown>(`${BASE}/version/${encodeURIComponent(fileId)}`);
   const info = toFileInfo(body);
-  if (!info.downloadUrl) throw new Error(`Modrinth 文件 ${fileId} 没有可用的下载地址`);
+  if (!info.downloadUrl) throw new Error(mt("mods.modrinthNoUrl", { file: fileId }));
   const project = await getProject(projectId);
   const owner = jsonString(jsonObject(body).project_id);
   // 界面可能传 slug（搜索结果里也可能给 slug），两种写法都算同一个项目
   const sameProject = !projectId || !owner || owner === projectId || project?.slug === projectId;
   if (!sameProject) {
-    throw new Error(`Modrinth 文件 ${fileId} 不属于项目 ${projectId}`);
+    throw new Error(mt("mods.modrinthWrongProject", { file: fileId, project: projectId }));
   }
   // 安装索引要按规范 project_id 判重：调用方传 slug 时也不能写成 slug
   return { info, projectId: owner || undefined, sha1: sha1Of(body), project };

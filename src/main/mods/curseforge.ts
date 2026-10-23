@@ -11,6 +11,7 @@ import {
 } from "./provider";
 
 import { fetchCfWidgetProject, filesFor, projectKeyFromQuery, toModFileInfo, toSearchResult as cfWidgetSearchResult } from "./cfwidget";
+import { mt } from "../core/i18n";
 
 const log = logger("mods");
 
@@ -18,7 +19,9 @@ const BASE = "https://api.curseforge.com/v1";
 const GAME_ID_MINECRAFT = 432;
 const CLASS_ID_MODS = 6;
 
-export const MISSING_KEY_MESSAGE = "请先在设置中填写 CurseForge API Key";
+export function missingKeyMessage(): string {
+  return mt("mods.missingKey");
+}
 
 const SORT_FIELD: Record<NonNullable<ModSearchRequest["sort"]>, number> = {
   relevance: 1,
@@ -55,11 +58,13 @@ export function curseforgeSearchAvailable(): boolean {
 function requireHeaders(): Record<string, string> {
   const key = getSettings().curseforgeApiKey;
   const trimmed = typeof key === "string" ? key.trim() : "";
-  if (!trimmed) throw new Error(MISSING_KEY_MESSAGE);
+  if (!trimmed) throw new Error(missingKeyMessage());
   return { "x-api-key": trimmed, Accept: "application/json" };
 }
 
-const KEY_REJECTED_MESSAGE = "CurseForge 拒绝了该 API Key，请到设置里检查或重新填写";
+function keyRejectedMessage(): string {
+  return mt("mods.keyRejected");
+}
 
 /**
  * 401/403 只可能是 key 被拒，换成用户看得懂的话（保留状态码，不透出 core/http 附带的长 URL）；
@@ -71,7 +76,7 @@ async function requestJson<T>(url: string, headers: Record<string, string>): Pro
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const status = /\bHTTP (401|403)\b/.exec(message)?.[1];
-    if (status) throw new Error(`${KEY_REJECTED_MESSAGE}（HTTP ${status}）`);
+    if (status) throw new Error(`${keyRejectedMessage()}（HTTP ${status}）`);
     throw err;
   }
 }
@@ -241,9 +246,9 @@ async function getFile(projectId: string, fileId: string): Promise<ResolvedFile>
   if (!hasApiKey()) {
     const project = await fetchCfWidgetProject(projectId);
     const file = project.files.find((item) => String(item.id) === String(fileId).trim());
-    if (!file) throw new Error(`CurseForge 项目「${project.title}」里没有文件 ${fileId}`);
+    if (!file) throw new Error(mt("mods.fileMissing", { project: project.title, file: fileId }));
     const info = toModFileInfo(file);
-    if (!info.downloadUrl) throw new Error(`无法为 CurseForge 文件 ${fileId} 构造下载地址`);
+    if (!info.downloadUrl) throw new Error(mt("mods.cfNoDownloadUrl", { file: fileId }));
     // cfwidget 不公布哈希：下载层按 filesize 校验完整性
     return { info, projectId: project.id, size: file.filesize, project: { title: project.title, slug: project.slug } };
   }
@@ -254,7 +259,7 @@ async function getFile(projectId: string, fileId: string): Promise<ResolvedFile>
   const data = jsonObject(body.data);
   const info = toFileInfo(data);
   if (!info.downloadUrl) {
-    throw new Error(`CurseForge 文件 ${fileId} 不允许第三方下载（作者未授权分发）`);
+    throw new Error(mt("mods.cfThirdPartyBlocked", { file: fileId }));
   }
   // file.modId 才是规范项目 id：调用方可能传 slug
   const owner = jsonIdString(data.modId);
@@ -387,8 +392,8 @@ async function postJson<T>(url: string, body: unknown, headers: Record<string, s
     }
   }
   const status = httpStatusOf(lastError);
-  if (status === 401 || status === 403) throw new Error(`${KEY_REJECTED_MESSAGE}（HTTP ${status}）`);
-  throw new Error(`指纹查询失败：${messageOf(lastError)}`);
+  if (status === 401 || status === 403) throw new Error(`${keyRejectedMessage()}（HTTP ${status}）`);
+  throw new Error(mt("mods.fingerprintFailed", { error: messageOf(lastError) }));
 }
 
 /** 一次 POST 查完全部指纹，命中项再按 modId 反查项目最佳文件。 */

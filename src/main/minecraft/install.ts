@@ -10,6 +10,7 @@ import { getPaths, versionDir } from "../core/paths";
 import { getSettings } from "../core/settings";
 import { mavenPathOf, nativesClassifierAllowed, rulesAllow } from "./args";
 import { getVanillaJson } from "./manifest";
+import { mt } from "../core/i18n";
 
 const log = logger("install");
 
@@ -66,17 +67,17 @@ function fail(err: unknown): Error {
 
 /** 安装器阶段一：客户端 jar 与 log4j 配置。 */
 async function installClient(json: any, versionId: string, dir: string, signal?: AbortSignal): Promise<void> {
-  const task = createTask("game", `安装 ${versionId}`);
+  const task = createTask("game", mt("inst.installTitle", { version: versionId }));
   try {
     const client = json.downloads?.client;
-    if (!client?.url) throw new Error(`${versionId} 的版本 JSON 缺少客户端下载地址`);
+    if (!client?.url) throw new Error(mt("inst.missingClientUrl", { version: versionId }));
     const jarPath = join(dir, `${versionId}.jar`);
-    task.update({ stage: "客户端 jar", filesTotal: 1, filesDone: 0, percent: null });
+    task.update({ stage: mt("inst.stage.clientJar"), filesTotal: 1, filesDone: 0, percent: null });
     if (await fileMatches(jarPath, client.sha1)) {
-      task.update({ stage: "客户端 jar（已存在）", filesDone: 1, percent: 1 });
+      task.update({ stage: mt("inst.stage.clientJarExists"), filesDone: 1, percent: 1 });
     } else {
       await downloadFile(client.url, jarPath, { task, expectedSha1: client.sha1, label: `${versionId}.jar`, signal });
-      task.update({ stage: "客户端 jar", filesDone: 1, percent: 1 });
+      task.update({ stage: mt("inst.stage.clientJar"), filesDone: 1, percent: 1 });
     }
 
     // log4j 配置是可选文件：缺了游戏会用内置默认配置照常启动，
@@ -86,7 +87,7 @@ async function installClient(json: any, versionId: string, dir: string, signal?:
       const dest = join(getPaths().assets, "log_configs", String(logFile.id ?? `${versionId}-client.xml`));
       try {
         if (!(await fileMatches(dest, logFile.sha1))) {
-          task.update({ stage: "log4j 配置" });
+          task.update({ stage: mt("inst.stage.log4j") });
           await downloadFile(logFile.url, dest, {
             task,
             expectedSha1: logFile.sha1,
@@ -180,10 +181,10 @@ async function installLibraries(json: any, versionId: string, dir: string, signa
   const settings = getSettings();
   const nativesDir = join(dir, "natives");
   const { items, natives } = collectLibraries(json);
-  const task = createTask("libraries", `下载 ${versionId} 依赖库`);
+  const task = createTask("libraries", mt("inst.installLibraries", { version: versionId }));
 
   try {
-    task.update({ stage: "依赖库", filesTotal: items.length, filesDone: 0, percent: 0 });
+    task.update({ stage: mt("inst.stage.libraries"), filesTotal: items.length, filesDone: 0, percent: 0 });
     const { failed } = await downloadMany(items, {
       task,
       concurrent: settings.concurrentDownloads,
@@ -192,13 +193,13 @@ async function installLibraries(json: any, versionId: string, dir: string, signa
       signal,
     });
     if (failed.length > 0) {
-      throw new Error(`依赖库下载失败 ${failed.length} 个，首个：${failed[0].url}（${failed[0].error}）`);
+      throw new Error(mt("inst.librariesFailed", { count: failed.length, url: failed[0].url, error: failed[0].error }));
     }
 
     await fs.mkdir(nativesDir, { recursive: true });
     for (const pending of natives) await extractNatives(pending, nativesDir);
 
-    task.update({ stage: "依赖库", filesDone: items.length, filesTotal: items.length, percent: 1 });
+    task.update({ stage: mt("inst.stage.libraries"), filesDone: items.length, filesTotal: items.length, percent: 1 });
     task.done({ libraries: items.length, natives: natives.length });
     return nativesDir;
   } catch (err) {
@@ -211,18 +212,18 @@ async function installLibraries(json: any, versionId: string, dir: string, signa
 async function installAssets(json: any, versionId: string, signal?: AbortSignal): Promise<void> {
   const paths = getPaths();
   const settings = getSettings();
-  const task = createTask("assets", `下载 ${versionId} 资源文件`);
+  const task = createTask("assets", mt("inst.installAssets", { version: versionId }));
 
   try {
     const indexMeta = json.assetIndex;
     if (!indexMeta?.url || !indexMeta?.id) {
-      task.update({ stage: "该版本无资源索引", percent: 1 });
+      task.update({ stage: mt("inst.stage.noAssetIndex"), percent: 1 });
       task.done({ objects: 0 });
       return;
     }
 
     const indexPath = join(paths.assetIndexes, `${indexMeta.id}.json`);
-    task.update({ stage: "资源索引", filesTotal: 1, filesDone: 0, percent: 0 });
+    task.update({ stage: mt("inst.stage.assetIndex"), filesTotal: 1, filesDone: 0, percent: 0 });
     if (!(await fileMatches(indexPath, indexMeta.sha1))) {
       await downloadFile(String(indexMeta.url), indexPath, {
         task,
@@ -253,7 +254,7 @@ async function installAssets(json: any, versionId: string, signal?: AbortSignal)
       pending.push({ url: `${RESOURCES_BASE}/${prefix}/${object.hash}`, dest, sha1: object.hash, size: object.size });
     }
 
-    task.update({ stage: "资源文件", filesTotal: objects.length, filesDone: objects.length - pending.length, percent: 0 });
+    task.update({ stage: mt("inst.stage.assetObjects"), filesTotal: objects.length, filesDone: objects.length - pending.length, percent: 0 });
     if (pending.length > 0) {
       const { failed } = await downloadMany(pending, {
         task,
@@ -263,11 +264,11 @@ async function installAssets(json: any, versionId: string, signal?: AbortSignal)
         signal,
       });
       if (failed.length > 0) {
-        throw new Error(`资源文件下载失败 ${failed.length} 个，首个：${failed[0].url}（${failed[0].error}）`);
+        throw new Error(mt("inst.assetsFailed", { count: failed.length, url: failed[0].url, error: failed[0].error }));
       }
     }
 
-    task.update({ stage: "资源文件", filesDone: objects.length, filesTotal: objects.length, percent: 1 });
+    task.update({ stage: mt("inst.stage.assetObjects"), filesDone: objects.length, filesTotal: objects.length, percent: 1 });
     task.done({ objects: seenHash.size });
   } catch (err) {
     task.fail(err);

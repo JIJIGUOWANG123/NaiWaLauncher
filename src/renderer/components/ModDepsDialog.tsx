@@ -1,4 +1,5 @@
 import type { ModDependency } from "../../shared/types";
+import { useT } from "../lib/i18n";
 import { Modal } from "./Modal";
 
 /** 前置确认的三种选择：连带安装 / 只装本体 / 取消。 */
@@ -21,23 +22,24 @@ export function ModDepsDialog({
   projectTitle: string;
   onChoose: (choice: DepsChoice) => void;
 }) {
+  const t = useT();
   return (
     <Modal
       open={open}
-      title="需要前置"
-      subtitle={`为「${projectTitle}」补齐必需前置后才能正常工作；前置会按各自类型装进 mods / resourcepacks / shaderpacks`}
+      title={t("pages.modDeps.title")}
+      subtitle={t("pages.modDeps.subtitle", { title: projectTitle })}
       width={480}
       onClose={() => onChoose("cancel")}
       footer={
         <>
           <button type="button" className="btn btn-ghost" onClick={() => onChoose("cancel")} data-action="deps-cancel">
-            取消
+            {t("pages.common.cancel")}
           </button>
           <button type="button" className="btn btn-ghost" onClick={() => onChoose("self")} data-action="deps-self">
-            仅安装本体
+            {t("pages.modDeps.self")}
           </button>
           <button type="button" className="btn btn-primary" onClick={() => onChoose("with")} data-action="deps-with">
-            一并安装
+            {t("pages.modDeps.with")}
           </button>
         </>
       }
@@ -54,8 +56,8 @@ export function ModDepsDialog({
               <span className="dep-title">
                 <span className="dep-name" data-dep-name>{dependencyName(dep)}</span>
                 {dep.origin === "builtin" ? (
-                  <span className="badge dep-badge-builtin" data-dep-builtin title="启动器按加载器推断出来的前置">
-                    内置规则
+                  <span className="badge dep-badge-builtin" data-dep-builtin title={t("pages.modDeps.builtinHint")}>
+                    {t("pages.modDeps.builtin")}
                   </span>
                 ) : null}
               </span>
@@ -64,12 +66,12 @@ export function ModDepsDialog({
               ) : null}
             </div>
             <span className={`badge ${dep.installed ? "dep-badge-ok" : "dep-badge-missing"}`} data-dep-badge>
-              {dep.installed ? "已安装" : "将一并安装"}
+              {dep.installed ? t("pages.modDeps.installed") : t("pages.modDeps.willInstall")}
             </span>
           </li>
         ))}
       </ul>
-      <p className="dep-hint" data-dep-hint>已装好的前置不会重复下载，「一并安装」只补缺失的必需前置。</p>
+      <p className="dep-hint" data-dep-hint>{t("pages.modDeps.hint")}</p>
     </Modal>
   );
 }

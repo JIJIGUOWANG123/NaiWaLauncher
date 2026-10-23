@@ -1,27 +1,30 @@
 import type { ReactNode } from "react";
+import { useT } from "../lib/i18n";
 import { IconAlert, IconRefresh } from "./icons";
 
-export function LoadingState({ label = "加载中…" }: { label?: string }) {
+export function LoadingState({ label }: { label?: string }) {
+  const t = useT();
   return (
     <div className="state state-loading">
       <span className="spinner" aria-hidden="true" />
-      <span>{label}</span>
+      <span>{label ?? t("pages.state.loading")}</span>
     </div>
   );
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const t = useT();
   return (
     <div className="state state-error" role="alert">
       <IconAlert size={22} />
       <div className="state-body">
-        <p className="state-title">出了点问题</p>
+        <p className="state-title">{t("pages.state.errorTitle")}</p>
         <p className="state-hint">{message}</p>
       </div>
       {onRetry ? (
         <button type="button" className="btn btn-ghost" onClick={onRetry}>
           <IconRefresh size={16} />
-          重试
+          {t("pages.state.retry")}
         </button>
       ) : null}
     </div>

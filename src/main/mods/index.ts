@@ -15,7 +15,7 @@ import {
   getModDependencies as resolveDependencies, installDependency, rememberInstalled,
 } from "./dependencies";
 import {
-  downloadModFile, KIND_NOUN, listInstalledMods as listModsOnDisk, MAP_DOWNLOAD_HINT, removeContentFile, safeFileName,
+  downloadModFile, kindNoun, listInstalledMods as listModsOnDisk, mapDownloadHint, removeContentFile, safeFileName,
 } from "./install";
 import { scanInstalledContent, type ScannedMod } from "./installed";
 import { listMinekuaiCategories, minekuaiProvider, minekuaiVersionTags } from "./minekuai";
@@ -26,6 +26,7 @@ import {
 } from "./provider";
 import { installModpackFrom, type ModpackInstallResult } from "./modpack";
 import { containsCjk, translateBatch, translateText } from "./translate";
+import { mt } from "../core/i18n";
 
 const log = logger("mods");
 
@@ -50,7 +51,7 @@ const BACKLOOK_CONCURRENCY = 4;
 
 function resolveProvider(id: ModProviderId): ModProvider {
   const provider = PROVIDERS[id];
-  if (!provider) throw new Error(`未知的模组来源：${String(id)}`);
+  if (!provider) throw new Error(mt("mods.unknownProvider", { provider: String(id) }));
   return provider;
 }
 
@@ -67,7 +68,7 @@ function nativeProviderOf(id: ModProviderId): ModProviderId {
 
 async function requireInstance(instanceId: string) {
   const instance = await getInstance(instanceId);
-  if (!instance) throw new Error(`实例不存在：${instanceId}`);
+  if (!instance) throw new Error(mt("inst.notFound", { id: instanceId }));
   return instance;
 }
 
@@ -152,11 +153,9 @@ const ALL_SOURCES_LIMIT = 40;
 /** 每个来源在聚合模式下的取数（Modrinth 上限 100，麦块上限 50）。 */
 const ALL_SOURCES_PER_SOURCE = 40;
 
-const SOURCE_LABELS: Record<ModProviderId, string> = {
-  modrinth: "Modrinth",
-  curseforge: "CurseForge",
-  minekuai: "麦块社区",
-};
+function sourceLabels(): Record<ModProviderId, string> {
+  return { modrinth: "Modrinth", curseforge: "CurseForge", minekuai: mt("mods.provider.minekuai") };
+}
 
 /**
  * 同一 projectId 的两条结果合并：麦块条目带中文名/简介，优先保留；
@@ -191,19 +190,19 @@ async function searchEverySource(
 
   if (kind !== "map") {
     jobs.push({
-      label: SOURCE_LABELS.modrinth,
+      label: sourceLabels().modrinth,
       run: () => modrinthProvider.search({ ...shared, provider: "modrinth", query: queryEn }),
     });
     // 无 Key 的 CurseForge 只能按 id/slug 精确解析，且它的搜索接口只覆盖模组与整合包
     if (kind === "mod" && curseforgeSearchAvailable()) {
       jobs.push({
-        label: SOURCE_LABELS.curseforge,
+        label: sourceLabels().curseforge,
         run: () => curseforgeProvider.search({ ...shared, provider: "curseforge", query: queryEn }),
       });
     }
   }
   jobs.push({
-    label: SOURCE_LABELS.minekuai,
+    label: sourceLabels().minekuai,
     run: () => minekuaiProvider.search({ ...shared, provider: "minekuai", query: queryZh }),
   });
 
@@ -235,7 +234,7 @@ async function searchEverySource(
   });
 
   if (merged.length === 0 && failed === jobs.length) {
-    throw new Error(`所有来源都搜索失败：${messageOf(failure)}`);
+    throw new Error(mt("mods.searchAllFailed", { error: messageOf(failure) }));
   }
   return merged.sort((a, b) => b.downloads - a.downloads).slice(0, ALL_SOURCES_LIMIT);
 }
@@ -257,10 +256,10 @@ export async function listCategories(
 ): Promise<ModCategory[]> {
   const jobs: { label: string; run: () => Promise<ModCategory[]> }[] = [];
   if (source === "all" || source === "modrinth") {
-    jobs.push({ label: SOURCE_LABELS.modrinth, run: () => listModrinthCategories(kind) });
+    jobs.push({ label: sourceLabels().modrinth, run: () => listModrinthCategories(kind) });
   }
   if (source === "all" || source === "minekuai") {
-    jobs.push({ label: SOURCE_LABELS.minekuai, run: () => listMinekuaiCategories(kind) });
+    jobs.push({ label: sourceLabels().minekuai, run: () => listMinekuaiCategories(kind) });
   }
   if (jobs.length === 0) return [];
 
@@ -294,7 +293,7 @@ export async function listCategories(
   });
 
   if (merged.length === 0 && failed === jobs.length) {
-    throw new Error(`分类列表获取失败：${messageOf(failure)}`);
+    throw new Error(mt("mods.categoriesFailed", { error: messageOf(failure) }));
   }
   return merged;
 }
@@ -376,9 +375,9 @@ async function installMissingDependencies(
       installed.push(label);
       log.info(`已安装前置 ${label} → ${result.fileName}`);
     } catch (err) {
-      const done = installed.length > 0 ? `已装上的前置：${installed.join("、")}；` : "";
+      const done = installed.length > 0 ? mt("mods.depInstalled", { list: installed.join("、") }) : "";
       throw new Error(
-        `前置 ${label} 安装失败：${messageOf(err)}（${done}本体未安装；重试会跳过已装前置）`,
+        mt("mods.depInstallFailed", { name: label, error: messageOf(err), done }),
       );
     }
   }
@@ -406,7 +405,7 @@ export async function installMod(req: ModInstallRequest, signal?: AbortSignal): 
   // 地图的 mapFileUrl 实测全为 null（下载接口要登录 token）：先说清楚去哪儿下，再抛给界面
   if (kind === "map") {
     await copyMapWebUrl();
-    throw new Error(MAP_DOWNLOAD_HINT);
+    throw new Error(mapDownloadHint());
   }
 
   const instance = await requireInstance(req.instanceId);
@@ -426,7 +425,7 @@ export async function installMod(req: ModInstallRequest, signal?: AbortSignal): 
     });
     const best = bestFile(files, instance.mcVersion, rankLoader);
     if (!best) {
-      throw new Error(`项目 ${req.projectId} 没有适用于 ${instance.mcVersion} / ${instance.loader} 的文件`);
+      throw new Error(mt("mods.noCompatibleFile", { project: req.projectId, mc: instance.mcVersion, loader: instance.loader }));
     }
     targetFileId = best.fileId;
   }
@@ -595,8 +594,8 @@ async function probeUpdates(
           status: "no-match",
           source,
           detail: byLoader
-            ? `项目 ${hit.projectId} 没有适用于 ${instance.mcVersion} / ${instance.loader} 的文件`
-            : `项目 ${hit.projectId} 没有适用于 ${instance.mcVersion} 的文件`,
+            ? mt("mods.noCompatibleFile", { project: hit.projectId, mc: instance.mcVersion, loader: instance.loader })
+            : mt("mods.noFileForVersion", { project: hit.projectId, mc: instance.mcVersion }),
         });
         return;
       }
@@ -670,15 +669,15 @@ export async function update(
   const target = safeFileName(fileName);
   const mods = await scanInstalledContent(instanceId, kind, { hash: true });
   const mod = mods.find((item) => item.fileName === target);
-  if (!mod) throw new Error(`${KIND_NOUN[kind]}文件不存在：${target}`);
+  if (!mod) throw new Error(mt("mods.contentFileMissing", { noun: kindNoun(kind), name: target }));
 
   const probes = await probeUpdates(instance, [mod], kind);
   const probe = probes.get(target);
   if (!probe || probe.status === "unknown") {
-    throw new Error(`无法反查 ${target} 的来源（Modrinth / CurseForge 都未收录），请手动更新`);
+    throw new Error(mt("mods.sourceUnknown", { name: target }));
   }
-  if (probe.status === "no-match") throw new Error(probe.detail ?? `没有适用于 ${instance.mcVersion} / ${instance.loader} 的文件`);
-  if (probe.status !== "update" || !probe.plan) throw new Error(`已是最新版本：${target}`);
+  if (probe.status === "no-match") throw new Error(probe.detail ?? mt("mods.noFileForInstance", { mc: instance.mcVersion, loader: instance.loader }));
+  if (probe.status !== "update" || !probe.plan) throw new Error(mt("mods.alreadyLatest", { name: target }));
 
   const plan = probe.plan;
   // 走提供方详情接口拿下载地址与 sha1，装完再清旧文件

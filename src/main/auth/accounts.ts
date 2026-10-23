@@ -6,6 +6,7 @@ import type { Account } from "../../shared/types";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { updateSettings } from "../core/settings";
+import { mt } from "../core/i18n";
 
 const log = logger("accounts");
 
@@ -194,12 +195,12 @@ export async function getAccount(id: string): Promise<Account | undefined> {
 export async function createOffline(name: string): Promise<Account> {
   const trimmed = name.trim();
   if (!NAME_PATTERN.test(trimmed)) {
-    throw new Error("玩家名必须是 3–16 位字母、数字或下划线");
+    throw new Error(mt("auth.name.invalid"));
   }
   const store = await load();
   const lower = trimmed.toLowerCase();
   if (store.accounts.some((a) => a.name.toLowerCase() === lower)) {
-    throw new Error("已存在同名账号：" + trimmed);
+    throw new Error(mt("auth.account.duplicate", { name: trimmed }));
   }
 
   const account: Account = {
@@ -231,7 +232,7 @@ export async function removeAccount(id: string): Promise<void> {
 export async function setActiveAccount(id: string): Promise<void> {
   const store = await load();
   const target = store.accounts.find((a) => a.id === id);
-  if (!target) throw new Error("账号不存在：" + id);
+  if (!target) throw new Error(mt("auth.account.notFound", { id }));
   const accounts = store.accounts.map((a) => (a.id === id ? { ...a, lastUsedAt: Date.now() } : a));
   await persist({ accounts, activeId: id });
   await syncActiveSetting(id);
@@ -305,7 +306,7 @@ export async function updateMicrosoftTokens(
 ): Promise<Account> {
   const store = await load();
   const existing = store.accounts.find((a) => a.id === id);
-  if (!existing || existing.type !== "microsoft") throw new Error("微软账号不存在：" + id);
+  if (!existing || existing.type !== "microsoft") throw new Error(mt("auth.account.microsoftNotFound", { id }));
   const microsoft: NonNullable<Account["microsoft"]> = {
     refreshToken: tokens.refreshToken,
     accessToken: tokens.accessToken,
@@ -338,7 +339,7 @@ export interface YggdrasilAccountInput {
 export async function upsertYggdrasilAccount(input: YggdrasilAccountInput): Promise<Account> {
   const store = await load();
   const apiUrl = input.apiUrl.trim();
-  if (!apiUrl) throw new Error("第三方账号缺少 API 地址");
+  if (!apiUrl) throw new Error(mt("auth.account.missingApiUrl"));
   const uuid = input.uuid.toLowerCase();
   const existing = store.accounts.find(
     (a) => a.type === "yggdrasil" && a.yggdrasil?.apiUrl === apiUrl && a.uuid === uuid,
@@ -394,12 +395,12 @@ export interface YggdrasilProfilePatch {
 export async function updateYggdrasilProfile(id: string, patch: YggdrasilProfilePatch): Promise<Account> {
   const store = await load();
   const existing = store.accounts.find((a) => a.id === id);
-  if (!existing || existing.type !== "yggdrasil" || !existing.yggdrasil) throw new Error("第三方账号不存在：" + id);
+  if (!existing || existing.type !== "yggdrasil" || !existing.yggdrasil) throw new Error(mt("auth.account.yggNotFound", { id }));
 
   const uuid = (patch.uuid ?? existing.uuid).toLowerCase();
-  if (!UUID_PATTERN.test(uuid)) throw new Error("角色 UUID 不合法：" + uuid);
+  if (!UUID_PATTERN.test(uuid)) throw new Error(mt("auth.account.badUuid", { uuid }));
   const name = patch.name ?? existing.name;
-  if (!name) throw new Error("角色名不能为空");
+  if (!name) throw new Error(mt("auth.account.emptyProfileName"));
 
   const yggdrasil: NonNullable<Account["yggdrasil"]> = { ...existing.yggdrasil };
   if (patch.accessToken) yggdrasil.accessToken = patch.accessToken;
@@ -420,7 +421,7 @@ export async function updateYggdrasilTokens(
 ): Promise<Account> {
   const store = await load();
   const existing = store.accounts.find((a) => a.id === id);
-  if (!existing || existing.type !== "yggdrasil" || !existing.yggdrasil) throw new Error("第三方账号不存在：" + id);
+  if (!existing || existing.type !== "yggdrasil" || !existing.yggdrasil) throw new Error(mt("auth.account.yggNotFound", { id }));
   const yggdrasil: NonNullable<Account["yggdrasil"]> = {
     ...existing.yggdrasil,
     accessToken: tokens.accessToken,

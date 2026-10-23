@@ -6,6 +6,7 @@ import { installForgeLoader, listForgeLoaders } from "./forge";
 import { installNeoForgeLoader, listNeoForgeLoaders } from "./neoforge";
 import { assertLiteLoaderSupported, installLiteLoader, listLiteLoaderVersions } from "./liteloader";
 import { installQuiltLoader, listQuiltLoaders } from "./quilt";
+import { mt } from "../core/i18n";
 
 const log = logger("loaders");
 
@@ -24,7 +25,7 @@ export async function listLoaderVersions(mcVersion: string, loader: LoaderKind):
     case "vanilla":
       return [{ loader: "vanilla", version: mcVersion, mcVersion, stable: true }];
     default:
-      throw new Error("未知的加载器类型：" + String(loader));
+      throw new Error(mt("loader.unknownType", { loader: String(loader) }));
   }
 }
 
@@ -63,6 +64,6 @@ export async function installLoader(input: {
     case "liteloader":
       return installLiteLoader(mcVersion, input.loaderVersion, signal);
     default:
-      throw new Error("未知的加载器类型：" + String(loader));
+      throw new Error(mt("loader.unknownType", { loader: String(loader) }));
   }
 }

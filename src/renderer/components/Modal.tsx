@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { useT } from "../lib/i18n";
 import { IconClose } from "./icons";
 
 export function Modal({
@@ -12,6 +13,7 @@ export function Modal({
   footer?: ReactNode;
   width?: number;
 }) {
+  const t = useT();
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -37,7 +39,7 @@ export function Modal({
             <h2 className="modal-title">{title}</h2>
             {subtitle ? <p className="modal-sub">{subtitle}</p> : null}
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭">
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={t("pages.common.close")}>
             <IconClose size={18} />
           </button>
         </header>
@@ -49,7 +51,7 @@ export function Modal({
 }
 
 export function ConfirmDialog({
-  open, title, message, confirmText = "确认", busyText = "处理中…", danger = false, busy = false, onCancel, onConfirm,
+  open, title, message, confirmText, busyText, danger = false, busy = false, onCancel, onConfirm,
 }: {
   open: boolean;
   title: string;
@@ -61,6 +63,7 @@ export function ConfirmDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const t = useT();
   return (
     <Modal
       open={open}
@@ -70,10 +73,10 @@ export function ConfirmDialog({
       footer={
         <>
           <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={busy}>
-            取消
+            {t("pages.common.cancel")}
           </button>
           <button type="button" className={`btn ${danger ? "btn-danger" : "btn-primary"}`} onClick={onConfirm} disabled={busy}>
-            {busy ? busyText : confirmText}
+            {busy ? (busyText ?? t("pages.common.processing")) : (confirmText ?? t("pages.common.confirm"))}
           </button>
         </>
       }

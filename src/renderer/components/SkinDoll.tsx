@@ -1,4 +1,5 @@
 import { useRef, useState, type CSSProperties } from "react";
+import { t } from "../lib/i18n";
 
 /** 每个皮肤像素渲染成多少 CSS 像素（8px 的头 = 40px）。 */
 const SCALE = 5;
@@ -154,7 +155,7 @@ function capeFaceStyle(url: string, flip: string): CSSProperties {
  * 拖拽绕 Y 轴旋转，松手保持角度；换皮肤/披风只换背景图，不重建结构。
  */
 export function SkinDoll({
-  texture, cape = null, emptyHint = "选一张皮肤就能预览",
+  texture, cape = null, emptyHint = t("pages.skin.dollHint"),
 }: {
   texture: SkinTexture | null;
   /** 披风层：只有拿到贴图时才渲染，和身体一起绕 Y 轴转。 */

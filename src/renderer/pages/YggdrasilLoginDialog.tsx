@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Account } from "../../shared/types";
 import { api } from "../lib/api";
+import { useT } from "../lib/i18n";
 import { errorMessage } from "../lib/useAsync";
 import { Field, TextInput } from "../components/Form";
 import { Modal } from "../components/Modal";
@@ -21,6 +22,7 @@ export function YggdrasilLoginDialog({
   onClose: () => void;
   onLoggedIn: (account: Account, temporary: boolean) => void;
 }) {
+  const t = useT();
   const [apiUrl, setApiUrl] = useState(LITTLESKIN_API_URL);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -46,15 +48,15 @@ export function YggdrasilLoginDialog({
     const trimmedUrl = apiUrl.trim();
     const trimmedUser = username.trim();
     if (!trimmedUrl) {
-      setError("请填写 Yggdrasil API 地址。");
+      setError(t("pages.yggdrasil.errApiUrl"));
       return;
     }
     if (!trimmedUser) {
-      setError("请填写账号或邮箱。");
+      setError(t("pages.yggdrasil.errUser"));
       return;
     }
     if (!password) {
-      setError("请填写密码。");
+      setError(t("pages.yggdrasil.errPassword"));
       return;
     }
     setBusy(true);
@@ -73,17 +75,17 @@ export function YggdrasilLoginDialog({
   return (
     <Modal
       open={open}
-      title="登录第三方账号"
-      subtitle="使用 LittleSkin 或其他兼容的 Yggdrasil 外置登录服务。"
+      title={t("pages.yggdrasil.title")}
+      subtitle={t("pages.yggdrasil.subtitle")}
       width={480}
       onClose={onClose}
       footer={
         <>
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy} data-ygg-cancel>
-            取消
+            {t("pages.common.cancel")}
           </button>
           <button type="button" className="btn btn-primary" onClick={() => void submit()} disabled={busy} data-ygg-submit>
-            {busy ? "登录中…" : "登录"}
+            {busy ? t("pages.yggdrasil.signingIn") : t("pages.yggdrasil.signIn")}
           </button>
         </>
       }
@@ -95,27 +97,27 @@ export function YggdrasilLoginDialog({
           onClick={() => setApiUrl(LITTLESKIN_API_URL)}
           data-ygg-quick
         >
-          使用 LittleSkin
+          {t("pages.yggdrasil.useLittleSkin")}
         </button>
-        <span className="ygg-quick-hint">默认已填 LittleSkin，换其它兼容服务时改下面的地址即可</span>
+        <span className="ygg-quick-hint">{t("pages.yggdrasil.quickHint")}</span>
       </div>
 
-      <Field label="Yggdrasil API 地址" hint="兼容 authlib-injector 的服务都可用，通常以 /api/yggdrasil 结尾。">
+      <Field label={t("pages.yggdrasil.apiLabel")} hint={t("pages.yggdrasil.apiHint")}>
         <TextInput
           value={apiUrl}
           placeholder={LITTLESKIN_API_URL}
-          aria-label="Yggdrasil API 地址"
+          aria-label={t("pages.yggdrasil.apiLabel")}
           spellCheck={false}
           data-ygg-api
           onChange={(event) => setApiUrl(event.target.value)}
         />
       </Field>
 
-      <Field label="账号或邮箱">
+      <Field label={t("pages.yggdrasil.userLabel")}>
         <TextInput
           value={username}
-          placeholder="LittleSkin 用户名或注册邮箱"
-          aria-label="第三方账号或邮箱"
+          placeholder={t("pages.yggdrasil.userPlaceholder")}
+          aria-label={t("pages.yggdrasil.userAria")}
           autoComplete="username"
           spellCheck={false}
           data-ygg-user
@@ -126,13 +128,13 @@ export function YggdrasilLoginDialog({
         />
       </Field>
 
-      <Field label="密码">
+      <Field label={t("pages.yggdrasil.passLabel")}>
         <div className="account-row">
           <TextInput
             type={showPassword ? "text" : "password"}
             value={password}
-            placeholder="账号密码"
-            aria-label="第三方账号密码"
+            placeholder={t("pages.yggdrasil.passPlaceholder")}
+            aria-label={t("pages.yggdrasil.passAria")}
             autoComplete="current-password"
             data-ygg-pass
             onChange={(event) => setPassword(event.target.value)}
@@ -144,7 +146,7 @@ export function YggdrasilLoginDialog({
             type="button"
             className="btn btn-ghost"
             onClick={() => setShowPassword((value) => !value)}
-            aria-label={showPassword ? "隐藏密码" : "显示密码"}
+            aria-label={showPassword ? t("pages.yggdrasil.hidePassword") : t("pages.yggdrasil.showPassword")}
             data-ygg-toggle
           >
             {showPassword ? <IconEyeOff size={16} /> : <IconEye size={16} />}
@@ -159,11 +161,9 @@ export function YggdrasilLoginDialog({
           data-ygg-save
           onChange={(event) => setSaveLogin(event.target.checked)}
         />
-        在此设备上保存登录
+        {t("pages.yggdrasil.saveLogin")}
       </label>
-      <p className="ygg-hint">
-        不勾选时账号只用于本次会话：凭据仍会写入本机（否则无法启动游戏），账号会标注为「临时」，关闭启动器后不再保留这个标记。
-      </p>
+      <p className="ygg-hint">{t("pages.yggdrasil.saveHint")}</p>
 
       {error ? (
         <p className="account-error" role="alert" data-ygg-error>

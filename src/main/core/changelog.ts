@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { ChangelogSection } from "../../shared/types";
 import { logger } from "./logger";
 import { getPaths } from "./paths";
+import { mt } from "./i18n";
 
 const log = logger("changelog");
 
@@ -36,7 +37,7 @@ export function parseChangelog(text: string): ChangelogSection[] {
     const heading = /^##\s+(.+?)\s*$/.exec(line);
     if (heading) {
       const title = heading[1].trim();
-      current = { version: /^[0-9]/.test(title) ? title : title || "未标注", lines: [] };
+      current = { version: /^[0-9]/.test(title) ? title : title || mt("changelog.unlabeled"), lines: [] };
       out.push(current);
       continue;
     }

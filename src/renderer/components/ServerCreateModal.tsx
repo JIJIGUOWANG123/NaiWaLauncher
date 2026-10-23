@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ServerCoreId, ServerEntry } from "../../shared/types";
 import { api } from "../lib/api";
+import { useT } from "../lib/i18n";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "./Toast";
 import { Modal } from "./Modal";
 import { Field, Select, Slider, TextInput, Toggle } from "./Form";
 
-/** FastMirror 的 tag 是英文 id，界面上要换成中文说明。 */
-const TAG_LABEL: Record<string, string> = { pure: "插件服", mod: "模组服", vanilla: "原版" };
+/** FastMirror 的 tag 是英文 id，界面上要换成对应语言的说明。 */
+const TAG_KEY: Record<string, string> = {
+  pure: "pages.server.tagPlugin",
+  mod: "pages.server.tagModded",
+  vanilla: "pages.server.tagVanilla",
+};
 
 const DEFAULT_PORT = "25565";
 const DEFAULT_MEMORY = 2048;
@@ -25,6 +30,7 @@ export function ServerCreateModal({
   onCreated: (entry: ServerEntry) => void;
 }) {
   const { push } = useToast();
+  const t = useT();
   const [core, setCore] = useState<ServerCoreId | "">("");
   const [mcVersion, setMcVersion] = useState("");
   const [coreVersion, setCoreVersion] = useState("");
@@ -78,10 +84,10 @@ export function ServerCreateModal({
   const coreOptions = useMemo(
     () => (cores.data ?? []).map((item) => ({
       value: item.core,
-      label: `${item.core}（${TAG_LABEL[item.tag] ?? item.tag}）`,
+      label: `${item.core} (${item.tag in TAG_KEY ? t(TAG_KEY[item.tag]) : item.tag})`,
       title: item.homepage,
     })),
-    [cores.data],
+    [cores.data, t],
   );
   const versionOptions = useMemo(
     () => (selectedCore?.mcVersions ?? []).map((version) => ({ value: version, label: version })),
@@ -98,17 +104,17 @@ export function ServerCreateModal({
 
   const submit = async () => {
     if (!core || !mcVersion || !coreVersion) {
-      setError("先选好核心、游戏版本与构建");
+      setError(t("pages.serverCreate.needSelection"));
       return;
     }
     const portNum = Number(port);
     const maxNum = Number(maxPlayers);
     if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-      setError("端口需要是 1-65535 的整数");
+      setError(t("pages.server.portInvalid"));
       return;
     }
     if (!Number.isInteger(maxNum) || maxNum < 1 || maxNum > 1000) {
-      setError("最大人数需要是 1-1000 的整数");
+      setError(t("pages.server.maxPlayersInvalid"));
       return;
     }
     setBusy(true);
@@ -124,7 +130,7 @@ export function ServerCreateModal({
         maxPlayers: maxNum,
         onlineMode,
       });
-      push(`已创建服务端「${entry.meta.name}」`, "success");
+      push(t("pages.serverCreate.created", { name: entry.meta.name }), "success");
       onCreated(entry);
     } catch (err: unknown) {
       setError(errorMessage(err));
@@ -136,15 +142,17 @@ export function ServerCreateModal({
   return (
     <Modal
       open={open}
-      title="新建服务端"
-      subtitle="服务端从 FastMirror 下载，数据放在启动器目录的 servers 下"
+      title={t("pages.server.create")}
+      subtitle={t("pages.serverCreate.subtitle")}
       width={560}
       onClose={() => {
         if (!busy) onClose();
       }}
       footer={(
         <>
-          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>取消</button>
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>
+            {t("pages.server.cancel")}
+          </button>
           <button
             type="button"
             className="btn btn-primary"
@@ -152,18 +160,18 @@ export function ServerCreateModal({
             onClick={() => void submit()}
             disabled={busy || cores.loading || builds.loading || !coreVersion}
           >
-            {busy ? "创建中…" : "创建并下载"}
+            {busy ? t("pages.serverCreate.creating") : t("pages.serverCreate.createAndDownload")}
           </button>
         </>
       )}
     >
       <div className="form-grid">
-      <Field label="名称" hint="留空就用「核心 + 版本」当名字">
+      <Field label={t("pages.server.name")} hint={t("pages.serverCreate.nameHint")}>
         <TextInput
           value={name}
           maxLength={40}
-          placeholder="例如：朋友服 Paper"
-          aria-label="服务端名称"
+          placeholder={t("pages.serverCreate.namePlaceholder")}
+          aria-label={t("pages.server.nameAria")}
           onChange={(event) => {
             setName(event.target.value);
             setNameTouched(true);
@@ -171,65 +179,70 @@ export function ServerCreateModal({
         />
       </Field>
 
-      <Field label="核心" hint={cores.error ?? "FastMirror 提供原版 / 插件服 / 模组服三类核心"}>
+      <Field label={t("pages.serverCreate.core")} hint={cores.error ?? t("pages.serverCreate.coreHint")}>
         <Select
           value={core}
           options={coreOptions}
           onChange={(value) => setCore(value as ServerCoreId)}
-          ariaLabel="服务端核心"
-          placeholder={cores.loading ? "读取核心列表…" : "选择核心"}
+          ariaLabel={t("pages.serverCreate.coreAria")}
+          placeholder={cores.loading ? t("pages.serverCreate.readingCores") : t("pages.serverCreate.chooseCore")}
           disabled={cores.loading || busy}
         />
       </Field>
 
-      <Field label="游戏版本" hint="按核心支持列表倒序，最新的在最上面">
+      <Field label={t("pages.serverCreate.gameVersion")} hint={t("pages.serverCreate.gameVersionHint")}>
         <Select
           value={mcVersion}
           options={versionOptions}
           onChange={setMcVersion}
-          ariaLabel="游戏版本"
-          placeholder={core ? "选择游戏版本" : "先选核心"}
+          ariaLabel={t("pages.serverCreate.gameVersionAria")}
+          placeholder={core ? t("pages.serverCreate.chooseGameVersion") : t("pages.serverCreate.chooseCoreFirst")}
           disabled={!core || busy}
         />
       </Field>
 
-      <Field label="构建" hint={builds.loading ? "读取构建列表…" : (builds.error ?? "构建越新，修掉的漏洞与兼容问题越多")}>
+      <Field
+        label={t("pages.server.build")}
+        hint={builds.loading
+          ? t("pages.serverCreate.readingBuilds")
+          : (builds.error ?? t("pages.serverCreate.buildHint"))}
+      >
         <Select
           value={coreVersion}
           options={buildOptions}
           onChange={setCoreVersion}
-          ariaLabel="服务端构建"
-          placeholder={mcVersion ? "选择构建" : "先选游戏版本"}
+          ariaLabel={t("pages.serverCreate.buildAria")}
+          placeholder={mcVersion ? t("pages.serverCreate.chooseBuild") : t("pages.serverCreate.chooseVersionFirst")}
           disabled={!mcVersion || builds.loading || busy}
         />
       </Field>
 
       <div className="server-form-row">
-        <Field label="端口" hint="默认 25565，同机多开时各用一个">
+        <Field label={t("pages.server.port")} hint={t("pages.serverCreate.portHint")}>
           <TextInput
             type="number"
             min={1}
             max={65535}
             value={port}
-            aria-label="端口"
+            aria-label={t("pages.server.port")}
             onChange={(event) => setPort(event.target.value)}
             disabled={busy}
           />
         </Field>
-        <Field label="最大人数" hint="写进 server.properties 的 max-players">
+        <Field label={t("pages.server.maxPlayers")} hint={t("pages.serverCreate.maxPlayersHint")}>
           <TextInput
             type="number"
             min={1}
             max={1000}
             value={maxPlayers}
-            aria-label="最大人数"
+            aria-label={t("pages.server.maxPlayers")}
             onChange={(event) => setMaxPlayers(event.target.value)}
             disabled={busy}
           />
         </Field>
       </div>
 
-      <Field label="内存" hint="写进启动参数 -Xmx；插件/模组越多要留得越多">
+      <Field label={t("pages.server.memory")} hint={t("pages.serverCreate.memoryHint")}>
         <Slider
           value={memoryMb}
           min={512}
@@ -244,11 +257,11 @@ export function ServerCreateModal({
       <Toggle
         checked={onlineMode}
         onChange={setOnlineMode}
-        label="正版验证"
-        hint="关掉后离线客户端也能进（online-mode=false）"
+        label={t("pages.server.onlineMode")}
+        hint={t("pages.server.onlineModeHint")}
       />
 
-      <p className="server-form-note">创建会下载服务端 jar，可能需要几十 MB；下载失败可以在列表里重试或删除重建。</p>
+      <p className="server-form-note">{t("pages.serverCreate.note")}</p>
       {error ? <p className="server-form-error" data-server-create-error>{error}</p> : null}
       </div>
     </Modal>

@@ -17,6 +17,7 @@ import { downloadFile } from "../core/http";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { getSettings } from "../core/settings";
+import { mt } from "../core/i18n";
 
 const log = logger("media/api");
 
@@ -157,7 +158,7 @@ async function downloadWithTimeout(url: string, dest: string, signal?: AbortSign
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   const linked = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
   try {
-    await downloadFile(url, dest, { label: "随机图背景", signal: linked, connections: 1 });
+    await downloadFile(url, dest, { label: mt("media.apiBackgroundLabel"), signal: linked, connections: 1 });
   } finally {
     clearTimeout(timer);
   }
@@ -198,7 +199,7 @@ async function cacheFromUrl(url: string, dir: string, source: string): Promise<A
     const bytes = await readFile(tmp);
     const sniffed = sniffMedia(bytes);
     if (!sniffed) {
-      throw new Error("该地址返回的不是图片/视频（" + bytes.length + " 字节）");
+      throw new Error(mt("media.notMedia", { bytes: bytes.length }));
     }
     const final = join(dir, "api-" + sha1Of(bytes).slice(0, 16) + sniffed.ext);
     // 同一张图重复获取时名字相同：直接覆盖，等于命中缓存
@@ -235,7 +236,7 @@ async function resolveFromApi(rawUrl: string, dir: string): Promise<ApiBackgroun
     if (!mediaUrl) mediaUrl = extractMediaUrlFromText(text);
     if (!mediaUrl) {
       const preview = text.replace(/\s+/g, " ").slice(0, 120);
-      throw new Error("响应里没有找到图片/视频地址（前 120 字符：" + preview + "）");
+      throw new Error(mt("media.noMediaUrl", { preview }));
     }
     log.info("随机图接口返回的是文本，已解析出媒体地址：" + mediaUrl);
     return await cacheFromUrl(mediaUrl, dir, rawUrl);

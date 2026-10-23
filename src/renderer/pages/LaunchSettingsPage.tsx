@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Settings } from "../../shared/types";
+import { useT } from "../lib/i18n";
 import { usePersist } from "../lib/persist";
 import { useApp } from "../lib/store";
 import { Field, Select, TextInput, Toggle } from "../components/Form";
@@ -7,37 +8,46 @@ import { ErrorState, LoadingState } from "../components/State";
 import { useToast } from "../components/Toast";
 import { AdvancedCard, MemoryCard, OfflineSkinCard } from "./LaunchCards";
 
-const ISOLATION_OPTIONS = [
-  { value: "all", label: "隔离所有版本（每个实例独立游戏目录）" },
-  { value: "none", label: "共用 .minecraft（不隔离）" },
+type Translator = (key: string, vars?: Record<string, string | number>) => string;
+
+/** 选项文案存 key，渲染时再翻：模块级常量在切换语言后不会自己更新。 */
+type OptionKey<T extends string> = { value: T; labelKey?: string; label?: string };
+
+function localize<T extends string>(options: Array<OptionKey<T>>, tr: Translator): Array<{ value: T; label: string }> {
+  return options.map(({ value, labelKey, label }) => ({ value, label: labelKey ? tr(labelKey) : (label ?? value) }));
+}
+
+const ISOLATION_OPTIONS: Array<OptionKey<"all" | "none">> = [
+  { value: "all", labelKey: "pages.launchSettings.isolationAll" },
+  { value: "none", labelKey: "pages.launchSettings.isolationNone" },
 ];
 
 /** 同时运行的游戏实例数：默认只允许一个，改成无限即可多开。 */
-const INSTANCE_LIMIT_OPTIONS = [
-  { value: "one", label: "一个（推荐）" },
-  { value: "unlimited", label: "无限（允许同时多开）" },
+const INSTANCE_LIMIT_OPTIONS: Array<OptionKey<"one" | "unlimited">> = [
+  { value: "one", labelKey: "pages.launchSettings.limitOne" },
+  { value: "unlimited", labelKey: "pages.launchSettings.limitUnlimited" },
 ];
 
-const VISIBILITY_OPTIONS = [
-  { value: "keep", label: "保持不变" },
-  { value: "minimize", label: "最小化" },
-  { value: "close", label: "启动后关闭" },
+const VISIBILITY_OPTIONS: Array<OptionKey<"keep" | "minimize" | "close">> = [
+  { value: "keep", labelKey: "pages.launchSettings.visKeep" },
+  { value: "minimize", labelKey: "pages.launchSettings.visMinimize" },
+  { value: "close", labelKey: "pages.launchSettings.visClose" },
 ];
 
-const PRIORITY_OPTIONS = [
-  { value: "low", label: "低" },
-  { value: "normal", label: "中（平衡）" },
-  { value: "high", label: "高" },
+const PRIORITY_OPTIONS: Array<OptionKey<"low" | "normal" | "high">> = [
+  { value: "low", labelKey: "pages.launchSettings.prioLow" },
+  { value: "normal", labelKey: "pages.launchSettings.prioNormal" },
+  { value: "high", labelKey: "pages.launchSettings.prioHigh" },
 ];
 
 const WINDOW_PRESETS = ["default", "1024x768", "1280x720", "1600x900", "1920x1080"];
-const WINDOW_OPTIONS = [
-  { value: "default", label: "默认" },
+const WINDOW_OPTIONS: Array<OptionKey<string>> = [
+  { value: "default", labelKey: "pages.launchSettings.windowDefault" },
   { value: "1024x768", label: "1024 × 768" },
   { value: "1280x720", label: "1280 × 720" },
   { value: "1600x900", label: "1600 × 900" },
   { value: "1920x1080", label: "1920 × 1080" },
-  { value: "custom", label: "自定义…" },
+  { value: "custom", labelKey: "pages.launchSettings.windowCustom" },
 ];
 
 function parseSize(value: string): { w: number; h: number } | null {
@@ -47,14 +57,15 @@ function parseSize(value: string): { w: number; h: number } | null {
 
 export function LaunchSettingsPage() {
   const { settings, settingsError } = useApp();
+  const tr = useT();
 
   if (!settings) {
     return (
       <section className="page">
         <header className="page-head">
-          <h1 className="page-title">启动</h1>
+          <h1 className="page-title">{tr("pages.launchSettings.title")}</h1>
         </header>
-        <LoadingState label="读取启动选项…" />
+        <LoadingState label={tr("pages.launchSettings.loading")} />
       </section>
     );
   }
@@ -63,8 +74,8 @@ export function LaunchSettingsPage() {
     <section className="page">
       <header className="page-head">
         <div>
-          <h1 className="page-title">启动</h1>
-          <p className="page-sub">仿 PCL2 的启动选项：版本隔离、游戏窗口、内存与高级参数</p>
+          <h1 className="page-title">{tr("pages.launchSettings.title")}</h1>
+          <p className="page-sub">{tr("pages.launchSettings.sub")}</p>
         </div>
       </header>
 
@@ -83,6 +94,7 @@ export function LaunchSettingsPage() {
 function LaunchOptionsCard({ settings }: { settings: Settings }) {
   const persist = usePersist();
   const { push } = useToast();
+  const tr = useT();
   const [titleDraft, setTitleDraft] = useState(settings.windowTitle);
   const [brandDraft, setBrandDraft] = useState(settings.launcherBrand);
   const [customSize, setCustomSize] = useState(false);
@@ -102,93 +114,93 @@ function LaunchOptionsCard({ settings }: { settings: Settings }) {
 
   const commitTitle = () => {
     const next = titleDraft.trim();
-    if (next !== settings.windowTitle) void persist({ windowTitle: next }, "游戏窗口标题");
+    if (next !== settings.windowTitle) void persist({ windowTitle: next }, tr("pages.launchSettings.persistWindowTitle"));
   };
 
   const commitBrand = () => {
     const next = brandDraft.trim();
-    if (next !== settings.launcherBrand) void persist({ launcherBrand: next }, "自定义信息");
+    if (next !== settings.launcherBrand) void persist({ launcherBrand: next }, tr("pages.launchSettings.persistBrand"));
   };
 
   const applySize = () => {
     const w = Math.round(Number(width));
     const h = Math.round(Number(height));
     if (!Number.isFinite(w) || !Number.isFinite(h) || w < 640 || h < 480) {
-      push("窗口宽高至少 640 × 480", "error");
+      push(tr("pages.launchSettings.sizeTooSmall"), "error");
       return;
     }
-    void persist({ windowSize: `${w}x${h}` }, "窗口大小");
+    void persist({ windowSize: `${w}x${h}` }, tr("pages.launchSettings.persistWindowSize"));
   };
 
   return (
     <div className="panel" data-card="launch-options">
       <div className="panel-head">
-        <h2 className="panel-title">启动选项</h2>
-        <span className="panel-count">改动即时保存并回读校验</span>
+        <h2 className="panel-title">{tr("pages.launchSettings.optionsTitle")}</h2>
+        <span className="panel-count">{tr("pages.launchSettings.optionsCount")}</span>
       </div>
       <div className="form-grid">
-        <Field label="默认版本隔离" hint="隔离后每个实例有独立存档、模组与配置文件">
+        <Field label={tr("pages.launchSettings.isolationLabel")} hint={tr("pages.launchSettings.isolationHint")}>
           <Select
             value={settings.versionIsolation}
-            options={ISOLATION_OPTIONS}
-            ariaLabel="默认版本隔离"
-            onChange={(value) => void persist({ versionIsolation: value as Settings["versionIsolation"] }, "版本隔离")}
+            options={localize(ISOLATION_OPTIONS, tr)}
+            ariaLabel={tr("pages.launchSettings.isolationLabel")}
+            onChange={(value) => void persist({ versionIsolation: value as Settings["versionIsolation"] }, tr("pages.launchSettings.persistIsolation"))}
           />
         </Field>
 
         <Field
-          label="同时运行的实例"
-          hint="默认只允许运行一个游戏实例：已有实例在跑时再点启动会被拦下；改成「无限」即可同时开多个（内存与 CPU 要自己算好）"
+          label={tr("pages.launchSettings.instanceLimitLabel")}
+          hint={tr("pages.launchSettings.instanceLimitHint")}
         >
           {/* data-game-limit 带上当前值，便于自检脚本断言 */}
           <div data-game-limit={settings.gameInstanceLimit}>
             <Select
               value={settings.gameInstanceLimit}
-              options={INSTANCE_LIMIT_OPTIONS}
-              ariaLabel="同时运行的实例"
-              onChange={(value) => void persist({ gameInstanceLimit: value as Settings["gameInstanceLimit"] }, "同时运行的实例")}
+              options={localize(INSTANCE_LIMIT_OPTIONS, tr)}
+              ariaLabel={tr("pages.launchSettings.instanceLimitLabel")}
+              onChange={(value) => void persist({ gameInstanceLimit: value as Settings["gameInstanceLimit"] }, tr("pages.launchSettings.persistInstanceLimit"))}
             />
           </div>
         </Field>
 
         <Field
-          label="游戏内存优化"
-          hint="开启后启动游戏会追加一套面向低延迟的 G1GC 参数（减少整合包卡顿）；关掉则只下发 -Xmx/-Xms，交给 JVM 默认 GC。实例里的「额外 JVM 参数」始终优先级最高。"
+          label={tr("pages.launchSettings.memOptLabel")}
+          hint={tr("pages.launchSettings.memOptHint")}
         >
           <Toggle
-            label="开启游戏内存优化（G1GC 低延迟参数）"
+            label={tr("pages.launchSettings.memOptToggle")}
             checked={settings.memoryOptimize}
-            onChange={(value) => void persist({ memoryOptimize: value }, "游戏内存优化")}
+            onChange={(value) => void persist({ memoryOptimize: value }, tr("pages.launchSettings.persistMemoryOptimize"))}
           />
         </Field>
 
         <Field
-          label="高级进程操作（默认关闭 · 可能触发杀毒误报）"
-          hint="开启后启动游戏会旁挂一个隐藏的 PowerShell 脚本去设置进程优先级、修改游戏窗口标题。这类操作别的进程的行为是杀毒软件的重点特征，默认关闭；不需要就别开。"
+          label={tr("pages.launchSettings.advProcLabel")}
+          hint={tr("pages.launchSettings.advProcHint")}
         >
           <Toggle
-            label="允许设置游戏进程优先级 / 窗口标题"
+            label={tr("pages.launchSettings.advProcToggle")}
             checked={settings.advancedProcessTweaks}
-            onChange={(value) => void persist({ advancedProcessTweaks: value }, "高级进程操作")}
+            onChange={(value) => void persist({ advancedProcessTweaks: value }, tr("pages.launchSettings.persistAdvancedProcess"))}
           />
         </Field>
 
         <Field
-          label="离线本地皮肤 API（默认关闭 · 可能触发杀毒误报）"
-          hint="开启后离线账号启动时会注入 authlib-injector，让游戏直接读本地皮肤与披风（实例内不必装模组）。注入 javaagent 属敏感行为，默认关闭；关掉时请用「一键安装 CustomSkinLoader」的方式。"
+          label={tr("pages.launchSettings.localSkinLabel")}
+          hint={tr("pages.launchSettings.localSkinHint")}
         >
           <Toggle
-            label="允许为离线账号注入本地皮肤 API"
+            label={tr("pages.launchSettings.localSkinToggle")}
             checked={settings.localSkinApi}
-            onChange={(value) => void persist({ localSkinApi: value }, "离线本地皮肤 API")}
+            onChange={(value) => void persist({ localSkinApi: value }, tr("pages.launchSettings.persistLocalSkinApi"))}
           />
         </Field>
 
-        <Field label="游戏窗口标题" hint="支持 {instance} 与 {version} 占位符；留空则用实例名">
+        <Field label={tr("pages.launchSettings.windowTitleLabel")} hint={tr("pages.launchSettings.windowTitleHint")}>
           <TextInput
             value={titleDraft}
-            placeholder="默认（实例名）"
-            aria-label="游戏窗口标题"
+            placeholder={tr("pages.launchSettings.windowTitlePlaceholder")}
+            aria-label={tr("pages.launchSettings.windowTitleLabel")}
             onChange={(event) => setTitleDraft(event.target.value)}
             onBlur={commitTitle}
             onKeyDown={(event) => {
@@ -198,11 +210,11 @@ function LaunchOptionsCard({ settings }: { settings: Settings }) {
           />
         </Field>
 
-        <Field label="自定义信息" hint="写入 -Dminecraft.launcher.brand，日志与崩溃报告会带上它">
+        <Field label={tr("pages.launchSettings.brandLabel")} hint={tr("pages.launchSettings.brandHint")}>
           <TextInput
             value={brandDraft}
             placeholder="NaiWa"
-            aria-label="自定义信息"
+            aria-label={tr("pages.launchSettings.brandLabel")}
             onChange={(event) => setBrandDraft(event.target.value)}
             onBlur={commitBrand}
             onKeyDown={(event) => {
@@ -212,37 +224,37 @@ function LaunchOptionsCard({ settings }: { settings: Settings }) {
           />
         </Field>
 
-        <Field label="启动器可见性" hint="游戏启动后启动器窗口的行为">
+        <Field label={tr("pages.launchSettings.visibilityLabel")} hint={tr("pages.launchSettings.visibilityHint")}>
           <Select
             value={settings.launcherVisibility}
-            options={VISIBILITY_OPTIONS}
-            ariaLabel="启动器可见性"
-            onChange={(value) => void persist({ launcherVisibility: value as Settings["launcherVisibility"] }, "启动器可见性")}
+            options={localize(VISIBILITY_OPTIONS, tr)}
+            ariaLabel={tr("pages.launchSettings.visibilityLabel")}
+            onChange={(value) => void persist({ launcherVisibility: value as Settings["launcherVisibility"] }, tr("pages.launchSettings.persistVisibility"))}
           />
         </Field>
 
-        <Field label="进程优先级" hint="高优先级更吃 CPU，低优先级让其他程序更流畅">
+        <Field label={tr("pages.launchSettings.priorityLabel")} hint={tr("pages.launchSettings.priorityHint")}>
           <Select
             value={settings.processPriority}
-            options={PRIORITY_OPTIONS}
-            ariaLabel="进程优先级"
-            onChange={(value) => void persist({ processPriority: value as Settings["processPriority"] }, "进程优先级")}
+            options={localize(PRIORITY_OPTIONS, tr)}
+            ariaLabel={tr("pages.launchSettings.priorityLabel")}
+            onChange={(value) => void persist({ processPriority: value as Settings["processPriority"] }, tr("pages.launchSettings.persistPriority"))}
           />
         </Field>
 
-        <Field label="窗口大小" hint="游戏窗口初始尺寸；自定义时填宽 × 高">
+        <Field label={tr("pages.launchSettings.windowSizeLabel")} hint={tr("pages.launchSettings.windowSizeHint")}>
           <div className="window-size-row">
             <Select
               value={customSize ? "custom" : settings.windowSize}
-              options={WINDOW_OPTIONS}
-              ariaLabel="窗口大小"
+              options={localize(WINDOW_OPTIONS, tr)}
+              ariaLabel={tr("pages.launchSettings.windowSizeLabel")}
               onChange={(value) => {
                 if (value === "custom") {
                   setCustomSize(true);
                   return;
                 }
                 setCustomSize(false);
-                void persist({ windowSize: value }, "窗口大小");
+                void persist({ windowSize: value }, tr("pages.launchSettings.persistWindowSize"));
               }}
             />
             {customSize ? (
@@ -252,7 +264,7 @@ function LaunchOptionsCard({ settings }: { settings: Settings }) {
                   min={640}
                   max={7680}
                   value={width}
-                  aria-label="窗口宽度"
+                  aria-label={tr("pages.launchSettings.windowWidthAria")}
                   onChange={(event) => setWidth(Number(event.target.value))}
                 />
                 <span className="window-size-x">×</span>
@@ -261,11 +273,11 @@ function LaunchOptionsCard({ settings }: { settings: Settings }) {
                   min={480}
                   max={4320}
                   value={height}
-                  aria-label="窗口高度"
+                  aria-label={tr("pages.launchSettings.windowHeightAria")}
                   onChange={(event) => setHeight(Number(event.target.value))}
                 />
                 <button type="button" className="btn btn-primary btn-sm" onClick={applySize}>
-                  应用
+                  {tr("pages.launchSettings.apply")}
                 </button>
               </>
             ) : null}

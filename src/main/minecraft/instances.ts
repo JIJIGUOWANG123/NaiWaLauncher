@@ -11,6 +11,7 @@ import { getPaths, instanceDir, instanceModsDir, versionDir } from "../core/path
 import { getSettings } from "../core/settings";
 import { installLoader } from "../loaders/index";
 import { installVersion, isVersionInstalled } from "./install";
+import { mt } from "../core/i18n";
 
 const log = logger("instances");
 
@@ -57,7 +58,7 @@ async function uniqueInstanceId(name: string): Promise<string> {
     const id = `${slug}-${suffix}`;
     if (!existsSync(instanceFile(id)) && !existsSync(instanceDir(id))) return id;
   }
-  throw new Error("实例 id 生成失败，请重试");
+  throw new Error(mt("inst.idFailed"));
 }
 
 async function readMeta(id: string): Promise<InstanceMeta | null> {
@@ -109,7 +110,7 @@ function cachedDiskUsage(id: string): number | undefined {
  * - 5 分钟内复用缓存，force=true 时重算并覆盖缓存。
  */
 export async function instanceDiskUsage(id: string, force = false): Promise<{ bytes: number }> {
-  if (!isSafeId(id)) throw new Error(`非法实例 id：${id}`);
+  if (!isSafeId(id)) throw new Error(mt("inst.badId", { id }));
   if (!force) {
     const cached = cachedDiskUsage(id);
     if (cached !== undefined) return { bytes: cached };
@@ -168,8 +169,8 @@ export async function instanceDiskUsage(id: string, force = false): Promise<{ by
   if (stopped) {
     const reason =
       stopped === "time"
-        ? `超过 ${DISK_USAGE_TIME_LIMIT_MS}ms 上限`
-        : `超过 ${DISK_USAGE_ENTRY_LIMIT} 个条目上限`;
+        ? mt("inst.diskTimeLimit", { ms: DISK_USAGE_TIME_LIMIT_MS })
+        : mt("inst.diskEntryLimit", { count: DISK_USAGE_ENTRY_LIMIT });
     log.warn(`实例 ${id} 占用统计未走完（${reason}），返回已统计的 ${bytes} 字节（耗时 ${elapsedMs}ms）`);
   }
 
@@ -219,11 +220,11 @@ export interface InstanceRecordRequest {
 /** 校验 + 生成 id + 写元数据，不碰网络与安装器。 */
 export async function createInstanceRecord(req: InstanceRecordRequest): Promise<InstanceMeta> {
   const name = String(req.name ?? "").trim();
-  if (name.length === 0) throw new Error("实例名称不能为空");
+  if (name.length === 0) throw new Error(mt("inst.nameRequired"));
   const mcVersion = String(req.mcVersion ?? "").trim();
-  if (mcVersion.length === 0) throw new Error("请选择 Minecraft 版本");
+  if (mcVersion.length === 0) throw new Error(mt("inst.versionRequired"));
   const versionId = String(req.versionId ?? "").trim();
-  if (versionId.length === 0) throw new Error("实例缺少要启动的版本 id");
+  if (versionId.length === 0) throw new Error(mt("inst.versionIdRequired"));
   const loader: LoaderKind = req.loader ?? "vanilla";
   const loaderVersion = String(req.loaderVersion ?? "").trim() || undefined;
 
@@ -248,9 +249,9 @@ export async function createInstanceRecord(req: InstanceRecordRequest): Promise<
 
 export async function createInstance(req: CreateInstanceRequest, signal?: AbortSignal): Promise<InstanceMeta> {
   const name = String(req.name ?? "").trim();
-  if (name.length === 0) throw new Error("实例名称不能为空");
+  if (name.length === 0) throw new Error(mt("inst.nameRequired"));
   const mcVersion = String(req.mcVersion ?? "").trim();
-  if (mcVersion.length === 0) throw new Error("请选择 Minecraft 版本");
+  if (mcVersion.length === 0) throw new Error(mt("inst.versionRequired"));
   const loader: LoaderKind = req.loader ?? "vanilla";
 
   // 先装原版：加载器要基于已存在的原版版本 JSON 生成差异 JSON
@@ -276,7 +277,7 @@ export async function createInstance(req: CreateInstanceRequest, signal?: AbortS
 
 export async function updateInstance(id: string, patch: Partial<InstanceMeta>): Promise<InstanceMeta> {
   const current = await getInstance(id);
-  if (!current) throw new Error(`实例不存在：${id}`);
+  if (!current) throw new Error(mt("inst.notFound", { id }));
   const next: InstanceMeta = { ...current, ...patch, id: current.id, createdAt: current.createdAt };
   if (typeof next.name !== "string" || next.name.trim().length === 0) next.name = current.name;
   await writeMeta(next);
@@ -288,7 +289,7 @@ const LOADER_KINDS: readonly LoaderKind[] = ["vanilla", "fabric", "forge", "neof
 
 export function assertLoaderKind(loader: unknown): LoaderKind {
   if (typeof loader !== "string" || !LOADER_KINDS.includes(loader as LoaderKind)) {
-    throw new Error(`未知的加载器类型：${String(loader)}`);
+    throw new Error(mt("loader.unknownType", { loader: String(loader) }));
   }
   return loader as LoaderKind;
 }
@@ -323,7 +324,7 @@ export async function setLoader(
 ): Promise<InstanceMeta> {
   const kind = assertLoaderKind(loader);
   const current = await getInstance(id);
-  if (!current) throw new Error(`实例不存在：${id}`);
+  if (!current) throw new Error(mt("inst.notFound", { id }));
 
   const wanted = kind === "vanilla" ? undefined : (loaderVersion ?? "").trim() || undefined;
 
@@ -338,7 +339,7 @@ export async function setLoader(
       if (signal?.aborted) throw err;
       const reason = err instanceof Error ? err.message : String(err);
       throw new Error(
-        `切换加载器失败：${kind}${wanted ? " " + wanted : ""} 未安装成功（${reason}）；实例仍是 ${current.loader}（${current.versionId}）`,
+        mt("inst.switchLoaderKind", { loader: kind + (wanted ? " " + wanted : ""), reason, current: current.loader + "（" + current.versionId + "）" }),
       );
     }
     nextVersionId = installed.versionId;
@@ -352,7 +353,7 @@ export async function setLoader(
       if (signal?.aborted) throw err;
       const reason = err instanceof Error ? err.message : String(err);
       throw new Error(
-        `切换加载器失败：原版 ${current.mcVersion} 补装失败（${reason}）；实例仍是 ${current.loader}（${current.versionId}）`,
+        mt("inst.switchLoaderVanilla", { version: current.mcVersion, reason, current: current.loader + "（" + current.versionId + "）" }),
       );
     }
   }
@@ -365,7 +366,7 @@ export async function setLoader(
     await writeMeta(next);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    throw new Error(`切换加载器失败：实例元数据写入失败（${reason}）；实例仍是 ${current.loader}（${current.versionId}）`);
+    throw new Error(mt("inst.switchLoaderFailed", { reason, loader: current.loader, version: current.versionId }));
   }
 
   invalidateInstanceDiskUsage(current.id);
@@ -379,7 +380,7 @@ export async function setLoader(
 }
 
 export async function deleteInstance(id: string): Promise<void> {
-  if (!isSafeId(id)) throw new Error(`非法实例 id：${id}`);
+  if (!isSafeId(id)) throw new Error(mt("inst.badId", { id }));
   const current = await readMeta(id);
   await fs.rm(instanceFile(id), { force: true });
   await fs.rm(instanceDir(id), { recursive: true, force: true });
@@ -410,7 +411,7 @@ function readLevelName(data: Buffer): string | undefined {
   let found: string | undefined;
 
   const need = (count: number): void => {
-    if (count < 0 || pos + count > data.length) throw new Error("NBT 数据越界");
+    if (count < 0 || pos + count > data.length) throw new Error(mt("inst.nbtOverflow"));
   };
   const u8 = (): number => {
     need(1);
@@ -459,7 +460,7 @@ function readLevelName(data: Buffer): string | undefined {
         // list：元素类型只出现一次
         const elementTag = u8();
         const length = i32();
-        if (length < 0 || length > data.length) throw new Error("NBT 列表长度异常");
+        if (length < 0 || length > data.length) throw new Error(mt("inst.nbtListLength"));
         for (let index = 0; index < length && elementTag !== NBT_TAG_END; index += 1) payload(elementTag, "");
         return;
       }
@@ -479,7 +480,7 @@ function readLevelName(data: Buffer): string | undefined {
         return;
       }
       default:
-        throw new Error("未知的 NBT 标签类型 " + String(tag));
+        throw new Error(mt("inst.nbtTagUnknown", { tag: String(tag) }));
     }
   };
 
@@ -545,7 +546,7 @@ function toFileUrl(path: string): string {
  */
 export async function listSaves(instanceId: string): Promise<SaveInfo[]> {
   const instance = await getInstance(instanceId);
-  if (!instance) throw new Error(`实例不存在：${instanceId}`);
+  if (!instance) throw new Error(mt("inst.notFound", { id: instanceId }));
   const savesDir = join(gameDirOf(instance), "saves");
 
   let entries: Dirent[];
