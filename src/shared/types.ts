@@ -557,12 +557,18 @@ export interface InstalledModInfo {
  */
 export interface InstalledContentRef {
   provider: ModProviderId;
-  /** Modrinth project_id / CurseForge modId（与搜索结果的项目 id 同一把钥匙）。 */
+  /** Modrinth project_id / CurseForge modId（与搜索结果的项目 id 同一把钥匙）；扫描兜底来的条目为空串。 */
   projectId: string;
   versionId?: string;
   kind: ModContentKind;
   /** 磁盘上的真实文件名。 */
   fileName: string;
+  /** 数据来源：index = 安装索引（精确）；scan = 磁盘扫描兜底（没有索引的老文件/手工放进去的）。 */
+  source?: "index" | "scan";
+  /** 模组 jar 里读到的 modId（fabric.mod.json / mods.toml），扫描条目用来做模糊匹配。 */
+  modId?: string;
+  /** jar 元数据里的显示名；资源包/光影为文件名主干。 */
+  name?: string;
 }
 
 export type TaskKind = "game" | "libraries" | "assets" | "loader" | "java" | "mod" | "generic";

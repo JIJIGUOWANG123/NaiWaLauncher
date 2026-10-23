@@ -428,34 +428,49 @@ const resolvedFor = (projectId, title, slug, fileName, url, sha, gameVersion, lo
     looseRows[0] && looseRows[0].installedFileName,
   );
 
-  console.log("\n===== 5) listInstalledContent（索引记录 + 磁盘核对，只读） =====");
+  console.log("\n===== 5) listInstalledContent（索引 + 磁盘扫描兜底，只读） =====");
   const refs = await dependencies.listInstalledContent(INST);
   console.log("  listInstalledContent(" + INST + ") → " + refs.length + " 条");
   for (const ref of refs) {
-    console.log("    - kind=" + ref.kind + " | fileName=" + ref.fileName + " | " + ref.provider + "/" + ref.projectId + " | versionId=" + ref.versionId);
+    console.log(
+      "    - source=" + ref.source + " | kind=" + ref.kind + " | fileName=" + ref.fileName + " | " + ref.provider + "/" + ref.projectId +
+        " | modId=" + ref.modId + " | name=" + ref.name,
+    );
   }
   console.log("  原始返回：" + JSON.stringify(refs));
-  ok(refs.length === 2, "装好模组 + 资源包后返回 2 条", refs.length);
   const refMod = refs.find((ref) => ref.kind === "mod");
-  const refRp = refs.find((ref) => ref.kind === "resourcepack");
+  const refRp = refs.find((ref) => ref.kind === "resourcepack" && ref.fileName === rpResult.fileName);
+  const refLoose = refs.find((ref) => ref.fileName === "fileonlypack-v1.0.zip");
+  // 此刻磁盘：mods/ 1 个索引 jar；resourcepacks/ 1 个索引 zip + 1 个无索引散包（第 4 段写的）
+  ok(refs.length === 3, "2 条索引 + 1 条扫描散包 = 3 条", refs.length);
   ok(
-    Boolean(refMod) && refMod.fileName === modResult.fileName && refMod.projectId === "moddep" && refMod.provider === "modrinth",
-    "模组条目的 kind/fileName/projectId 正确",
-    refMod && refMod.fileName + " / " + refMod.projectId,
+    Boolean(refMod) && refMod.source === "index" && refMod.fileName === modResult.fileName && refMod.projectId === "moddep" && refMod.provider === "modrinth",
+    "模组索引条目 source/fileName/projectId 正确",
+    refMod && refMod.source + " / " + refMod.fileName + " / " + refMod.projectId,
   );
   ok(
-    Boolean(refRp) && refRp.fileName === rpResult.fileName && refRp.projectId === "rpdep",
-    "资源包条目的 kind/fileName/projectId 正确",
-    refRp && refRp.fileName + " / " + refRp.projectId,
+    Boolean(refMod) && refMod.modId === "fakedep" && refMod.name === "Fake Dep",
+    "模组索引条目顺带补上 jar 元数据 modId/name",
+    refMod && refMod.modId + " / " + refMod.name,
+  );
+  ok(
+    Boolean(refRp) && refRp.source === "index" && refRp.projectId === "rpdep",
+    "资源包索引条目 source/projectId 正确",
+    refRp && refRp.source + " / " + refRp.projectId,
+  );
+  ok(
+    Boolean(refLoose) && refLoose.source === "scan" && refLoose.projectId === "" && refLoose.versionId === undefined,
+    "无索引的散包以 source=scan 出现，projectId 为空串",
+    refLoose && refLoose.source + " / projectId=「" + refLoose.projectId + "」",
   );
   ok(refs[0] && refs[0].kind === "mod" && refs[1] && refs[1].kind === "resourcepack", "顺序按 kind 再按 fileName（mod 在 resourcepack 前）", refs.map((ref) => ref.kind).join(","));
-  ok(!refs.some((ref) => ref.fileName === "fileonlypack-v1.0.zip"), "没有索引记录的散包不返回（只认索引）");
 
   // 索引保留、文件手删：不能再算已装
   fs.rmSync(path.join(rpDir, rpResult.fileName), { force: true });
   const afterDelete = await dependencies.listInstalledContent(INST);
   console.log("  删掉资源包文件（索引保留）后 → " + JSON.stringify(afterDelete.map((ref) => ref.kind + ":" + ref.fileName)));
-  ok(!afterDelete.some((ref) => ref.kind === "resourcepack"), "磁盘上已删除的资源包条目不再返回");
+  ok(!afterDelete.some((ref) => ref.fileName === rpResult.fileName), "磁盘上已删除的资源包索引条目不再返回");
+  ok(afterDelete.some((ref) => ref.fileName === "fileonlypack-v1.0.zip" && ref.source === "scan"), "仍在磁盘的散包扫描条目照旧返回");
   ok(afterDelete.some((ref) => ref.kind === "mod" && ref.fileName === modResult.fileName), "模组条目仍在");
   ok(
     Boolean(index[INST] && index[INST][rpResult.fileName]),
@@ -487,6 +502,69 @@ const resolvedFor = (projectId, title, slug, fileName, url, sha, gameVersion, lo
   fs.writeFileSync(mapFile, JSON.stringify(mapWithShadow, null, 2) + "\n", "utf8");
   fs.rmSync(modsShadow, { force: true });
   console.log("  已还原安装索引与 mods/ 下的临时文件");
+
+  // 5e) 手工丢进 mods/ 的 jar（不写索引）：扫描兜底要认出来
+  const handName = "hand-placed-1.0.jar";
+  const handZip = new AdmZip();
+  handZip.addFile(
+    "fabric.mod.json",
+    Buffer.from(JSON.stringify({ schemaVersion: 1, id: "handplaced", name: "Hand Placed", version: "2.0.0" }), "utf8"),
+  );
+  fs.writeFileSync(path.join(modsDir, handName), handZip.toBuffer());
+  const handRefs = await dependencies.listInstalledContent(INST);
+  const handScan = handRefs.find((ref) => ref.fileName === handName);
+  console.log("  手工放入 " + handName + "（无索引）→ " + JSON.stringify(handScan));
+  ok(Boolean(handScan) && handScan.source === "scan", "手工放入的 jar 以 source=scan 出现", handScan && handScan.source);
+  ok(
+    Boolean(handScan) && handScan.modId === "handplaced" && handScan.name === "Hand Placed" && handScan.projectId === "",
+    "扫描条目带 jar 元数据的 modId/name，projectId 为空串",
+    handScan && handScan.modId + " / " + handScan.name + " / projectId=「" + handScan.projectId + "」",
+  );
+
+  // 5f) 同一文件写进索引 → 变成 source=index，且不出现两条同名条目
+  const mapWithHand = JSON.parse(fs.readFileSync(mapFile, "utf8"));
+  mapWithHand[INST][handName] = { provider: "modrinth", projectId: "handplaced-proj", versionId: "hand-v1", kind: "mod" };
+  fs.writeFileSync(mapFile, JSON.stringify(mapWithHand, null, 2) + "\n", "utf8");
+  const indexedHandRefs = await dependencies.listInstalledContent(INST);
+  const handIndexed = indexedHandRefs.filter((ref) => ref.fileName === handName);
+  console.log("  写进索引后 → " + JSON.stringify(handIndexed));
+  ok(handIndexed.length === 1, "同一文件名只出现一条（索引优先，不重复）", handIndexed.length);
+  ok(
+    handIndexed[0] && handIndexed[0].source === "index" && handIndexed[0].projectId === "handplaced-proj",
+    "写进索引后 source 由 scan 变 index",
+    handIndexed[0] && handIndexed[0].source + " / " + handIndexed[0].projectId,
+  );
+  ok(handIndexed[0] && handIndexed[0].modId === "handplaced", "索引条目仍带 modId（复用扫描结果，不重复解析 jar）", handIndexed[0] && handIndexed[0].modId);
+
+  // 5g) 资源包扫描条目 name = 文件名主干
+  const packScan = indexedHandRefs.find((ref) => ref.fileName === "fileonlypack-v1.0.zip");
+  ok(
+    Boolean(packScan) && packScan.source === "scan" && packScan.name === "fileonlypack-v1.0",
+    "资源包扫描条目 name 是文件名主干",
+    packScan && packScan.name,
+  );
+
+  // 5h) 索引 + 扫描混排：数量、去重与顺序都稳定
+  const mixedKeys = indexedHandRefs.map((ref) => ref.kind + "|" + ref.fileName);
+  const nonDecreasing = indexedHandRefs.every(
+    (ref, i) => i === 0 || mixedKeys[i - 1].localeCompare(mixedKeys[i]) <= 0,
+  );
+  console.log("  混排结果：" + JSON.stringify(mixedKeys));
+  ok(indexedHandRefs.length === 3, "索引 2 条 + 扫描 1 条 = 3 条", indexedHandRefs.length);
+  ok(new Set(mixedKeys).size === mixedKeys.length, "同一条记录只出现一次（kind+fileName 唯一）", mixedKeys.length);
+  ok(nonDecreasing, "排序稳定：按 kind 再按 fileName 非递减", mixedKeys.join(","));
+  ok(
+    indexedHandRefs.filter((ref) => ref.source === "index").length === 2 &&
+      indexedHandRefs.filter((ref) => ref.source === "scan").length === 1,
+    "source 计数：index 2 / scan 1",
+    indexedHandRefs.map((ref) => ref.source).join(","),
+  );
+
+  // 还原：手写的索引记录与手工放入的 jar 都清掉，后面的删除段只面对原来的两个文件
+  delete mapWithHand[INST][handName];
+  fs.writeFileSync(mapFile, JSON.stringify(mapWithHand, null, 2) + "\n", "utf8");
+  fs.rmSync(path.join(modsDir, handName), { force: true });
+  console.log("  已还原安装索引与手工放入的 jar");
 
   console.log("\n===== 6) removeContentFile 跨类型拒绝 =====");
   const badRp = await throws(() => install.removeContentFile(INST, "some-mod.jar", "resourcepack"));

@@ -23,6 +23,7 @@ import { exportInstance, importInstance } from "../minecraft/share";
 import { launchInstance } from "../minecraft/launch";
 import { installLoader, listLoaderVersions } from "../loaders/index";
 import { installJava, listInstalledJava, listJavaReleases } from "../java/index";
+import { contentDirForInstance } from "../mods/install";
 import { listMapEntries } from "../mods/minekuai";
 import { checkUpdates, getModDependencies, getModDetail, installMod, installed, listInstalledContent, listInstalledMods, installModpack, listCategories, listFilterOptions, listModFiles, remove as removeMod, searchMods, update as updateMod } from "../mods/index";
 import {
@@ -104,6 +105,14 @@ export function registerIpc(): void {
   // 隔离模式决定模组目录：all → 实例目录；none → <gameRoot>/mods
   handle<void>(IPC.openInstanceMods, async (instanceId: string) => {
     const dir = getSettings().versionIsolation === "none" ? join(getPaths().gameRoot, "mods") : instanceModsDir(instanceId);
+    await mkdir(dir, { recursive: true });
+    const error = await shell.openPath(assertInsideRoot(dir));
+    if (error) throw new Error(error);
+  });
+
+  // 实例里的三类内容目录：光影/材质与模组一样跟随版本隔离设置，目录不存在就先建出来
+  handle<void>(IPC.openInstanceContent, async (instanceId: string, kind: ModContentKind) => {
+    const dir = contentDirForInstance({ id: instanceId }, kind);
     await mkdir(dir, { recursive: true });
     const error = await shell.openPath(assertInsideRoot(dir));
     if (error) throw new Error(error);

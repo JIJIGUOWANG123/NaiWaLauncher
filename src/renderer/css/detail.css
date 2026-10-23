@@ -182,6 +182,47 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 内容分区：类型分段控件（复用「标题栏」页的 .source-card / .radio-dot）+ 单一面板 */
+.content-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.content-tabs .content-tab {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  gap: 8px;
+}
+
+.content-tabs .source-name {
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+/* 三个面板都留在 DOM 里，靠 hidden 收起：切回来搜索词还在、也不重新读目录 */
+.detail-content-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.detail-content-panel[hidden] {
+  display: none;
+}
+
+/* 内容管理抽屉：整段内容区直接铺在抽屉正文里，不再套一层卡片边框；
+   抽屉宽度由 Drawer 的 width 决定（与实例设置抽屉同为 760px）。 */
+.content-drawer-panel {
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .detail-mods-actions {
   display: flex;
   gap: 8px;
@@ -419,5 +460,18 @@
   /* 窄屏里搜索框占满整行 */
   .detail-search-input {
     max-width: none;
+  }
+
+  /* 分类按钮放不下就横向滚动，不撑破抽屉 */
+  .content-tabs {
+    gap: 6px;
+  }
+
+  .content-tabs .content-tab {
+    padding: 7px 10px;
+  }
+
+  .content-drawer-panel {
+    gap: 10px;
   }
 }

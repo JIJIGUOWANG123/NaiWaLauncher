@@ -576,6 +576,14 @@
   background: var(--surface-recess);
 }
 
+/* 只有扫描兜底命中 = 疑似：虚线边 + 中性色，绝不和索引命中的绿色混在一起。 */
+.res-installed.is-scan {
+  color: var(--text-dim);
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--text-dim) 45%, transparent);
+  background: var(--surface-recess);
+}
+
 /* 来源徽标：三家各自一个色系，扫一眼就知道文件从哪来。 */
 .res-source {
   flex: 0 0 auto;

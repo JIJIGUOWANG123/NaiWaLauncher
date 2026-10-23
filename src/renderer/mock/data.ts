@@ -1,5 +1,6 @@
 import type {
-  Account, AppInfo, DownloadSourceInfo, InstanceMeta, InstalledJava, InstalledModInfo, JavaRelease, LoaderKind,
+  Account, AppInfo, DownloadSourceInfo, InstalledContentRef, InstanceMeta, InstalledJava, InstalledModInfo, JavaRelease,
+  LoaderKind,
   LoaderVersionInfo, MapEntry, ModContentKind, ModDependency, ModDetail, ModFileInfo, ModSearchResult, SaveInfo,
   Settings, VersionBrief,
 } from "../../shared/types";
@@ -694,6 +695,43 @@ export const MOCK_INSTALLED_PACKS: Record<"shader" | "resourcepack", Record<stri
       },
     ],
   },
+};
+
+/**
+ * 磁盘扫描兜底条目（source: "scan"，projectId 为空串）：模拟「索引里没有、但目录里真放着」
+ * 的老文件，用来点验资源页的「疑似已安装」分支。三条各自演示一种命中的方式：
+ * - jei：modId 与候选 projectId/slug 完全相等；
+ * - StayTrueAddon：文件名主干「包含」候选 slug；
+ * - BSLShaders_v9：文件名主干「包含」候选 slug（光影同上）。
+ */
+export const MOCK_SCANNED_CONTENT: Record<string, InstalledContentRef[]> = {
+  "naiwa-create": [
+    {
+      provider: "modrinth",
+      projectId: "",
+      kind: "mod",
+      fileName: "jei-1.20.1-15.2.0.27.jar",
+      source: "scan",
+      modId: "jei",
+      name: "Just Enough Items",
+    },
+    {
+      provider: "modrinth",
+      projectId: "",
+      kind: "resourcepack",
+      fileName: "StayTrueAddon_1.20.zip",
+      source: "scan",
+      name: "StayTrueAddon_1.20",
+    },
+    {
+      provider: "modrinth",
+      projectId: "",
+      kind: "shader",
+      fileName: "BSLShaders_v9.0.zip",
+      source: "scan",
+      name: "BSLShaders_v9.0",
+    },
+  ],
 };
 
 /** checkUpdates 反查到的远端目标文件：光影/资源包各一条，用于演示「可更新」高亮与更新按钮。 */

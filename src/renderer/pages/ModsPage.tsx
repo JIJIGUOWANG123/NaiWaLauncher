@@ -116,6 +116,106 @@ function installedFileKey(kind: ModContentKind, fileName: string): string {
   return `${kind}:${fileName.trim().toLowerCase()}`;
 }
 
+/** 候选资源（搜索卡片 / 详情面板）参与弱匹配的三把钥匙。 */
+interface InstalledCandidate {
+  projectId: string;
+  slug?: string;
+  title: string;
+}
+
+/** strong = 索引精确命中；weak = 磁盘扫描条目靠名字/文件名推出来的「疑似」。 */
+interface InstalledMatch {
+  strong: InstalledContentRef[];
+  weak: InstalledContentRef[];
+}
+
+const EMPTY_MATCH: InstalledMatch = { strong: [], weak: [] };
+
+interface ScanEntry {
+  ref: InstalledContentRef;
+  tokens: string[];
+}
+
+interface InstalledIndex {
+  byProject: Map<string, InstalledContentRef[]>;
+  files: Set<string>;
+  scan: Map<ModContentKind, ScanEntry[]>;
+}
+
+/** 扫描条目的比对 token：modId、显示名、文件名主干（不含扩展名）。 */
+function scanTokensOf(ref: InstalledContentRef): string[] {
+  const stem = ref.fileName.replace(/\.[^.]+$/, "");
+  return [ref.modId, ref.name, stem]
+    .map((value) => normalizeKey(value ?? ""))
+    .filter((token) => token.length > 0);
+}
+
+function candidateTokensOf(candidate: InstalledCandidate): string[] {
+  return [candidate.projectId, candidate.slug ?? "", candidate.title]
+    .map(normalizeKey)
+    .filter((token) => token.length > 0);
+}
+
+/**
+ * 弱匹配：token 完全相等最可信；否则要求两边都够长（≥4）才做互相包含，
+ * 免得 "jei" 这种短词把一堆条目全命中。
+ */
+function isWeakMatch(refTokens: string[], candidateTokens: string[]): boolean {
+  for (const token of refTokens) {
+    if (candidateTokens.includes(token)) return true;
+  }
+  for (const refToken of refTokens) {
+    if (refToken.length < 4) continue;
+    for (const candidateToken of candidateTokens) {
+      if (candidateToken.length < 4) continue;
+      if (refToken.includes(candidateToken) || candidateToken.includes(refToken)) return true;
+    }
+  }
+  return false;
+}
+
+function buildInstalledIndex(refs: InstalledContentRef[]): InstalledIndex {
+  const byProject = new Map<string, InstalledContentRef[]>();
+  const files = new Set<string>();
+  const scan = new Map<ModContentKind, ScanEntry[]>();
+  for (const ref of refs) {
+    files.add(installedFileKey(ref.kind, ref.fileName));
+    // 有 projectId 的才进强匹配表：扫描条目的 projectId 是空串。
+    if (ref.projectId) {
+      const key = projectKey(ref.kind, ref.projectId);
+      const list = byProject.get(key);
+      if (list) list.push(ref);
+      else byProject.set(key, [ref]);
+    }
+    // 老数据没有 source 字段，于是再看 projectId 是否为空，两者任一成立就走弱匹配。
+    if (ref.source === "scan" || !ref.projectId) {
+      const list = scan.get(ref.kind) ?? [];
+      list.push({ ref, tokens: scanTokensOf(ref) });
+      scan.set(ref.kind, list);
+    }
+  }
+  return { byProject, files, scan };
+}
+
+/** 命中的文件名（强优先），拼给角标 title 与面板提示用。 */
+function hitFileNames(match: InstalledMatch): string {
+  const hits = match.strong.length > 0 ? match.strong : match.weak;
+  return hits.map((hit) => hit.fileName).join(" / ");
+}
+
+function matchIn(index: InstalledIndex, kind: ModContentKind, candidate: InstalledCandidate): InstalledMatch {
+  const strong = candidate.projectId
+    ? index.byProject.get(projectKey(kind, candidate.projectId)) ?? []
+    : [];
+  // 强命中就到此为止：同一个资源不该再被同时标成「疑似」。
+  if (strong.length > 0) return { strong, weak: [] };
+  const tokens = candidateTokensOf(candidate);
+  const weak = (index.scan.get(kind) ?? [])
+    .filter((entry) => isWeakMatch(entry.tokens, tokens))
+    .map((entry) => entry.ref);
+  return { strong: [], weak };
+}
+
 /** 收藏图标：只在资源卡片上用，画在页内免得给通用 icons 添语义。 */
 function IconStar({ filled, size = 16 }: { filled: boolean; size?: number }) {
   return (
@@ -161,9 +261,14 @@ export function ModsPage() {
   const depsResolver = useRef<((choice: DepsChoice) => void) | null>(null);
   /** 「这个项目已经装过」确认框：待装的项目 + 已装的记录，等用户选覆盖还是取消。 */
   const [dupPrompt, setDupPrompt] = useState<{
-    mod: ModSearchResult; hits: InstalledContentRef[]; incoming: string;
+    mod: ModSearchResult; match: InstalledMatch; incoming: string;
   } | null>(null);
   const dupResolver = useRef<((overwrite: boolean) => void) | null>(null);
+  /**
+   * 已装清单缓存是否已失效：安装成功后置位，直到新快照落地才复位。
+   * 置位期间重复检测不再拿缓存当快路径，避免用旧快照判「没装过」。
+   */
+  const [installedStale, setInstalledStale] = useState(false);
 
   /** 实时翻译总开关：关掉后即使结果里带译名也回退原文。 */
   const translateMods = settings?.translateMods ?? true;
@@ -302,27 +407,24 @@ export function ModsPage() {
     [currentInstance?.id, tick, instances],
   );
 
-  /** 同一份数据建两套索引：项目键 → 已装记录（可能多条），文件键集合 → 「这个文件已装」。 */
-  const installedIndex = useMemo(() => {
-    const byProject = new Map<string, InstalledContentRef[]>();
-    const files = new Set<string>();
-    for (const ref of installedRefs.data ?? []) {
-      const key = projectKey(ref.kind, ref.projectId);
-      const list = byProject.get(key);
-      if (list) list.push(ref);
-      else byProject.set(key, [ref]);
-      files.add(installedFileKey(ref.kind, ref.fileName));
-    }
-    return { byProject, files };
-  }, [installedRefs.data]);
+  /**
+   * 同一份数据建三档索引：强匹配（项目键 → 索引条目）、文件键集合（这个文件已装）、
+   * 弱匹配（扫描条目的 token 表）。索引缺记录的老文件只能靠扫描条目兜底。
+   */
+  const installedIndex = useMemo(() => buildInstalledIndex(installedRefs.data ?? []), [installedRefs.data]);
 
-  /** 当前实例里该项目已装的记录；没选实例一律当作没装。 */
-  const installedOf = (contentKind: ModContentKind, projectId: string): InstalledContentRef[] => (
-    currentInstance ? installedIndex.byProject.get(projectKey(contentKind, projectId)) ?? [] : []
+  /** 当前实例里这个候选资源的匹配结果；没选实例一律当作没装。 */
+  const matchInstalled = (contentKind: ModContentKind, candidate: InstalledCandidate): InstalledMatch => (
+    currentInstance ? matchIn(installedIndex, contentKind, candidate) : EMPTY_MATCH
   );
   const isInstalledFile = (contentKind: ModContentKind, fileName: string): boolean => (
     currentInstance ? installedIndex.files.has(installedFileKey(contentKind, fileName)) : false
   );
+
+  // 新快照落地 = 缓存重新可信；此前（含刚安装完的那段窗口）都按旧数据/脏数据处理。
+  useEffect(() => {
+    if (installedRefs.data !== null) setInstalledStale(false);
+  }, [installedRefs.data]);
 
   /** 卡片列表：后端排序之外再兜一层本地排序，切换排序立即见效。 */
   const results = useMemo(() => {
@@ -361,10 +463,10 @@ export function ModsPage() {
 
   /** 打开「已装过」确认框并等用户选择（按钮点击走 resolveDuplicate）。 */
   const askDuplicate = (
-    mod: ModSearchResult, hits: InstalledContentRef[], incoming: string,
+    mod: ModSearchResult, match: InstalledMatch, incoming: string,
   ) => new Promise<boolean>((resolve) => {
     dupResolver.current = resolve;
-    setDupPrompt({ mod, hits, incoming });
+    setDupPrompt({ mod, match, incoming });
   });
 
   const resolveDuplicate = (overwrite: boolean) => {
@@ -375,24 +477,38 @@ export function ModsPage() {
   };
 
   /**
-   * 目标实例里同项目的已装记录。当前实例直接用索引；卡片浮层刚切过去的实例
-   * （索引还没跟上）临时查一次；查不到就按「没装过」放行，不能让检查失败挡住安装。
+   * 目标实例里这个候选资源的强弱匹配。
+   * 缓存只当快路径，判定永远有兜底：不是当前实例、缓存还没加载好（null）、缓存是空的、
+   * 或刚安装完缓存已失效，都直接现查一次。否则「还没读好」会被当成「没装过」，
+   * 覆盖确认框就被静默跳过了（真实事故）。
    */
   const duplicatesIn = async (
     instanceId: string, mod: ModSearchResult, contentKind: ModContentKind,
-  ): Promise<InstalledContentRef[]> => {
+  ): Promise<InstalledMatch> => {
+    // 正在重新拉取（loading）时也算缓存不可信：那次请求可能还在上一个安装之前发出。
+    const cacheUsable = currentInstance?.id === instanceId && !installedStale && !installedRefs.loading;
+    const cached = cacheUsable ? installedRefs.data : null;
     let refs: InstalledContentRef[];
-    if (currentInstance?.id === instanceId) {
-      refs = installedRefs.data ?? [];
+    if (cached !== null && cached.length > 0) {
+      refs = cached;
     } else {
       try {
         refs = await api.mods.installedContent(instanceId);
       } catch {
-        return [];
+        // 不静默吞：用户要知道这次为什么没有重复提示。
+        push("重复检查失败，本次未做重复提示", "info");
+        return EMPTY_MATCH;
       }
     }
-    const wanted = projectKey(contentKind, mod.projectId);
-    return refs.filter((ref) => projectKey(ref.kind, ref.projectId) === wanted);
+    const result = matchIn(buildInstalledIndex(refs), contentKind, {
+      projectId: mod.projectId, slug: mod.slug, title: mod.title,
+    });
+    if (result.strong.length > 0 || result.weak.length > 0) {
+      // 一行痕迹：用户回报「没弹框/弹错框」时能直接看到当次判定依据。
+      const grade = result.strong.length > 0 ? "index" : "scan";
+      console.info(`[dedupe] 命中重复安装提示 instance=${instanceId} grade=${grade} files=${hitFileNames(result)}`);
+    }
+    return result;
   };
 
   /**
@@ -425,9 +541,10 @@ export function ModsPage() {
   /** 安装单个内容；file 为空时交给主进程挑该实例的最佳版本（卡片下拉走这条）。 */
   const installContent = async (mod: ModSearchResult, instance: InstanceMeta, file: ModFileInfo | null) => {
     if (!isBackendKind(kind)) return;
-    // 同一项目装过任意版本就先问：取消即整单中止（一个 install 请求都不发），覆盖才继续原流程。
+    // 同一项目装过任意版本（或扫描到疑似同一资源）就先问：取消即整单中止（一个 install
+    // 请求都不发），覆盖才继续原流程。弱命中同样要问，只是文案不一样。
     const dupes = await duplicatesIn(instance.id, mod, kind);
-    if (dupes.length > 0) {
+    if (dupes.strong.length > 0 || dupes.weak.length > 0) {
       const overwrite = await askDuplicate(mod, dupes, file?.fileName ?? "启动器挑选的最佳版本");
       if (!overwrite) return;
     }
@@ -450,7 +567,8 @@ export function ModsPage() {
         ? `，并安装了前置：${result.installedDependencies.join("、")}`
         : "";
       push(`${result.fileName} 已安装到「${instance.name}」的 ${KIND_DIR[kind]} 目录${extra}`, "success");
-      // 立刻重查一次，让卡片角标与文件行标记跟着变。
+      // 先标记缓存失效（下一次点安装不会用旧快照判定），再重查一次让角标跟着变。
+      setInstalledStale(true);
       installedRefs.reload();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -461,8 +579,16 @@ export function ModsPage() {
 
   const panelInstalling = installing !== null && installing.projectId === (selected?.projectId ?? "");
   /** 详情面板当前项目在该实例的已装记录：整合包走「新建实例」，不参与判定。 */
-  const selectedInstalled = selected && detailKind !== "modpack"
-    ? installedOf(detailKind, selected.projectId)
+  const selectedMatch = selected && detailKind !== "modpack"
+    ? matchInstalled(detailKind, { projectId: selected.projectId, slug: selected.slug, title: selected.title })
+    : EMPTY_MATCH;
+  /** 详情面板当前项目的匹配分级：null = 没装过。 */
+  const selectedGrade = selectedMatch.strong.length > 0 ? "index" : selectedMatch.weak.length > 0 ? "scan" : null;
+
+  /** 确认框里的分级与待列出的记录：强命中优先，弱命中只用于「疑似」文案。 */
+  const dupGrade = dupPrompt && dupPrompt.match.strong.length === 0 ? "scan" : "index";
+  const dupHits = dupPrompt
+    ? (dupPrompt.match.strong.length > 0 ? dupPrompt.match.strong : dupPrompt.match.weak)
     : [];
 
   /** 卡片/浮层共用的 key，与 data-res-card 一致。 */
@@ -842,8 +968,13 @@ export function ModsPage() {
                 const creating = packBusy?.key === key;
                 const updatedAt = updatedAtOf(mod);
                 const badge = isBackendKind(kind) ? KIND_BADGE[kind] : null;
-                // 项目级判定：装过任意版本就算已装，具体是哪个文件在详情里的文件行标。
-                const installedHits = isBackendKind(kind) ? installedOf(kind, mod.projectId) : [];
+                // 项目级判定：索引命中=已安装，扫描兜底命中=疑似已安装（可能只是同名）。
+                const installedMatch = isBackendKind(kind)
+                  ? matchInstalled(kind, { projectId: mod.projectId, slug: mod.slug, title: mod.title })
+                  : EMPTY_MATCH;
+                const installedGrade = installedMatch.strong.length > 0
+                  ? "index"
+                  : installedMatch.weak.length > 0 ? "scan" : null;
                 return (
                   <article key={key} className="res-card" data-res-card={key}>
                     <button
@@ -861,13 +992,13 @@ export function ModsPage() {
                           <span className={`badge res-source res-source-${mod.provider}`} data-res-source={mod.provider}>
                             {SOURCE_BADGE[mod.provider]}
                           </span>
-                          {installedHits.length > 0 ? (
+                          {installedGrade ? (
                             <span
-                              className="badge res-installed"
-                              data-res-installed={key}
-                              title={`已安装：${installedHits.map((hit) => hit.fileName).join(" / ")}`}
+                              className={`badge res-installed ${installedGrade === "scan" ? "is-scan" : ""}`.trim()}
+                              data-res-installed={installedGrade}
+                              title={`${installedGrade === "index" ? "已安装" : "疑似已安装"}：${hitFileNames(installedMatch)}`}
                             >
-                              已安装
+                              {installedGrade === "index" ? "已安装" : "疑似已安装"}
                             </span>
                           ) : null}
                         </div>
@@ -1008,7 +1139,7 @@ export function ModsPage() {
           fallbackTitle={selected.title}
           titleZh={translateMods ? selected.titleZh : undefined}
           summaryZh={translateMods ? selected.summaryZh : undefined}
-          installLabel={selectedInstalled.length > 0 ? "重新安装" : KIND_INSTALL_LABEL[detailKind]}
+          installLabel={selectedGrade ? "重新安装" : KIND_INSTALL_LABEL[detailKind]}
           onClose={() => setSelected(null)}
           onInstall={() => {
             // 整合包：新建实例，不需要选实例。
@@ -1028,7 +1159,11 @@ export function ModsPage() {
           instanceName={currentInstance?.name}
           installHint={detailKind === "modpack"
             ? `将新建实例「${titleOf(selected)}」并安装，可能需要几分钟`
-            : undefined}
+            : selectedGrade === "index"
+              ? "该实例里已装过这个资源，继续会再装一份"
+              : selectedGrade === "scan"
+                ? `实例里疑似已装过（${hitFileNames(selectedMatch)}），继续会再装一份`
+                : undefined}
           noInstance={detailKind !== "modpack" && !currentInstance}
           filesSlot={
             <>
@@ -1060,8 +1195,12 @@ export function ModsPage() {
                             <MatchTag exact={file.exactMatch} />
                             {isInstalledFile(detailKind, file.fileName) ? (
                               <span className="badge res-installed" data-file-installed="same">已装此版本</span>
-                            ) : selectedInstalled.length > 0 ? (
+                            ) : selectedMatch.strong.length > 0 ? (
                               <span className="badge res-installed" data-file-installed="other">已装其它版本</span>
+                            ) : selectedMatch.weak.length > 0 ? (
+                              <span className="badge res-installed is-scan" data-file-installed="other-scan">
+                                疑似已装其它版本
+                              </span>
                             ) : null}
                           </div>
                           <div className="file-meta">
@@ -1107,12 +1246,14 @@ export function ModsPage() {
         <ModDepsDialog open deps={depsPrompt.deps} projectTitle={depsPrompt.title} onChoose={resolveDeps} />
       ) : null}
 
-      {/* 已装过同一项目：默认不静默拦，交给用户决定是否覆盖。 */}
+      {/* 已装过同一项目（或磁盘上疑似同一资源）：默认不静默拦，交给用户决定是否覆盖。 */}
       {dupPrompt ? (
         <Modal
           open
-          title="该实例已安装这个资源"
-          subtitle={`实例「${currentInstance?.name ?? ""}」里已经有「${titleOf(dupPrompt.mod)}」，继续会再装一份`}
+          title={dupGrade === "index" ? "该实例已安装这个资源" : "实例里已存在看起来相同的资源"}
+          subtitle={dupGrade === "index"
+            ? `实例「${currentInstance?.name ?? ""}」里已经有「${titleOf(dupPrompt.mod)}」，继续会再装一份`
+            : `没在安装索引里找到「${titleOf(dupPrompt.mod)}」，但磁盘上有名字相近的文件，继续会再装一份`}
           width={460}
           onClose={() => resolveDuplicate(false)}
           footer={
@@ -1126,19 +1267,30 @@ export function ModsPage() {
             </>
           }
         >
-          <p className="confirm-text">已装的记录：</p>
+          <p className="confirm-text">
+            {dupGrade === "index" ? "索引里已装的记录：" : "磁盘上匹配到的文件："}
+          </p>
           <ul className="dep-list" data-dup-list>
-            {dupPrompt.hits.map((hit) => (
+            {dupHits.map((hit) => (
               <li key={`${hit.kind}:${hit.fileName}`} className="dep-row" data-dup-row data-dup-file={hit.fileName}>
                 <div className="dep-main">
                   <span className="dep-name">{hit.fileName}</span>
+                  {hit.versionId ? (
+                    <span className="dep-file">版本 {hit.versionId}</span>
+                  ) : hit.name ? (
+                    <span className="dep-file">{hit.name}</span>
+                  ) : null}
                 </div>
-                <span className="badge dep-badge-ok">已安装</span>
+                <span className={`badge ${dupGrade === "index" ? "dep-badge-ok" : "dep-badge-builtin"}`}>
+                  {dupGrade === "index" ? "已安装" : "疑似同款"}
+                </span>
               </li>
             ))}
           </ul>
           <p className="dep-hint">
-            覆盖安装会写入 {dupPrompt.incoming}；同名文件直接覆盖，旧版本文件不会自动删除。
+            {dupGrade === "index"
+              ? `覆盖安装会写入 ${dupPrompt.incoming}；同名文件直接覆盖，旧版本文件不会自动删除。`
+              : `这些文件只是名字/元数据相近，可能并不是同一个资源；覆盖安装会写入 ${dupPrompt.incoming}，旧文件不会自动删除。`}
           </p>
         </Modal>
       ) : null}

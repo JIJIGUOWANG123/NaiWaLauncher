@@ -9,7 +9,7 @@ import type {
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { contentDirForInstance, downloadModFile, safeFileName } from "./install";
-import { modsDirForInstance, readModMetadata } from "./installed";
+import { modsDirForInstance, readModMetadata, scanInstalledContent, type ScannedMod } from "./installed";
 import { shaderBuiltinDependency } from "./prereq";
 import {
   bestFile, loaderAppliesTo, mapLimit, matchTier, messageOf, versionOnlyTier, type MatchTier,
@@ -425,32 +425,97 @@ async function dependencyFileId(
   return best.fileId;
 }
 
+/** 扫描兜底覆盖的目录：顺序固定，排序也按 kind，界面与自检比对才稳定。 */
+const SCAN_KINDS: ModContentKind[] = ["mod", "shader", "resourcepack"];
+
+/** 去重键：同名文件可能同时躺在 mods 与 resourcepacks，必须把 kind 带上。 */
+function contentKey(kind: ModContentKind, fileName: string): string {
+  return kind + "\u0000" + fileName;
+}
+
+/** 文件名主干（去掉扩展名）：资源包/光影没有可读元数据，名称只能用它。 */
+function nameStem(fileName: string): string {
+  return basename(fileName, extname(fileName));
+}
+
+/** 同名同 kind 时的先后：索引是精确来源，排在扫描兜底前面。 */
+const SOURCE_RANK: Record<NonNullable<InstalledContentRef["source"]>, number> = { index: 0, scan: 1 };
+
 /**
- * 实例里「索引有记录 + 磁盘上真的存在」的内容清单（资源页下载前的重复检测用）。
- * 目录按记录自己的 kind 定位：同名文件躺在别的目录里不算这个资源装过；索引留着但用户手删过
- *（或只剩 .bak）的条目也不返回。索引缺失/损坏/目录不存在一律退化成空数组，不抛错。
+ * 实例里已装内容的清单（资源页重复检测用）：安装索引 + 磁盘扫描两路合并。
+ * - 索引条目先过磁盘核对：索引只证明「装过」，用户手删过（或只剩 .bak）的不算已装；
+ * - 索引里没有的老文件、用户手工丢进目录的，由 scanInstalledContent 扫出来补 source: "scan" 的条目
+ *   （没有来源信息，projectId 为空串，只能按文件名/modId 模糊匹配）。
+ * 每个目录只扫一次：索引条目的 modId/name 与扫描条目复用同一份结果，48 个模组不会重复解析 jar
+ * （逐个 jar 解压读元数据是真实 IO 成本，一次调用里每个文件只解析一次）。
  */
 export async function listInstalledContent(instanceId: string): Promise<InstalledContentRef[]> {
   const records = (await readInstallMap())[instanceId] ?? {};
+
+  // kind → fileName → 扫描结果
+  const scanned = new Map<ModContentKind, Map<string, ScannedMod>>();
+  for (const kind of SCAN_KINDS) {
+    const byFile = new Map<string, ScannedMod>();
+    for (const item of await scanInstalledContent(instanceId, kind)) byFile.set(item.fileName, item);
+    scanned.set(kind, byFile);
+  }
+
   const found: InstalledContentRef[] = [];
+  const seen = new Set<string>();
+
+  // 1) 索引条目：精确来源，磁盘核对通过才算已装
   for (const [fileName, record] of Object.entries(records)) {
     try {
       const dir = contentDirForInstance({ id: instanceId }, record.kind);
       const info = await stat(join(dir, safeFileName(fileName)));
       if (!info.isFile()) continue;
-      found.push({
-        provider: record.provider,
-        projectId: record.projectId,
-        versionId: record.versionId,
-        kind: record.kind,
-        fileName,
-      });
     } catch {
       // 文件名非法、该类型没有内容目录（地图）或文件已被删：一律不算已装
+      continue;
+    }
+    const key = contentKey(record.kind, fileName);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    // 模组顺手补 modId/名字：复用上面的扫描结果，不额外读一次 jar
+    const meta = scanned.get(record.kind)?.get(fileName);
+    found.push({
+      provider: record.provider,
+      projectId: record.projectId,
+      versionId: record.versionId,
+      kind: record.kind,
+      fileName,
+      source: "index",
+      modId: meta?.modId,
+      name: meta?.name ?? (record.kind === "mod" ? nameStem(fileName) : undefined),
+    });
+  }
+
+  // 2) 扫描兜底：目录里有、索引里没有的（老版本装的、用户手工放进去的）
+  for (const kind of SCAN_KINDS) {
+    for (const item of scanned.get(kind)?.values() ?? []) {
+      const key = contentKey(kind, item.fileName);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      found.push({
+        // 契约要求 provider 必填：扫描条目没有来源信息，projectId 为空串时不参与任何项目比对
+        provider: "modrinth",
+        projectId: "",
+        kind,
+        fileName: item.fileName,
+        source: "scan",
+        modId: kind === "mod" ? item.modId : undefined,
+        name: kind === "mod" ? item.name ?? nameStem(item.fileName) : nameStem(item.fileName),
+      });
     }
   }
-  // 顺序稳定：界面与自检都按 kind 再按文件名比对
-  found.sort((a, b) => a.kind.localeCompare(b.kind) || a.fileName.localeCompare(b.fileName));
+
+  // 顺序稳定：kind → 文件名；同名同 kind 撞上时索引在前
+  found.sort(
+    (a, b) =>
+      a.kind.localeCompare(b.kind)
+      || a.fileName.localeCompare(b.fileName)
+      || SOURCE_RANK[a.source ?? "index"] - SOURCE_RANK[b.source ?? "index"],
+  );
   return found;
 }
 

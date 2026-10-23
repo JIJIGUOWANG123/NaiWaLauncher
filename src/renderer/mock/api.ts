@@ -13,7 +13,7 @@ import {
   DEFAULT_SETTINGS, MOCK_ACCOUNTS, MOCK_APP_INFO, MOCK_INSTALLED_JAVA, MOCK_INSTALLED_MODS, MOCK_INSTANCES,
   MOCK_JAVA_RELEASES, MOCK_DATA_ROOT, MOCK_GAME_ROOT, MOCK_CONTENT, MOCK_CONTENT_META, MOCK_MAPS, MOCK_MEDIA,
   MOCK_INSTALLED_PACKS, MOCK_MOD_DEPENDENCIES, MOCK_MOD_UPDATES, MOCK_PACK_DEPENDENCIES, MOCK_PACK_UPDATES,
-  MOCK_ROOT, MOCK_SAVES, MOCK_SOURCES, MOCK_STARTUP_SOUND, MOCK_VERSIONS,
+  MOCK_ROOT, MOCK_SAVES, MOCK_SCANNED_CONTENT, MOCK_SOURCES, MOCK_STARTUP_SOUND, MOCK_VERSIONS,
   mockDependencyFile, mockDetailFor, mockFiles, mockFindProject, mockIconUrl, mockLoaderVersions,
 } from "./data";
 import { emitDone, emitProgress, mockBus } from "./emitter";
@@ -508,6 +508,10 @@ export function createMockApi(): NaiwaApi {
       },
       openInstanceMods: async (instanceId: string) => {
         console.info("[mock] 打开实例模组目录", instanceId);
+        await sleep(80);
+      },
+      openInstanceContent: async (instanceId: string, kind: ModContentKind) => {
+        console.info("[mock] 打开实例内容目录", instanceId, kind);
         await sleep(80);
       },
       openPath: async (target: string) => {
@@ -1394,8 +1398,14 @@ export function createMockApi(): NaiwaApi {
               fileName: item.fileName,
               // mock 只记了版本标签，真实实现给的是站点那边的 versionId。
               versionId: item.version,
+              source: "index",
             });
           }
+        }
+        // 磁盘扫描兜底：没有索引的老文件/手工放进去的资源，projectId 为空串，
+        // 只能靠 modId/文件名主干做弱匹配——这正是事故现场那种实例的形态。
+        for (const extra of MOCK_SCANNED_CONTENT[instanceId] ?? []) {
+          refs.push({ ...extra });
         }
         return refs;
       },

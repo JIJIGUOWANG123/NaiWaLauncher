@@ -1,6 +1,4 @@
 import type { ComponentType } from "react";
-import { iconSrc } from "../lib/appIcon";
-import { DEFAULT_BRAND } from "../lib/brand";
 import { useApp, type PageId } from "../lib/store";
 import { useTasks } from "../lib/tasks";
 import { isMockApi } from "../lib/api";
@@ -28,26 +26,11 @@ const NAV: NavItem[] = [
 ];
 
 export function Sidebar() {
-  const { page, navigate, info, iconUrl, update } = useApp();
+  const { page, navigate, info, update } = useApp();
   const { runningCount } = useTasks();
 
   return (
     <aside className="sidebar">
-      <div className="brand">
-        <img
-          className="brand-logo"
-          src={iconSrc(iconUrl)}
-          alt="奶娃启动器"
-          width={40}
-          height={40}
-          data-app-icon={iconUrl ? "custom" : "default"}
-        />
-        <div className="brand-text">
-          <strong title={DEFAULT_BRAND.title} data-brand-title>{DEFAULT_BRAND.title}</strong>
-          <span title={DEFAULT_BRAND.subtitle} data-brand-subtitle>{DEFAULT_BRAND.subtitle}</span>
-        </div>
-      </div>
-
       <nav className="nav" aria-label="主导航">
         {NAV.map((item) => (
           <button

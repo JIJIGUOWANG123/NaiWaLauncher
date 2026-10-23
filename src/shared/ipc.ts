@@ -36,6 +36,7 @@ export const IPC = {
   natfrpStop: "net:natfrpStop",
   natfrpNodes: "net:natfrpNodes",
   openInstanceMods: "app:openInstanceMods",
+  openInstanceContent: "app:openInstanceContent",
   openRootDir: "app:openRootDir",
   log: "app:log",
 
@@ -185,6 +186,8 @@ export interface NaiwaApi {
     revealInFolder(path: string): Promise<void>;
     /** 打开指定实例的模组目录（自动按版本隔离模式定位）。 */
     openInstanceMods(instanceId: string): Promise<void>;
+    /** 打开指定实例的某一类内容目录：mod → mods、shader → shaderpacks、resourcepack → resourcepacks（跟随版本隔离设置）。 */
+    openInstanceContent(instanceId: string, kind: ModContentKind): Promise<void>;
     openExternal(url: string): Promise<void>;
   };
   settings: {

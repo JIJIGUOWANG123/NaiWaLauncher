@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { InstanceMeta } from "../../shared/types";
+import type { InstanceMeta, ModContentKind } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatRelative, instanceDiskUsage, instanceMemory, loaderLabel } from "../lib/format";
 import { iconSrc } from "../lib/appIcon";
@@ -9,12 +9,21 @@ import { useToast } from "../components/Toast";
 import { LoaderBadge } from "../components/Badges";
 import { ConfirmDialog } from "../components/Modal";
 import { CreateInstanceModal, EditInstanceModal } from "../components/InstanceModals";
+import { AnchoredMenu } from "../components/AnchoredMenu";
 import { InstanceDetailDrawer } from "../components/InstanceDetailDrawer";
+import { ContentDrawer } from "../components/ContentDrawer";
 import { SaveDrawer } from "../components/SaveDrawer";
 import { EmptyState, ErrorState, SkeletonCards } from "../components/State";
 import {
-  IconBook, IconDownload, IconFolder, IconMods, IconPackage, IconPlay, IconPlus, IconRefresh, IconSettings, IconTrash,
+  IconBook, IconDownload, IconFolder, IconList, IconMods, IconPackage, IconPlay, IconPlus, IconRefresh, IconSettings, IconTrash,
 } from "../components/icons";
+
+/** 「资源目录」下拉里的三项：目录名同时用于提示文案。 */
+const CONTENT_DIRS: Array<{ kind: ModContentKind; label: string; short: string }> = [
+  { kind: "mod", label: "模组目录", short: "mods" },
+  { kind: "shader", label: "光影目录", short: "shaderpacks" },
+  { kind: "resourcepack", label: "材质目录", short: "resourcepacks" },
+];
 
 export function InstancesPage() {
   const { info, instances, instancesLoading, instancesError, reloadInstances, iconUrl } = useApp();
@@ -24,6 +33,8 @@ export function InstancesPage() {
   const [deleting, setDeleting] = useState<InstanceMeta | null>(null);
   const [busyDelete, setBusyDelete] = useState(false);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
+  // 「资源目录」下拉：记下被点的按钮当锚点，浮层 Portal 到 body 才不会被卡片裁切。
+  const [dirMenu, setDirMenu] = useState<{ instance: InstanceMeta; anchor: HTMLElement; name: string } | null>(null);
   // 导出先过确认弹窗：exporting 存待导出实例，busyExport 控制「导出中…」。
   const [exporting, setExporting] = useState<InstanceMeta | null>(null);
   const [busyExport, setBusyExport] = useState(false);
@@ -35,6 +46,12 @@ export function InstancesPage() {
   const savesInstance = useMemo(
     () => (savesId ? instances.find((item) => item.id === savesId) ?? null : null),
     [instances, savesId],
+  );
+  // 内容管理（模组 / 光影包 / 资源包）独立成抽屉，同样只存 id。
+  const [contentId, setContentId] = useState<string | null>(null);
+  const contentInstance = useMemo(
+    () => (contentId ? instances.find((item) => item.id === contentId) ?? null : null),
+    [instances, contentId],
   );
   const managing = useMemo(
     () => (managingId ? instances.find((item) => item.id === managingId) ?? null : null),
@@ -66,12 +83,14 @@ export function InstancesPage() {
     }
   };
 
-  // 实例模组目录在游戏目录下，主进程会 resolve 并拒绝越界路径。
-  const openModsDir = async (instance: InstanceMeta) => {
+  /**
+   * 实例里的三类内容目录都在游戏目录下，主进程负责 resolve 与越界拒绝。
+   * 按钮统一叫「资源目录」，点开后再选具体是哪一类。
+   */
+  const openContentDir = async (instance: InstanceMeta, kind: ModContentKind, label: string) => {
     try {
-      const gameRoot = (info ?? (await api.app.info())).gameRoot.replace(/[\\/]+$/, "");
-      await api.app.openInstanceMods(instance.id);
-      push(`已打开模组目录：.minecraft/instances/${instance.id}/mods`, "success");
+      await api.app.openInstanceContent(instance.id, kind);
+      push(`已打开${label}`, "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -248,17 +267,35 @@ export function InstancesPage() {
                   <IconSettings size={16} />
                   <span>设置</span>
                 </button>
-                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setManagingId(instance.id)} title="管理加载器与模组">
+                <button type="button" className="btn btn-ghost btn-icon" onClick={() => setManagingId(instance.id)} title="管理加载器、Java 与启动窗口">
                   <IconMods size={16} />
                   <span>管理</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-icon"
+                  data-action="open-content"
+                  onClick={() => setContentId(instance.id)}
+                  title="管理已安装的模组、光影包与资源包"
+                >
+                  <IconList size={16} />
+                  <span>资源</span>
                 </button>
                 <button type="button" className="btn btn-ghost btn-icon" onClick={() => void openLogsDir(instance)} title="打开启动器日志目录（排查启动失败）">
                   <IconFolder size={16} />
                   <span>日志</span>
                 </button>
-                <button type="button" className="btn btn-ghost btn-icon" onClick={() => void openModsDir(instance)} title="打开模组目录">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-icon"
+                  aria-haspopup="menu"
+                  aria-expanded={dirMenu?.instance.id === instance.id}
+                  data-action="open-content-dir"
+                  onClick={(event) => setDirMenu({ instance, anchor: event.currentTarget, name: instance.name })}
+                  title="打开资源目录（模组 / 光影 / 材质）"
+                >
                   <IconFolder size={16} />
-                  <span>模组目录</span>
+                  <span>资源目录</span>
                 </button>
                 <button type="button" className="btn btn-ghost btn-icon" onClick={() => setSavesId(instance.id)} title="查看存档并直接进入">
                   <IconBook size={16} />
@@ -295,6 +332,11 @@ export function InstancesPage() {
         onClose={() => setManagingId(null)}
         onChanged={() => void reloadInstances()}
       />
+      <ContentDrawer
+        instance={contentInstance}
+        open={contentId !== null}
+        onClose={() => setContentId(null)}
+      />
       <SaveDrawer
         instance={savesInstance}
         open={savesId !== null}
@@ -311,6 +353,35 @@ export function InstancesPage() {
         onCancel={() => setExporting(null)}
         onConfirm={() => void confirmExport()}
       />
+      {dirMenu ? (
+        <AnchoredMenu
+          anchor={dirMenu.anchor}
+          onClose={() => setDirMenu(null)}
+          ariaLabel="打开资源目录"
+          menuKey={dirMenu.instance.id}
+          width={208}
+        >
+          <span className="res-menu-title">{dirMenu.name} · 资源目录</span>
+          {CONTENT_DIRS.map((item) => (
+            <button
+              key={item.kind}
+              type="button"
+              role="menuitem"
+              className="res-menu-item"
+              data-menu-dir={item.kind}
+              onClick={() => {
+                const target = dirMenu.instance;
+                setDirMenu(null);
+                void openContentDir(target, item.kind, item.label + "：" + item.short);
+              }}
+            >
+              <span className="res-menu-name">{item.label}</span>
+              <span className="res-menu-meta">{item.short}</span>
+            </button>
+          ))}
+        </AnchoredMenu>
+      ) : null}
+
       <ConfirmDialog
         open={deleting !== null}
         title="删除实例"

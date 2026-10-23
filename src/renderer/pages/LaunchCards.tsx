@@ -6,10 +6,11 @@ import { useSliderDraft } from "../lib/useSliderDraft";
 import { errorMessage } from "../lib/useAsync";
 import { Collapse } from "../components/Collapse";
 import { Field, Segmented, Select, Slider, TextInput } from "../components/Form";
+import { ContentDrawer } from "../components/ContentDrawer";
 import { InstanceDetailDrawer } from "../components/InstanceDetailDrawer";
 import { EmptyState } from "../components/State";
 import { useToast } from "../components/Toast";
-import { IconRefresh } from "../components/icons";
+import { IconList, IconRefresh } from "../components/icons";
 import { RECOMMENDED_MEMORY_MB, deviceMemoryGb, memoryUpperMb, readHeap } from "../lib/memory";
 
 const MODE_OPTIONS: Array<{ value: "auto" | "custom"; label: string }> = [
@@ -165,6 +166,7 @@ export function AdvancedCard() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [contentOpen, setContentOpen] = useState(false);
 
   useEffect(() => setDraft(currentInstance?.extraJvmArgs ?? ""), [currentInstance?.id, currentInstance?.extraJvmArgs]);
 
@@ -213,7 +215,11 @@ export function AdvancedCard() {
             <button type="button" className="btn btn-ghost" onClick={() => setDetailOpen(true)}>
               版本独立设置
             </button>
-            <span className="ext-note">打开「{currentInstance.name}」的实例详情，单独调整加载器与模组</span>
+            <button type="button" className="btn btn-ghost" data-action="open-content" onClick={() => setContentOpen(true)}>
+              <IconList size={15} />
+              资源管理
+            </button>
+            <span className="ext-note">「版本独立设置」调加载器与启动窗口；模组 / 光影 / 材质在「资源管理」里</span>
           </div>
         </>
       ) : (
@@ -226,6 +232,7 @@ export function AdvancedCard() {
         onClose={() => setDetailOpen(false)}
         onChanged={() => void reloadInstances()}
       />
+      <ContentDrawer instance={currentInstance} open={contentOpen} onClose={() => setContentOpen(false)} />
     </Collapse>
   );
 }
