@@ -3,7 +3,7 @@ import type {
 } from "../../shared/ipc";
 import type {
   Account, DownloadJob, InstalledContentRef, InstalledModInfo, InstanceMeta, InstalledJava, LanAddress, LoaderKind,
-  LocalSkin, MapEntry, MicrosoftLoginState, ModCategory, ModContentKind, ModDependency, ModFilterOptions, ModProviderId,
+  LocalCape, LocalSkin, MapEntry, MicrosoftLoginState, ModCategory, ModContentKind, ModDependency, ModFilterOptions, ModProviderId,
   ModSearchResult,
   NatfrpStatus, NatfrpTunnel, NatfrpUser, PortProbeResult, ServerConsoleLine, ServerCoreId, ServerEntry, ServerStatus,
   SkinInfo, SkinProfile, TaskKind,
@@ -13,7 +13,7 @@ import { loaderLabel } from "../lib/format";
 import {
   DEFAULT_SETTINGS, MOCK_ACCOUNTS, MOCK_APP_INFO, MOCK_INSTALLED_JAVA, MOCK_INSTALLED_MODS, MOCK_INSTANCES,
   MOCK_JAVA_RELEASES, MOCK_DATA_ROOT, MOCK_GAME_ROOT, MOCK_CONTENT, MOCK_CONTENT_META, MOCK_MAPS, MOCK_MEDIA,
-  MOCK_INSTALLED_PACKS, MOCK_LOCAL_SKINS, MOCK_MOD_DEPENDENCIES, MOCK_MOD_UPDATES, MOCK_PACK_DEPENDENCIES, MOCK_PACK_UPDATES,
+  MOCK_INSTALLED_PACKS, MOCK_LOCAL_CAPES, MOCK_LOCAL_SKINS, MOCK_MOD_DEPENDENCIES, MOCK_MOD_UPDATES, MOCK_PACK_DEPENDENCIES, MOCK_PACK_UPDATES,
   MOCK_SERVER_CORES, MOCK_SERVERS, mockServerBuilds,
   MOCK_ROOT, MOCK_SAVES, MOCK_SCANNED_CONTENT, MOCK_SOURCES, MOCK_STARTUP_SOUND, MOCK_VERSIONS,
   mockDependencyFile, mockDetailFor, mockFiles, mockFindProject, mockIconUrl, mockLoaderVersions,
@@ -89,6 +89,8 @@ function mockYggInvalidReason(): string | null {
 const MOCK_SKIN_TEXTURE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAnklEQVR42u3WwQnCQBRF0SlEXGUl4tKtHdiKYAHahxWkDnf2YC9fEAa+oAExgmbOgbeIYEguA1oKAMALsygxNAGm7nLax9CaCLBezO+rL52vnQABGgmw668PcwJaCQC0ZbU9RN67398cz1FXfzHyZ58+X77XGPcTQIA/C/D1/yECCDBegGcTQIAfD9B1y8gTQIDGAgAAAAAAAAAAk3MDAfN1yzvK5/UAAAAASUVORK5CYII=";
 /** 应用皮肤后换成的另一张纹理：用来断言「上传成功后预览真的刷新了」。 */
 const MOCK_SKIN_TEXTURE_UPLOADED = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAnklEQVR42u3WsQnCUBSG0axi+xpttHMBwQ2cKE0GcAnHsHQEN7mC8OAJGhAjaO458BcRDMnHA+06AIAX+m2JsQkwd9dTH2NLEWBZNvfVl26vnQABkgS4DOeHOQFZAgC57NaHaPfu94/7IerqL0b72afP195rivsJIMCfBfj6/xABBJguwLMJIMCPByiLVbQTQIBkAQAAAAAAAACA2bkBs6yDw2fy90sAAAAASUVORK5CYII=";
+/** 微软账号的官方披风（64×32）：accounts.skin 的 capeUrl 返回它。 */
+const MOCK_SKIN_CAPE_OFFICIAL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAARElEQVR42u3WQQ0AIBADweohiEIiapCBhcMCX8hMUgP7akKy16ibCSDAp2brdTMBBBBAAAEEEEAAAVxhAQQAAAAAnnUAOGOGOOnO1l0AAAAASUVORK5CYII=";
 /** 第三方账号在皮肤站上的那张皮肤（slim）：只读预览用，和本地皮肤的贴图区分开。 */
 const MOCK_SKIN_YGG_TEXTURE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAfUlEQVR42u3aMQ3AIBCGUZQhgblSOiEHER0qpkZAAyGU4d6X/AbeeLn0va2fXDodAAAAAAAAAAAAAAAAAAAAEBCg5LuvrF7P1m0HBgAAAAAAAAAAAAAAAAAAAAICSJIkSZIkzbZ6UAn/YAEAAAAAAAAAAAAAAAAAAAD8DzAAXBbxrdaQtaIAAAAASUVORK5CYII=";
 const MOCK_SKIN_PICKED = "C:\\Users\\Public\\Pictures\\NAIWA-skin.png";
@@ -335,6 +337,15 @@ export function createMockApi(): NaiwaApi {
   }));
   /** 本地皮肤库内存态：内置皮肤只读，用户导入可增删。 */
   let localSkins: LocalSkin[] = MOCK_LOCAL_SKINS.map((item) => ({ ...item }));
+  /** 本地披风内存态 + 账号 id → 选中的披风文件名。 */
+  let localCapes: LocalCape[] = MOCK_LOCAL_CAPES.map((item) => ({ ...item }));
+  const capeSelection = new Map<string, string>();
+
+  const localCapesFor = (accountId?: string): LocalCape[] => {
+    const picked = accountId ? capeSelection.get(accountId) ?? "" : "";
+    return localCapes.map((item) => ({ ...item, active: item.fileName === picked }));
+  };
+
   /** 账号 id → 选中的皮肤文件名；没有记录表示跟随账号原皮肤。 */
   const skinSelection = new Map<string, string>(MOCK_ACCOUNTS.map((item) => [item.id, "steve.png"]));
 
@@ -952,12 +963,21 @@ export function createMockApi(): NaiwaApi {
         }
         // 微软应用没拿到 Minecraft 服务授权时只读：预览照常给，但 canUpload=false 并说明原因。
         if (mockSkinNoUpload()) {
-          return { source, skinUrl: MOCK_SKIN_TEXTURE, model: "classic", canUpload: false, error: SKIN_NO_UPLOAD_ERROR };
+          return {
+            source,
+            skinUrl: MOCK_SKIN_TEXTURE,
+            capeUrl: account.type === "microsoft" ? MOCK_SKIN_CAPE_OFFICIAL : undefined,
+            model: "classic",
+            canUpload: false,
+            error: SKIN_NO_UPLOAD_ERROR,
+          };
         }
         const applied = appliedSkins.get(id);
         return {
           source,
           skinUrl: applied?.skinUrl ?? MOCK_SKIN_TEXTURE,
+          // 微软账号的官方披风：主进程从 profile.skins 取，预览直接用这个直链。
+          capeUrl: account.type === "microsoft" ? MOCK_SKIN_CAPE_OFFICIAL : undefined,
           model: applied?.model ?? "classic",
           canUpload: true,
         };
@@ -1599,6 +1619,64 @@ export function createMockApi(): NaiwaApi {
         downloadListeners.add(cb);
         return () => { downloadListeners.delete(cb); };
       },
+    },
+
+    capes: {
+      list: async (accountId?: string) => {
+        trace("capes.list", { accountId: accountId ?? null });
+        await sleep(160);
+        return localCapesFor(accountId);
+      },
+      import: async (filePaths: string[]) => {
+        trace("capes.import", { count: filePaths.length, filePaths });
+        await sleep(300);
+        const imported: string[] = [];
+        const skipped: string[] = [];
+        for (const target of filePaths) {
+          const fileName = target.split(/[\\/]/).pop() || "cape.png";
+          if (!/\.png$/i.test(fileName) || localCapes.some((item) => item.fileName === fileName)) {
+            skipped.push(fileName);
+            continue;
+          }
+          localCapes = [...localCapes, {
+            fileName,
+            name: fileName.replace(/\.png$/i, ""),
+            path: MOCK_SKIN_CAPE_OFFICIAL,
+            sizeBytes: 64 * 32 * 4,
+            width: 64,
+            height: 32,
+            active: false,
+          }];
+          imported.push(fileName);
+        }
+        return { imported, skipped };
+      },
+      remove: async (fileName: string) => {
+        trace("capes.remove", { fileName });
+        await sleep(200);
+        if (!localCapes.some((item) => item.fileName === fileName)) {
+          throw new Error(`披风库里没有这个文件：${fileName}`);
+        }
+        localCapes = localCapes.filter((item) => item.fileName !== fileName);
+        for (const [accountId, picked] of capeSelection) {
+          if (picked === fileName) capeSelection.delete(accountId);
+        }
+        return localCapesFor();
+      },
+      select: async (accountId: string, fileName: string | null) => {
+        trace("capes.select", { accountId, fileName });
+        await sleep(120);
+        if (fileName === null) {
+          capeSelection.delete(accountId);
+        } else {
+          if (!localCapes.some((item) => item.fileName === fileName)) {
+            throw new Error(`披风库里没有这个文件：${fileName}`);
+          }
+          capeSelection.set(accountId, fileName);
+        }
+        return localCapesFor(accountId);
+      },
+      pathForFile: (file: File) => `${MOCK_DATA_ROOT}\\capes\\${file?.name || "cape.png"}`,
     },
 
     skinsLocal: {

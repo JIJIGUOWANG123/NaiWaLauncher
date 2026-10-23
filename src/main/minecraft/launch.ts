@@ -17,11 +17,18 @@ import { getPaths, instanceDir, versionDir } from "../core/paths";
 import { getSettings } from "../core/settings";
 import { resolveJavaFor } from "../java/index";
 import { LAUNCH_FEATURES, mavenPathOf, missingPlaceholders, nativesClassifierAllowed, rulesAllow, splitArgs, substitute } from "./args";
-import { applyToInstance } from "../skins/local";
+import { selectedLocalCape } from "../skins/capes";
+import { applyToInstance, selectedLocalSkin } from "../skins/local";
+import { registerOfflineProfile, startSkinApi } from "../skins/localapi";
 import { getInstance, updateInstance } from "./instances";
 import { getVersionJson, resolveBaseVersionId } from "./manifest";
 
 const log = logger("launch");
+
+/** 本地错误文案（launch 里已经有同语义的写法，单独抽一个避免重复三元表达式）。 */
+function messageOfLaunch(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 const LAUNCHER_VERSION = "0.1.5";
 // 离线模式：服务端只校验令牌前缀，给个占位值即可
@@ -75,6 +82,8 @@ interface LaunchIdentity {
   source: "account" | "name-fallback";
   /** 第三方账号的 API 根地址；有值时必须注入 authlib-injector。 */
   yggdrasilApiUrl?: string;
+  /** 离线账号的 id（选了本地皮肤/披风时要用它起本地皮肤 API）。 */
+  offlineAccountId?: string;
 }
 
 /**
@@ -145,11 +154,64 @@ async function resolveIdentity(instance: InstanceMeta): Promise<LaunchIdentity> 
     xuid: "",
     profileName: account.name,
     source: "account",
+    offlineAccountId: account.id,
   };
 }
 
 /**
- * 版本隔离：
+ * 纯函数：本地皮肤 API 的注入参数（自检直接断言，避免为了它去跑完整启动流程）。
+ * -javaagent 必须在主类之前进入 JVM，调用方把它放到 jvm 参数最前面。
+ */
+export function offlineSkinArgs(jarPath: string, apiBaseUrl: string): string[] {
+  return [authlibInjectorArg(jarPath, apiBaseUrl), "-Dauthlibinjector.side=client"];
+}
+
+/**
+ * 离线账号 + 选了本地皮肤/披风：起本地皮肤 API 并返回注入参数。
+ * 任何一步失败都只 warn 并返回空数组 —— 降级到「装 CustomSkinLoader」的老路，绝不阻断启动。
+ */
+async function offlineLocalSkinInjection(instance: InstanceMeta, identity: LaunchIdentity): Promise<string[]> {
+  const accountId = identity.offlineAccountId;
+  if (!accountId) return [];
+  try {
+    const [skin, cape] = await Promise.all([selectedLocalSkin(accountId), selectedLocalCape(accountId)]);
+    // 什么都没选：保持原样启动，不注入、不起服务
+    if (!skin && !cape) return [];
+
+    const supported = authlibInjectorSupported(instance.mcVersion);
+    if (supported === false) {
+      log.warn(
+        "该版本（" + instance.mcVersion + "）低于 1.7.10，authlib-injector 无法注入：本地皮肤/披风不会生效；" +
+          "可以改用「一键安装 CustomSkinLoader」的方式",
+      );
+      return [];
+    }
+
+    const api = await startSkinApi();
+    if (!api) {
+      log.warn("本地皮肤 API 启动失败，已回退到「装 CustomSkinLoader」的方式（皮肤/披风本次不生效）");
+      return [];
+    }
+    registerOfflineProfile({ accountId, uuid: identity.uuid, name: identity.name });
+
+    let jar: string;
+    try {
+      jar = (await ensureAuthlibInjector()).path;
+    } catch (err) {
+      log.warn(
+        "下载 authlib-injector 失败，已回退到「装 CustomSkinLoader」的方式（皮肤/披风本次不生效）：" + messageOfLaunch(err),
+      );
+      return [];
+    }
+    log.info("已注入本地皮肤 API：" + jar + " → " + api.baseUrl);
+    return offlineSkinArgs(jar, api.baseUrl);
+  } catch (err) {
+    log.warn("本地皮肤注入失败（不影响启动，可改用 CustomSkinLoader）：" + messageOfLaunch(err));
+    return [];
+  }
+}
+
+/** 版本隔离：
  * all  = 每个实例独立的游戏目录（<root>/.minecraft/instances/<id>）
  * none = 所有实例共用 <root>/.minecraft（options.txt、saves、mods 都落在那边）
  */
@@ -394,6 +456,9 @@ export async function buildLaunchArgs(instance: InstanceMeta): Promise<{ exe: st
       injectorArgs.push(authlibInjectorArg(jar, identity.yggdrasilApiUrl));
       log.info("已注入 authlib-injector：" + jar + " → API " + identity.yggdrasilApiUrl);
     }
+  } else if (identity.offlineAccountId) {
+    // 离线账号：用本地皮肤 API 让游戏自己取皮肤/披风（不需要装模组）；失败只 warn
+    injectorArgs.push(...(await offlineLocalSkinInjection(instance, identity)));
   }
 
   const extraJvmArgs = splitArgs(instance.extraJvmArgs ?? "");

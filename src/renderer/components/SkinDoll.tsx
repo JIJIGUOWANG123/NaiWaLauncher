@@ -125,14 +125,40 @@ export interface SkinTexture {
   label: string;
 }
 
+/** 披风贴图：账号官方披风与本地披风库都归一成这个形状。 */
+export interface CapeTexture {
+  /** 可直接用作 background-image 的地址（data: / file: / http(s)）。 */
+  url: string;
+  /** account = 账号自带（微软官方 / 皮肤站），local = 本地披风库。 */
+  source: "account" | "local";
+  /** 写进 data-skin-cape-label 的标识。 */
+  label: string;
+}
+
 /**
- * CSS 3D 小人：零依赖，贴图来自一张 PNG（本地皮肤库或皮肤站直链）。
- * 拖拽绕 Y 轴旋转，松手保持角度；换皮肤只换背景图，不重建结构。
+ * 披风正面那张 10×16 的贴图裁切。
+ * 依据：Minecraft 官方披风贴图是 64×32，左上有 1 像素留白，
+ * 「正面」占 (1,1)-(11,17)，「背面」在 (12,1)-(22,17) —— 这里只用正面那块。
+ */
+function capeFaceStyle(url: string, flip: string): CSSProperties {
+  return {
+    transform: flip,
+    backgroundImage: `url("${url}")`,
+    backgroundSize: `${64 * SCALE}px ${32 * SCALE}px`,
+    backgroundPosition: `${-1 * SCALE}px ${-1 * SCALE}px`,
+  };
+}
+
+/**
+ * CSS 3D 小人：零依赖，贴图来自一张 PNG（本地皮肤库或皮肤站直链），可再叠一层披风。
+ * 拖拽绕 Y 轴旋转，松手保持角度；换皮肤/披风只换背景图，不重建结构。
  */
 export function SkinDoll({
-  texture, emptyHint = "选一张皮肤就能预览",
+  texture, cape = null, emptyHint = "选一张皮肤就能预览",
 }: {
   texture: SkinTexture | null;
+  /** 披风层：只有拿到贴图时才渲染，和身体一起绕 Y 轴转。 */
+  cape?: CapeTexture | null;
   emptyHint?: string;
 }) {
   const [rotate, setRotate] = useState(-24);
@@ -161,6 +187,9 @@ export function SkinDoll({
       data-skin-doll={texture.label}
       data-skin-model={texture.model}
       data-skin-legacy={legacy ? "true" : "false"}
+      data-skin-cape={cape ? "true" : "false"}
+      data-skin-cape-source={cape?.source ?? "none"}
+      data-skin-cape-label={cape?.label}
       onPointerDown={(event) => {
         drag.current = { startX: event.clientX, base: rotate };
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -185,6 +214,24 @@ export function SkinDoll({
           transform: `rotateX(-8deg) rotateY(${rotate}deg)`,
         }}
       >
+        {cape ? (
+          // 披风挂在躯干后方：z 负方向再退半格，避免和后背贴图 z-fighting；
+          // 高度从肩膀（8）盖到 24，宽度 10 皮肤像素（比 8 宽的躯干略宽）。
+          <div
+            className="skin-doll-cape"
+            data-skin-cape-layer
+            style={{
+              left: (8 - 5) * SCALE,
+              top: 8 * SCALE,
+              width: 10 * SCALE,
+              height: 16 * SCALE,
+              transform: `translateZ(${-(2 + 0.5) * SCALE}px)`,
+            }}
+          >
+            <div className="skin-doll-cape-face" data-skin-cape-face="outer" style={capeFaceStyle(cape.url, "rotateY(180deg)")} />
+            <div className="skin-doll-cape-face" data-skin-cape-face="inner" style={capeFaceStyle(cape.url, "none")} />
+          </div>
+        ) : null}
         {parts.map((part) => (
           <div
             key={part.key}

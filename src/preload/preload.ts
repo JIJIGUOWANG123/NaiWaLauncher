@@ -143,6 +143,13 @@ const api: NaiwaApi = {
     onConsole: (cb) => { const h = (_e: unknown, line: ServerConsoleLine) => cb(line); ipcRenderer.on(IPC.serversConsoleLine, h); return () => ipcRenderer.off(IPC.serversConsoleLine, h); },
     onStatus: (cb) => { const h = (_e: unknown, entries: ServerEntry[]) => cb(entries); ipcRenderer.on(IPC.serversStatus, h); return () => ipcRenderer.off(IPC.serversStatus, h); },
   },
+  capes: {
+    list: (accountId) => invoke(IPC.capesList, accountId),
+    import: (filePaths) => invoke(IPC.capesImport, filePaths),
+    remove: (fileName) => invoke(IPC.capesRemove, fileName),
+    select: (accountId, fileName) => invoke(IPC.capesSelect, accountId, fileName),
+    pathForFile: (file) => webUtils.getPathForFile(file),
+  },
   events: {
     onProgress: (cb) => { const h = (_: unknown, p: TaskProgress) => cb(p); ipcRenderer.on("task:progress", h); return () => ipcRenderer.off("task:progress", h); },
     onTaskDone: (cb) => { const h = (_: unknown, r: TaskResult) => cb(r); ipcRenderer.on("task:done", h); return () => ipcRenderer.off("task:done", h); },

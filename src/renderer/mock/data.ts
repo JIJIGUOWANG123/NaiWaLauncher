@@ -1,7 +1,7 @@
 import type {
   Account, AppInfo, DownloadSourceInfo, InstalledContentRef, InstanceMeta, InstalledJava, InstalledModInfo, JavaRelease,
   LoaderKind,
-  LoaderVersionInfo, LocalSkin, MapEntry, ModContentKind, ModDependency, ModDetail, ModFileInfo, ModSearchResult, SaveInfo,
+  LoaderVersionInfo, LocalCape, LocalSkin, MapEntry, ModContentKind, ModDependency, ModDetail, ModFileInfo, ModSearchResult, SaveInfo,
   ServerBuildInfo, ServerCoreId, ServerCoreInfo, ServerEntry,
   Settings, VersionBrief,
 } from "../../shared/types";
@@ -1030,5 +1030,31 @@ export const MOCK_SERVERS: ServerEntry[] = [
       lastExitCode: 1,
     },
     status: "crashed",
+  },
+];
+
+
+/** 本地披风假数据：两张用户导入的 64×32 披风（<dataRoot>/capes）。 */
+const MOCK_CAPE_BLUE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAAR0lEQVR42u3YMQ0AIBAEwVOEJDSiBBGIoIWajhpmkjOw1ecTklLbupkAAnwQoI95TAABBBBAAAEEEMAlKIAAAngcAAAAwBM2bVCX2J2ubkMAAAAASUVORK5CYII=";
+const MOCK_CAPE_GREEN = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAARElEQVR42u3WMQ0AIBRDwUpCEIqQyYQA9o8FVshdUgNvakIy96qbCSDAp9rodTMBBBBAAAEEEEAAAVxhAQQAAAAAnnUAChSwkALsDLwAAAAASUVORK5CYII=";
+
+export const MOCK_LOCAL_CAPES: LocalCape[] = [
+  {
+    fileName: "蓝色披风.png",
+    name: "蓝色披风",
+    path: MOCK_CAPE_BLUE,
+    sizeBytes: 64 * 32 * 4,
+    width: 64,
+    height: 32,
+    active: false,
+  },
+  {
+    fileName: "绿色披风.png",
+    name: "绿色披风",
+    path: MOCK_CAPE_GREEN,
+    sizeBytes: 64 * 32 * 4,
+    width: 64,
+    height: 32,
+    active: false,
   },
 ];

@@ -641,6 +641,19 @@ export interface LocalSkinSelection {
   model: "classic" | "slim";
 }
 
+/** 本地披风（用户导入，<dataRoot>/capes）。 */
+export interface LocalCape {
+  fileName: string;
+  name: string;
+  /** 绝对路径。 */
+  path: string;
+  sizeBytes: number;
+  width: number;
+  height: number;
+  /** 当前账号是否选中了它。 */
+  active: boolean;
+}
+
 /** 把本地皮肤写进实例（CustomSkinLoader 的本地皮肤目录）的结果。 */
 export interface SkinApplyResult {
   /** 皮肤文件是否已写入实例。 */

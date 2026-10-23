@@ -1,7 +1,7 @@
 import {
   useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent,
 } from "react";
-import type { Account, LocalSkin, SkinApplyResult } from "../../shared/types";
+import type { Account, LocalCape, LocalSkin, SkinApplyResult } from "../../shared/types";
 import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
@@ -9,13 +9,18 @@ import { useToast } from "../components/Toast";
 import { ConfirmDialog } from "../components/Modal";
 import { Select } from "../components/Form";
 import { EmptyState, ErrorState, SkeletonCards } from "../components/State";
-import { SkinDoll, skinImageUrl, type SkinTexture } from "../components/SkinDoll";
+import { SkinDoll, skinImageUrl, type CapeTexture, type SkinTexture } from "../components/SkinDoll";
 import { IconChevronDown, IconLink, IconPlus, IconRefresh, IconTrash } from "../components/icons";
 
 const LITTLESKIN_URL = "https://littleskin.cn/";
 /** 第三方账号是只读预览：皮肤由皮肤站托管，启动器里不选中、不上传、不本地应用。 */
 const READONLY_HINT = "第三方账号的皮肤由皮肤站管理，启动器只做预览";
 const READONLY_NOTE = "第三方账号：只预览皮肤站上的皮肤，上传与本地应用请到皮肤站网页操作。";
+/** 披风只读说明：微软走 Mojang 官网，第三方走皮肤站。 */
+const CAPE_READONLY_HINT: Record<"microsoft" | "yggdrasil", string> = {
+  microsoft: "官方披风来自 Mojang 账号，只能在官网更换",
+  yggdrasil: "第三方账号的披风来自皮肤站，请到皮肤站网页更换",
+};
 const TYPE_LABEL: Record<Account["type"], string> = { offline: "离线", microsoft: "微软正版", yggdrasil: "第三方" };
 const TAB_LABEL: Record<SkinTab, string> = { saved: "已保存皮肤", official: "内置皮肤" };
 
@@ -55,6 +60,13 @@ export function SkinPage() {
   const [ensuring, setEnsuring] = useState(false);
   const [applyResult, setApplyResult] = useState<SkinApplyResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // 披风：离线账号可选本地披风，微软/第三方只读预览账号自带的披风。
+  const [capes, setCapes] = useState<LocalCape[] | null>(null);
+  const [capeBusy, setCapeBusy] = useState<string | null>(null);
+  const [capeImporting, setCapeImporting] = useState(false);
+  const [capeToDelete, setCapeToDelete] = useState<string | null>(null);
+  const capeInputRef = useRef<HTMLInputElement | null>(null);
 
   // 默认账号：设置里选中的那个，没有就取第一个；页面上仍可切换。
   useEffect(() => {
@@ -142,6 +154,43 @@ export function SkinPage() {
       : null;
   }, [accountTexture, readonly, skins]);
 
+  /** 只有离线账号能碰本地披风库；微软/第三方一律只读（只看账号自带披风）。 */
+  const capeEditable = account?.type === "offline";
+  const capeReadonlyType = account?.type === "microsoft" || account?.type === "yggdrasil"
+    ? account.type
+    : null;
+
+  const loadCapes = useCallback(async () => {
+    // 只读账号不读本地披风库：省一次 IPC，也不会让人误以为能选。
+    if (!accountId || !capeEditable) {
+      setCapes([]);
+      return;
+    }
+    try {
+      setCapes(await api.capes.list(accountId));
+    } catch (err: unknown) {
+      push(errorMessage(err), "error");
+    }
+  }, [accountId, capeEditable, push]);
+
+  useEffect(() => {
+    void loadCapes();
+  }, [loadCapes]);
+
+  /**
+   * 当前预览的披风：离线优先用本地选中的那张，其次账号自带（一般没有）；
+   * 微软/第三方只认 SkinInfo.capeUrl。
+   */
+  const previewCape = useMemo<CapeTexture | null>(() => {
+    const list = capes ?? [];
+    if (capeEditable) {
+      const chosen = list.find((item) => item.active) ?? null;
+      if (chosen) return { url: skinImageUrl(chosen.path), source: "local", label: chosen.fileName };
+    }
+    const capeUrl = accountSkin.data?.capeUrl;
+    return capeUrl ? { url: capeUrl, source: "account", label: "account" } : null;
+  }, [accountSkin.data, capeEditable, capes]);
+
   /** 拖放与「添加皮肤」卡片共用这一条导入链路（都走 skinsLocal.import）。 */
   const importFiles = async (files: File[]) => {
     // 导入的皮肤属于「已保存皮肤」：在内置 tab 里拖放时，导入完自动切过去，否则用户看不到结果
@@ -223,6 +272,67 @@ export function SkinPage() {
       push(errorMessage(err), "error");
     } finally {
       setBusyFile(null);
+    }
+  };
+
+  /** 披风导入：和皮肤同一条 webUtils 通道，但落到 capes.import。 */
+  const importCapeFiles = async (files: File[]) => {
+    if (!capeEditable) {
+      push("只有离线账号能使用本地披风", "info");
+      return;
+    }
+    const pngs = files.filter(isPng);
+    if (pngs.length === 0) {
+      push("只支持 PNG 披风文件", "error");
+      return;
+    }
+    setCapeImporting(true);
+    try {
+      const paths = pngs.map((file) => api.capes.pathForFile(file));
+      const result = await api.capes.import(paths);
+      push(result.imported.length > 0 ? `已导入 ${result.imported.length} 张披风` : "没有新的披风可导入", result.imported.length > 0 ? "success" : "info");
+      if (result.skipped.length > 0) push(`已跳过：${result.skipped.join("、")}`, "info");
+      await loadCapes();
+    } catch (err: unknown) {
+      push(errorMessage(err), "error");
+    } finally {
+      setCapeImporting(false);
+    }
+  };
+
+  const onPickCapeFiles = async (event: ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    await importCapeFiles(picked);
+  };
+
+  const selectCape = async (fileName: string) => {
+    if (!accountId || !capeEditable) {
+      push("只有离线账号能选择本地披风", "info");
+      return;
+    }
+    setCapeBusy(fileName);
+    try {
+      setCapes(await api.capes.select(accountId, fileName));
+      push("已选中这张披风", "success");
+    } catch (err: unknown) {
+      push(errorMessage(err), "error");
+    } finally {
+      setCapeBusy(null);
+    }
+  };
+
+  // 删除披风也是破坏性操作：先二次确认再调 capes.remove。
+  const removeCape = async (fileName: string) => {
+    setCapeToDelete(null);
+    setCapeBusy(fileName);
+    try {
+      setCapes(await api.capes.remove(fileName));
+      push(`已删除 ${fileName}`, "success");
+    } catch (err: unknown) {
+      push(errorMessage(err), "error");
+    } finally {
+      setCapeBusy(null);
     }
   };
 
@@ -420,7 +530,7 @@ export function SkinPage() {
       <div className="skin-layout">
         <section className="panel skin-stage" data-skin-preview-source={previewTexture?.source ?? "none"}>
           <span className="skin-name" data-skin-name>{account?.name ?? "未选择账号"}</span>
-          <SkinDoll texture={previewTexture} emptyHint="该账号还没有可预览的皮肤" />
+          <SkinDoll texture={previewTexture} cape={previewCape} emptyHint="该账号还没有可预览的皮肤" />
           <p className="skin-rotate-hint" data-skin-hint>拖动以旋转</p>
           {readonly ? (
             <p className="skin-account-hint" data-skin-account-hint>
@@ -497,6 +607,87 @@ export function SkinPage() {
         </section>
       </div>
 
+      <section className="panel skin-capes" data-skin-capes>
+        <div className="panel-head">
+          <h2 className="panel-title">披风</h2>
+          <span className="panel-count">
+            {capeEditable ? `${(capes ?? []).length} 张本地披风` : "账号自带 · 只读"}
+          </span>
+        </div>
+
+        <div className="skin-cape-current">
+          {previewCape ? (
+            <img className="skin-cape-thumb" src={previewCape.url} alt="" width={66} height={33} />
+          ) : (
+            <span className="skin-cape-thumb skin-cape-thumb-empty" data-skin-cape-empty aria-hidden="true" />
+          )}
+          <div className="skin-cape-current-text">
+            <span className="skin-cape-name" data-skin-cape-name>
+              {previewCape
+                ? (previewCape.source === "local"
+                  ? previewCape.label
+                  : (capeReadonlyType === "microsoft" ? "官方披风" : "皮肤站披风"))
+                : (capeReadonlyType ? "该账号没有披风" : "未设置披风")}
+            </span>
+            {capeReadonlyType ? (
+              <p className="skin-account-hint" data-cape-readonly={capeReadonlyType}>
+                {CAPE_READONLY_HINT[capeReadonlyType]}
+              </p>
+            ) : (
+              <p className="skin-account-hint">离线下可用本地披风：选一张后启动游戏即生效（走本地皮肤 API，不需要装模组）。</p>
+            )}
+          </div>
+        </div>
+
+        {capeEditable ? (
+          <div className="skin-grid skin-cape-grid" data-cape-grid>
+            {(capes ?? []).map((item) => (
+              <div
+                key={item.fileName}
+                className={`skin-card ${item.active ? "is-active" : ""}`.trim()}
+                data-cape-card={item.fileName}
+              >
+                <button
+                  type="button"
+                  className="skin-card-main"
+                  data-action="select-cape"
+                  onClick={() => void selectCape(item.fileName)}
+                  disabled={capeBusy === item.fileName}
+                  title={`${item.fileName} · ${item.width}×${item.height}`}
+                >
+                  <img className="skin-cape-thumb" src={skinImageUrl(item.path)} alt="" width={64} height={32} />
+                  <span className="skin-card-name">{item.name}</span>
+                  <span className="skin-card-meta">{item.width}×{item.height}</span>
+                </button>
+                {item.active ? <span className="badge skin-active-tag">使用中</span> : null}
+                <button
+                  type="button"
+                  className="skin-card-del"
+                  data-action="delete-cape"
+                  onClick={() => setCapeToDelete(item.fileName)}
+                  disabled={capeBusy === item.fileName}
+                  title="从本地披风库删除"
+                >
+                  <IconTrash size={14} />
+                  删除
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="skin-add skin-cape-add"
+              data-cape-add
+              onClick={() => capeInputRef.current?.click()}
+              disabled={capeImporting}
+            >
+              <IconPlus size={18} />
+              <span>{capeImporting ? "导入中…" : "添加披风"}</span>
+              <span className="skin-add-hint">64×32 的 PNG</span>
+            </button>
+          </div>
+        ) : null}
+      </section>
+
       <footer className="skin-recommend">
         <span>想让自己皮肤对别人也可见，可在 LittleSkin 上传：</span>
         <button type="button" className="account-link" data-action="open-littleskin" onClick={() => void openLittleSkin()}>
@@ -506,6 +697,7 @@ export function SkinPage() {
       </footer>
 
       <input ref={fileInputRef} type="file" accept="image/png" multiple hidden onChange={(event) => void onPickFiles(event)} />
+      <input ref={capeInputRef} type="file" accept="image/png" multiple hidden onChange={(event) => void onPickCapeFiles(event)} />
       <ConfirmDialog
         open={toDelete !== null}
         title="删除本地皮肤"
@@ -516,6 +708,18 @@ export function SkinPage() {
         onCancel={() => setToDelete(null)}
         onConfirm={() => {
           if (toDelete) void removeSkin(toDelete);
+        }}
+      />
+      <ConfirmDialog
+        open={capeToDelete !== null}
+        title="删除本地披风"
+        message={capeToDelete ? `确定删除 ${capeToDelete} 吗？该文件会从本地披风库移除。` : ""}
+        confirmText="删除"
+        danger
+        busy={capeBusy !== null}
+        onCancel={() => setCapeToDelete(null)}
+        onConfirm={() => {
+          if (capeToDelete) void removeCape(capeToDelete);
         }}
       />
     </section>

@@ -13,6 +13,7 @@ import { setSystemFetcher } from "./core/netfetch";
 import { registerIpc } from "./ipc/register";
 import type { Settings } from "../shared/types";
 import { createSplash, fadeInWindow, fadeOutSplash, logoPathFor, splashHoldRemaining } from "./splash";
+import { stopSkinApi } from "./skins/localapi";
 
 let mainWindow: BrowserWindow | null = null;
 const log = logger("main");
@@ -145,3 +146,8 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+
+// 本地皮肤 API 只在离线账号启动游戏时用：进程退出前关掉，别把 127.0.0.1 上的端口留着
+app.on("will-quit", () => {
+  void stopSkinApi();
+});

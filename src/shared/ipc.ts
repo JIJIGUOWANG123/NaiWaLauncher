@@ -1,6 +1,6 @@
 import type {
   Account, AppInfo, DeviceCodeChallenge, DownloadSourceId, DownloadSourceInfo, InstanceMeta, InstalledJava,
-  DownloadJob, InstalledModInfo, InstalledContentRef, LocalSkin, LocalSkinSelection, SkinApplyResult, ServerBuildInfo, ServerConsoleLine, ServerCoreId, ServerCoreInfo, ServerEntry, ServerMeta, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
+  DownloadJob, InstalledModInfo, InstalledContentRef, LocalCape, LocalSkin, LocalSkinSelection, SkinApplyResult, ServerBuildInfo, ServerConsoleLine, ServerCoreId, ServerCoreInfo, ServerEntry, ServerMeta, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
   PortProbeResult, SaveInfo, UpdateCheckResult, InstanceExportResult, InstanceImportResult,
   LoaderKind, LoaderVersionInfo, LogLine, ModCategory, ModFileInfo, ModFilterOptions, ModProviderId,
   ModSearchResult, ModSourceFilter, Settings, SkinInfo, SkinProfile, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
@@ -110,6 +110,10 @@ export const IPC = {
   skinsLocalRemove: "skins:localRemove",
   skinsLocalApply: "skins:localApply",
   skinsLocalEnsureMod: "skins:localEnsureMod",
+  capesList: "capes:list",
+  capesImport: "capes:import",
+  capesRemove: "capes:remove",
+  capesSelect: "capes:select",
   serversCores: "servers:cores",
   serversBuilds: "servers:builds",
   serversList: "servers:list",
@@ -401,6 +405,15 @@ export interface NaiwaApi {
     onConsole(cb: (line: ServerConsoleLine) => void): () => void;
     /** 列表状态变化推送（启动/停止/崩溃）。 */
     onStatus(cb: (entries: ServerEntry[]) => void): () => void;
+  };
+  /** 本地披风库：微软账号只读官方披风，离线账号可选本地披风并应用。 */
+  capes: {
+    list(accountId?: string): Promise<LocalCape[]>;
+    import(filePaths: string[]): Promise<{ imported: string[]; skipped: string[] }>;
+    remove(fileName: string): Promise<LocalCape[]>;
+    select(accountId: string, fileName: string | null): Promise<LocalCape[]>;
+    /** 拖放拿绝对路径（与皮肤同一个 webUtils 通道）。 */
+    pathForFile(file: File): string;
   };
   events: {
     onProgress(cb: (p: TaskProgress) => void): () => void;

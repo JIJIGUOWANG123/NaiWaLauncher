@@ -382,6 +382,21 @@ export async function selectLocalSkin(accountId: string, fileName: string | null
   return listLocalSkins(account);
 }
 
+/** 本地皮肤 API 用：该账号当前选中的皮肤文件（已被删或尺寸失效时 undefined）。 */
+export async function selectedLocalSkin(
+  accountId: string,
+): Promise<{ path: string; fileName: string; model: "classic" | "slim" } | undefined> {
+  const selections = await readSelections();
+  const selection = selections[accountId];
+  if (!selection) return undefined;
+  try {
+    const skin = await locateSkin(selection.fileName);
+    return { path: skin.path, fileName: selection.fileName, model: skin.model };
+  } catch {
+    return undefined;
+  }
+}
+
 // ---------- 对外：写进实例（CustomSkinLoader） ----------
 
 /** 实例里是否装了 CustomSkinLoader：先看 jar 元数据 modId，再退到文件名/显示名。 */

@@ -5,7 +5,7 @@ import { IPC } from "../../shared/ipc";
 import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest,
 } from "../../shared/ipc";
-import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
+import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { checkAppUpdates } from "../core/updates";
@@ -19,6 +19,7 @@ import { addToWardrobe, getSkin, listSkinProfiles, listWardrobe, pickSkinFile, r
 import {
   applyToInstance, ensureMod, importLocalSkins, listLocalSkins, removeLocalSkin, selectLocalSkin,
 } from "../skins/local";
+import { importCapes, listCapes, removeCape, selectCape } from "../skins/capes";
 import { SOURCES, probeSources, setActiveSource } from "../core/sources";
 import { listVersions } from "../minecraft/manifest";
 import { createInstance, deleteInstance, instanceDiskUsage, listInstances, listSaves, setLoader, updateInstance } from "../minecraft/instances";
@@ -225,6 +226,13 @@ export function registerIpc(): void {
   handle<{ installed: boolean; fileName?: string; message?: string }>(IPC.skinsLocalEnsureMod, (instanceId: string) =>
     ensureMod(instanceId),
   );
+  // 本地披风库：只给离线账号用（微软账号读官方披风，不经过这里）
+  handle<LocalCape[]>(IPC.capesList, (accountId?: string) => listCapes(accountId));
+  handle<{ imported: string[]; skipped: string[] }>(IPC.capesImport, (filePaths: string[]) =>
+    importCapes(Array.isArray(filePaths) ? filePaths : []),
+  );
+  handle<LocalCape[]>(IPC.capesRemove, (fileName: string) => removeCape(fileName));
+  handle<LocalCape[]>(IPC.capesSelect, (accountId: string, fileName: string | null) => selectCape(accountId, fileName));
 
   handle<void>(IPC.accountsSetActive, (id: string) => setActiveAccount(id));
   handle<DeviceCodeChallenge>(IPC.accountsBeginMicrosoft, () => beginDeviceCode());
