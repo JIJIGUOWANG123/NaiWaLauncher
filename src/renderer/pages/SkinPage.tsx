@@ -144,6 +144,8 @@ export function SkinPage() {
 
   /** 拖放与「添加皮肤」卡片共用这一条导入链路（都走 skinsLocal.import）。 */
   const importFiles = async (files: File[]) => {
+    // 导入的皮肤属于「已保存皮肤」：在内置 tab 里拖放时，导入完自动切过去，否则用户看不到结果
+    if (tab !== "saved") setTab("saved");
     if (readonly) {
       push(READONLY_HINT, "info");
       return;
@@ -470,12 +472,13 @@ export function SkinPage() {
                   title={tab === "saved" ? "还没有保存的皮肤" : "没有内置皮肤"}
                   hint={tab === "saved"
                     ? "把 64×64（或 64×32）的 PNG 拖进这里，或点下面的「添加皮肤」。"
-                    : "内置皮肤随程序一起分发：把 PNG 放进启动器根目录的 skins 文件夹后点刷新即可看到；缺失时可以重装启动器。"}
+                    : "内置皮肤随程序一起分发、只读，用户在本地无法添加或修改。若这里为空，说明安装包缺少内嵌皮肤资源，重装启动器即可恢复。"}
                 />
               ) : null}
               <div className="skin-grid" data-skin-grid>
                 {listSkins.map(renderCard)}
-                {readonly ? null : (
+                {/* 「添加皮肤」只属于用户自己的皮肤库：内置皮肤内嵌在程序里，用户既找不到也不该改它 */}
+                {readonly || tab !== "saved" ? null : (
                   <button
                     type="button"
                     className="skin-add"
