@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { BackgroundMode, Settings, ThemeId, TitleBarStyle, WallpaperEntry } from "../../shared/types";
+import type { ApiBackground, BackgroundMode, Settings, ThemeId, TitleBarStyle, WallpaperEntry } from "../../shared/types";
 import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { usePersist } from "../lib/persist";
@@ -23,6 +23,16 @@ const TITLE_BARS: Array<{ value: TitleBarStyle; label: string; hint: string }> =
   { value: "compact", label: "精简", hint: "40px 主题渐变细条，随主题色变化" },
   { value: "image", label: "图片", hint: "当前背景图做条底 + 半透明遮罩 + 主题色描边" },
 ];
+
+/** 背景来源三选：本地目录 / API 随机图 / Steam 壁纸引擎。 */
+const BG_SOURCES: Array<{ value: Settings["backgroundSource"]; label: string }> = [
+  { value: "local", label: "本地背景图" },
+  { value: "api", label: "API 随机图" },
+  { value: "wallpaperEngine", label: "Steam 壁纸引擎" },
+];
+
+/** API 随机图的示例地址：只当 placeholder 灰字提示，永远不写进设置、也不会被请求。 */
+const API_BG_PLACEHOLDER = "https://example.com/api/random?size=1920x1080";
 
 const BACKGROUND_MODES: Array<{ value: BackgroundMode; label: string }> = [
   { value: "single", label: "单张" },
@@ -221,6 +231,72 @@ export function PersonalizePage() {
     );
 
   const commitStartupVolume = () => void persist({ startupVolume }, "启动音效音量");
+
+  // ---- API 随机图：默认关闭（backgroundApiUrl 为空就是关闭，绝不发请求）----
+  const bgSource = settings?.backgroundSource ?? "local";
+  const apiUrl = (settings?.backgroundApiUrl ?? "").trim();
+  const apiEnabled = bgSource === "api" && apiUrl !== "";
+  const [apiUrlDraft, setApiUrlDraft] = useState(settings?.backgroundApiUrl ?? "");
+  const [apiBg, setApiBg] = useState<ApiBackground | null>(null);
+  const [apiRolling, setApiRolling] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const apiAutoRef = useRef(false);
+
+  useEffect(() => {
+    setApiUrlDraft(settings?.backgroundApiUrl ?? "");
+  }, [settings?.backgroundApiUrl]);
+
+  const commitApiUrl = () => {
+    const next = apiUrlDraft.trim();
+    if (next === (settings?.backgroundApiUrl ?? "")) return;
+    void persist({ backgroundApiUrl: next }, next ? "API 随机图地址" : "API 随机图地址（已清空，相当于关闭）");
+  };
+
+  /** 拉一张随机图：writeSettings=false 只更新本页预览（进入模式时用），按钮传 true 顺便记成当前背景。 */
+  const rollApiBackground = async (writeSettings = true) => {
+    if (!apiUrl) {
+      setApiError("还没有填写地址：API 随机图相当于关闭");
+      return;
+    }
+    setApiRolling(true);
+    setApiError(null);
+    try {
+      const next = await api.media.apiBackground();
+      if (!next) {
+        setApiError("接口没有返回可用的图片地址（主进程返回空）");
+        return;
+      }
+      setApiBg(next);
+      if (writeSettings) await persist({ backgroundImage: next.url }, "API 随机背景");
+    } catch (error: unknown) {
+      setApiError(errorMessage(error));
+    } finally {
+      setApiRolling(false);
+    }
+  };
+
+  // 切到「API 随机图」且已填地址时自动拉一张做预览（不写设置）；地址为空 = 关闭，一次请求都不发。
+  useEffect(() => {
+    if (!apiEnabled) {
+      setApiBg(null);
+      setApiError(null);
+      apiAutoRef.current = false;
+      return;
+    }
+    if (apiAutoRef.current) return;
+    apiAutoRef.current = true;
+    void (async () => {
+      setApiRolling(true);
+      try {
+        const next = await api.media.apiBackground();
+        if (next) setApiBg(next);
+      } catch (error: unknown) {
+        setApiError(errorMessage(error));
+      } finally {
+        setApiRolling(false);
+      }
+    })();
+  }, [apiEnabled]);
 
   // 设置回读（例如在别的页面改了音量）时把草稿拉回来，避免滑杆和真实值不一致。
   useEffect(() => {
@@ -444,14 +520,33 @@ export function PersonalizePage() {
 
         <div className="panel">
           <div className="panel-head">
-            <h2 className="panel-title">背景图片</h2>
-            <span className="panel-count">NaiWa/backgrounds</span>
+            <h2 className="panel-title">背景</h2>
+            <span className="panel-count">
+              {bgSource === "local" ? "NaiWa/backgrounds" : bgSource === "api" ? "API 随机图" : "Steam 壁纸引擎"}
+            </span>
           </div>
 
-          {media.loading ? <LoadingState label="读取背景图片…" /> : null}
+          {/* 背景来源三选：只有「本地」与「壁纸引擎」会用 backgroundImage，API 模式走独立请求 */}
+          <div className="segmented" role="tablist" aria-label="背景来源">
+            {BG_SOURCES.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                role="tab"
+                aria-selected={bgSource === item.value}
+                className={`segmented-item ${bgSource === item.value ? "active" : ""}`.trim()}
+                data-bg-source={item.value}
+                onClick={() => void persist({ backgroundSource: item.value }, "背景来源")}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          {bgSource === "local" && media.loading ? <LoadingState label="读取背景图片…" /> : null}
           {media.error ? <ErrorState message={media.error} onRetry={media.reload} /> : null}
 
-          {!media.loading && !media.error && backgrounds.length === 0 ? (
+          {bgSource === "local" && !media.loading && !media.error && backgrounds.length === 0 ? (
             <p className="media-empty">
               还没有背景资源：把图片（png / jpg / jpeg / webp / gif / bmp）或视频（mp4 / webm / ogv）放进 NaiWa/backgrounds，再点下面的「刷新背景图片」。
             </p>
@@ -464,23 +559,84 @@ export function PersonalizePage() {
             onChange={toggleTint}
           />
 
-          <Field
-            label="背景图 / 视频"
-            hint="支持图片与视频（mp4 / webm / ogv）：把文件放进 NaiWa/backgrounds 后点刷新；选中后立即铺满窗口"
-          >
-            <Select
-              value={settings.backgroundImage}
-              // 第一项是「不使用背景」：空串是有效选项，所以 keepEmpty（否则 Select 会把它当成 placeholder）
-              options={[
-                { value: "", label: "不使用背景（只留主题色）" },
-                ...backgrounds.map((name, index) => ({ value: name, label: mediaLabel(name, index) })),
-              ]}
-              keepEmpty
-              ariaLabel="背景图片"
-              disabled={media.loading}
-              onChange={pickBackground}
-            />
-          </Field>
+          {bgSource === "local" ? (
+            <Field
+              label="背景图 / 视频"
+              hint="支持图片与视频（mp4 / webm / ogv）：把文件放进 NaiWa/backgrounds 后点刷新；选中后立即铺满窗口"
+            >
+              <Select
+                value={settings.backgroundImage}
+                // 第一项是「不使用背景」：空串是有效选项，所以 keepEmpty（否则 Select 会把它当成 placeholder）
+                options={[
+                  { value: "", label: "不使用背景（只留主题色）" },
+                  ...backgrounds.map((name, index) => ({ value: name, label: mediaLabel(name, index) })),
+                ]}
+                keepEmpty
+                ariaLabel="背景图片"
+                disabled={media.loading}
+                onChange={pickBackground}
+              />
+            </Field>
+          ) : null}
+
+          {bgSource === "api" ? (
+            <>
+              <Field
+                label="随机图地址"
+                hint="地址可以直接返回图片，也可以返回包含图片地址的 JSON（主进程会挑出图片字段）。留空 = 关闭 API 随机图"
+              >
+                <div className="key-row">
+                  <TextInput
+                    value={apiUrlDraft}
+                    // placeholder 只是灰字示例：不会写进设置，也不会被请求
+                    placeholder={API_BG_PLACEHOLDER}
+                    aria-label="API 随机图地址"
+                    spellCheck={false}
+                    autoComplete="off"
+                    data-bg-api-url
+                    onChange={(event) => setApiUrlDraft(event.target.value)}
+                    onBlur={commitApiUrl}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") commitApiUrl();
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    data-action="refresh-api-background"
+                    onClick={() => void rollApiBackground(true)}
+                    disabled={apiRolling || !apiUrl}
+                    title={apiUrl ? "立即向该地址要一张新图" : "先在左边填写地址"}
+                  >
+                    {apiRolling ? "拉取中…" : "立即换一张"}
+                  </button>
+                </div>
+              </Field>
+
+              {!apiUrl ? (
+                <p className="field-hint" data-bg-api-off>
+                  未填写地址（相当于关闭）：填一个能返回图片的地址才会开始请求。地址清空即关闭 API 随机图，背景回到「不使用」。
+                </p>
+              ) : (
+                <p className="field-hint" data-bg-api-on>
+                  地址可以直接返回图片，也可以返回包含图片地址的 JSON；「立即换一张」会重新请求一次。
+                </p>
+              )}
+
+              {apiError ? <p className="server-form-error" data-bg-api-error>{apiError}</p> : null}
+
+              {apiBg ? (
+                <div className="media-preview" data-media-preview={apiBg.kind}>
+                  {apiBg.kind === "video" ? (
+                    <video className="media-preview-video" src={mediaUrl("", apiBg.url)} muted loop autoPlay playsInline />
+                  ) : (
+                    <img src={mediaUrl("", apiBg.url)} alt="API 随机图预览" />
+                  )}
+                  <span className="media-preview-name">API 随机图（{apiBg.source}）</span>
+                </div>
+              ) : null}
+            </>
+          ) : null}
 
           <Field label="播放方式" hint="单张＝只用所选图片；顺序轮播＝按文件名排序循环；随机轮播＝每次随机取，不连续重复">
             <Select
@@ -513,7 +669,7 @@ export function PersonalizePage() {
             </div>
           </Field>
 
-          {bgUrl ? (
+          {bgSource !== "api" && bgUrl ? (
             <div className="media-preview" data-media-preview={isVideoFile(settings.backgroundImage) ? "video" : "image"}>
               {isVideoFile(settings.backgroundImage) ? (
                 // 预览也走视频元素：当图片渲染会是一块空白
@@ -555,18 +711,21 @@ export function PersonalizePage() {
             </p>
           ) : null}
 
-          <div className="media-actions">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void openDir("backgrounds", "背景图片")}>
-              <IconFolder size={14} />
-              打开文件夹
-            </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={refreshMedia}>
-              <IconRefresh size={14} />
-              刷新背景图片
-            </button>
-          </div>
+          {bgSource === "local" ? (
+            <div className="media-actions">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void openDir("backgrounds", "背景图片")}>
+                <IconFolder size={14} />
+                打开文件夹
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={refreshMedia}>
+                <IconRefresh size={14} />
+                刷新背景图片
+              </button>
+            </div>
+          ) : null}
         </div>
 
+        {bgSource === "wallpaperEngine" ? (
         <div className="panel">
           <div className="panel-head">
             <h2 className="panel-title">Steam 壁纸引擎</h2>
@@ -593,7 +752,9 @@ export function PersonalizePage() {
           {(wallpapers.data ?? []).length > 0 ? (
             <div className="wp-grid" data-wallpaper-grid>
               {(wallpapers.data ?? []).map((entry) => {
-                const using = Boolean(entry.videoPath) && settings.backgroundImage === entry.videoPath;
+                // 选中态按 videoPath / imagePath 任一匹配；视频壁纸也可能同时有静态预览图
+                const target = entry.videoPath || entry.imagePath;
+                const using = Boolean(target) && settings.backgroundImage === target;
                 const preview = entry.previewPath ? mediaUrl("", entry.previewPath) : "";
                 return (
                   <button
@@ -603,13 +764,17 @@ export function PersonalizePage() {
                     data-wallpaper-card={entry.id}
                     data-wallpaper-kind={entry.kind}
                     onClick={() => {
-                      if (!entry.videoPath) {
-                        push("这条壁纸没有可播放的视频文件（可能是场景 / 网页类型），不能当背景", "info");
+                      if (!target) {
+                        push("这条壁纸既没有视频也没有静态图，不能当背景", "info");
                         return;
                       }
-                      pickBackground(entry.videoPath);
+                      // 视频壁纸 → 视频背景；只有静态图 → 图片背景；顺带把来源钉在「壁纸引擎」
+                      void persist(
+                        { backgroundSource: "wallpaperEngine", backgroundImage: target },
+                        entry.videoPath ? "壁纸引擎视频背景" : "壁纸引擎静态背景",
+                      );
                     }}
-                    title={entry.videoPath || entry.dir}
+                    title={target || entry.dir}
                   >
                     {preview ? (
                       <img
@@ -631,6 +796,7 @@ export function PersonalizePage() {
             </div>
           ) : null}
         </div>
+        ) : null}
 
         <div className="panel">
           <div className="panel-head">

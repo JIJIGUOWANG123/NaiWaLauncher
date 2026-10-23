@@ -19,6 +19,8 @@ const log = logger("media/wallpaper");
 /** Wallpaper Engine 的 Steam AppID。 */
 const APP_ID = "431960";
 const VIDEO_EXTS = new Set([".mp4", ".webm", ".ogv"]);
+/** 静态图壁纸能用的图片后缀（project.json.file 是图片时直接当背景）。 */
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"]);
 const PREVIEW_NAMES = ["preview.jpg", "preview.png", "preview.gif", "preview.jpeg", "preview.webp"];
 /** 结果缓存 30 秒：设置页会反复拉这个列表。 */
 const CACHE_TTL_MS = 30_000;
@@ -218,19 +220,40 @@ async function findPreview(dir: string, preferred?: string): Promise<string> {
   return "";
 }
 
-/** 扫描单个创意工坊项目目录；没有可播视频时返回 undefined。 */
+/** project.json.file 本身是图片时，它就是静态背景图（image/gif 型壁纸常这么写）。 */
+async function findImageFile(dir: string, fileName?: string): Promise<string> {
+  if (!fileName) return "";
+  if (!IMAGE_EXTS.has(extname(fileName).toLowerCase())) return "";
+  const target = join(dir, fileName);
+  return existsSync(target) ? target : "";
+}
+
+/**
+ * 扫描单个创意工坊项目目录：
+ * · 有视频 → videoPath 有值，imagePath 用预览图兜底（视频壁纸也能当静态背景）；
+ * · 没视频但有 type（image/gif/web…）且能找到图片 → videoPath 为空串、imagePath 填图片；
+ * · 两者都没有 → 不返回（scene 只剩 .pkg 这类没图可用的项目就到不了前台）。
+ */
 export async function scanProjectDir(id: string, dir: string): Promise<WallpaperEntry | undefined> {
   const text = await readFile(join(dir, "project.json"), "utf8").catch(() => "");
   const meta = parseProjectJson(text);
   const videoPath = await findVideo(dir, meta.file);
-  if (!videoPath) return undefined;
   const previewPath = await findPreview(dir, meta.preview);
+  // 图片候选：project.json.file 本身是图片优先，其次才是预览图
+  const imagePath = (await findImageFile(dir, meta.file)) || previewPath;
+  if (!videoPath) {
+    // 静态图壁纸：必须声明了 type 且真的找到图片，否则视为不支持
+    if (!meta.type || !imagePath) return undefined;
+    return { id, title: meta.title ?? id, dir, videoPath: "", previewPath, imagePath, kind: meta.type };
+  }
   return {
     id,
     title: meta.title ?? id,
     dir,
     videoPath,
     previewPath,
+    // 视频壁纸的静态图就是预览图（没有预览图时为空串）
+    imagePath,
     kind: meta.type ?? "",
   };
 }

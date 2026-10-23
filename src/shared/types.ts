@@ -23,10 +23,10 @@ export type ThemeId =
   | "pineapple"  // 菠萝黄
   | "oak"        // 橡木棕
   | "midnight"   // 玄素黑
-  | "candy"      // 滑稽彩
+  | "candy"      // 薄荷青
   | "pink"       // 铁杆粉
   | "mystery"    // 神秘紫
-  | "lucky"      // 欧皇彩
+  | "lucky"      // 琥珀金
   | "autumn"     // 秋仪金
   | "orange"     // 活泼橙
   | "red"        // 跳票红
@@ -84,6 +84,10 @@ export interface Settings {
   backgroundImage: string;
   /** 视频背景音量 0–1；0 表示静音（默认）。图片背景忽略此值。 */
   backgroundVideoVolume: number;
+  /** 背景来源：local = NaiWa/backgrounds 里的文件；api = 从随机图 API 拉；wallpaperEngine = Steam 壁纸。 */
+  backgroundSource: "local" | "api" | "wallpaperEngine";
+  /** 随机图 API 地址（返回图片本身，或返回含图片地址的 JSON）；空串表示未配置。 */
+  backgroundApiUrl: string;
   /** 关窗口时的行为：ask = 首次弹窗询问（默认）；tray = 隐藏到托盘；quit = 直接退出。 */
   closeAction: "ask" | "tray" | "quit";
   /** Wallpaper Engine 壁纸目录；留空表示自动探测 Steam 库。 */
@@ -296,6 +300,14 @@ export type JavaSourceId = "auto" | "bellsoft" | "adoptium" | "tuna";
 /** 具体（非 auto）的 JDK 来源，用来标记发行方与已安装来源。 */
 export type JavaVendorId = "bellsoft" | "adoptium" | "tuna" | "system";
 
+/** 随机图 API 解析出来的背景（主进程已落盘，url 是本地绝对路径）。 */
+export interface ApiBackground {
+  url: string;
+  kind: "image" | "video";
+  /** 原始接口地址，便于界面提示「这张来自哪里」。 */
+  source: string;
+}
+
 /** 一个可下载的 JDK 版本。 */
 /** 本地 Wallpaper Engine 壁纸（Steam 创意工坊 431960 下的项目）。 */
 export interface WallpaperEntry {
@@ -307,6 +319,8 @@ export interface WallpaperEntry {
   dir: string;
   /** 可当动态背景播放的视频绝对路径（没有则为空串）。 */
   videoPath: string;
+  /** 可当静态背景用的图片绝对路径（视频类壁纸通常也有预览图；没有则为空串）。 */
+  imagePath: string;
   /** 预览图绝对路径（没有则为空串）。 */
   previewPath: string;
   /** 原始壁纸类型（video / scene / web / application…）。 */

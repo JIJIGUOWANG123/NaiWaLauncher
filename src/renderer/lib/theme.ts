@@ -18,11 +18,11 @@ export const THEME_PRESETS: ThemePreset[] = [
   { id: "pineapple", name: "菠萝黄", color: "#E0A93B", mode: "light" },
   { id: "oak", name: "橡木棕", color: "#A9744F", mode: "light" },
   { id: "midnight", name: "玄素黑", color: "#2B2B33", mode: "dark" },
-  // 滑稽彩 / 欧皇彩：固定单一主色，不走彩色渐变（见 paletteOf 的 gradient 选项）
-  { id: "candy", name: "滑稽彩", color: "#6FCF97", mode: "light" },
+  // candy / lucky 也是普通单色预设（id 保持不变，避免老配置失效）
+  { id: "candy", name: "薄荷青", color: "#6FCF97", mode: "light" },
   { id: "pink", name: "铁杆粉", color: "#F06E96", mode: "light" },
   { id: "mystery", name: "神秘紫", color: "#9B6BD6", mode: "dark" },
-  { id: "lucky", name: "欧皇彩", color: "#FFC53D", mode: "dark" },
+  { id: "lucky", name: "琥珀金", color: "#FFC53D", mode: "dark" },
   { id: "autumn", name: "秋仪金", color: "#D98324", mode: "light" },
   { id: "orange", name: "活泼橙", color: "#F2792B", mode: "light" },
   { id: "red", name: "跳票红", color: "#E04B4B", mode: "dark" },
@@ -188,7 +188,7 @@ export interface ThemeGradientOptions {
 export interface PaletteOptions extends ThemeGradientOptions {
   /** 推导第二色标的方式：lighten = 提亮同色（预设主题）；hue = 色相旋转 +40°（自定义主题）。 */
   partner?: "lighten" | "hue";
-  /** 未显式给 from/to 时该主题是否保持纯色（滑稽彩 / 欧皇彩沿用原观感）。 */
+  /** 未显式给 from/to 时该主题是否保持纯色（candy / lucky 沿用原观感）。 */
   flatDefault?: boolean;
 }
 
@@ -218,7 +218,7 @@ export function paletteOf(mode: ThemeMode, accentInput: string, options: Palette
   const explicitFrom = pickHex(options.from);
   const explicitTo = pickHex(options.to);
   // 显式两色一律优先；只填一侧时另一侧按「起始色＝主色 / 结束色＝主色色相 +40°」推导；
-  // 两侧都没填时：flatDefault 主题（滑稽彩 / 欧皇彩）退化为纯色，其它主题用 derivedEnd。
+  // 两侧都没填时：flatDefault 主题（candy / lucky）退化为纯色，其它主题用 derivedEnd。
   const flatNoExplicit = options.flatDefault === true && !explicitFrom && !explicitTo;
   const gradStart = gradient ? (explicitFrom || accent) : accent;
   const gradEnd = !gradient
@@ -234,7 +234,7 @@ export function paletteOf(mode: ThemeMode, accentInput: string, options: Palette
   const accentInk = readableOn(accent, inkBase, mode, 4.8);
   // 自定义渐变时，标题渐变取用户两色的可读版本（对比度仍按页面底色校验）。
   const titleInkStart = gradient && explicitFrom ? readableOn(explicitFrom, inkBase, mode, 4.8) : accentInk;
-  // 滑稽彩 / 欧皇彩在未显式配色时，标题也保持纯色。
+  // candy / lucky 在未显式配色时，标题也保持纯色。
   const titleFlat = !gradient || flatNoExplicit;
   const titleInkEnd = gradient && explicitTo
     ? readableOn(explicitTo, inkBase, mode, 4.8)
@@ -301,7 +301,7 @@ export function paletteFor(theme: ThemeId, accentColor: string, options: ThemeGr
     return paletteOf(customMode(accent), accent, { ...shared, partner: "hue" });
   }
   const preset = THEME_PRESETS.find((item) => item.id === theme) ?? THEME_PRESETS[3];
-  // 滑稽彩 / 欧皇彩：用户没显式指定两色时保持纯色观感。
+  // candy / lucky：用户没显式指定两色时保持纯色观感。
   const flatDefault = preset.id === "candy" || preset.id === "lucky";
   return paletteOf(preset.mode, preset.color, { ...shared, partner: "lighten", flatDefault });
 }
@@ -397,8 +397,7 @@ export function applyTheme(
   set("--cream", palette.accentInk);
   set("--card", palette.surface);
   set("--card-2", palette.surface2);
-  set("--line", palette.border);
-  set("--line-strong", palette.divider);
+  set("--line", palette.border);  set("--line-strong", palette.divider);
   set("--green", palette.ok);
   set("--red", palette.danger);
   set("--grad-warm", palette.accentGrad);

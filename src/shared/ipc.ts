@@ -3,7 +3,7 @@ import type {
   ChangelogSection, DownloadJob, InstalledModInfo, InstalledContentRef, LocalCape, LocalSkin, LocalSkinSelection, SkinApplyResult, ServerBuildInfo, ServerConsoleLine, ServerCoreId, ServerCoreInfo, ServerEntry, ServerMeta, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
   PortProbeResult, SaveInfo, UpdateCheckResult, InstanceExportResult, InstanceImportResult,
   LoaderKind, LoaderVersionInfo, LogLine, ModCategory, ModFileInfo, ModFilterOptions, ModProviderId,
-  JavaSourceId, JavaSourceProbe, WallpaperEntry,
+  ApiBackground, JavaSourceId, JavaSourceProbe, WallpaperEntry,
   ModSearchResult, ModSourceFilter, Settings, SkinInfo, SkinProfile, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
   WardrobeSkin,
 } from "./types";
@@ -44,6 +44,7 @@ export const IPC = {
 
   mediaList: "media:list",
   wallpaperList: "wallpaper:list",
+  mediaApiBackground: "media:apiBackground",
   windowMinimize: "window:minimize",
   windowToggleMaximize: "window:toggleMaximize",
   windowClose: "window:close",
@@ -241,6 +242,8 @@ export interface NaiwaApi {
   media: {
     /** 列出 NaiWa/backgrounds 与 NaiWa/music 下的可用文件。 */
     list(): Promise<MediaList>;
+    /** 按设置里的随机图 API 取一张背景（主进程已下载到本地缓存）。失败返回 null。 */
+    apiBackground(): Promise<ApiBackground | null>;
     /** 打开背景/音乐目录，方便用户放文件。 */
     openDir(kind: "backgrounds" | "music" | "icons"): Promise<void>;
   };

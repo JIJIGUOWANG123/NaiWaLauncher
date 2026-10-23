@@ -31,6 +31,7 @@ const api: NaiwaApi = {
   },
   media: {
     list: () => invoke(IPC.mediaList),
+    apiBackground: () => invoke(IPC.mediaApiBackground),
     openDir: async (kind) => {
       const media = await invoke<MediaList>(IPC.mediaList);
       const dir = kind === "backgrounds" ? media.dirs.backgrounds : kind === "icons" ? media.dirs.icons : media.dirs.music;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppProvider, useApp } from "./lib/store";
 import { TaskProvider } from "./lib/tasks";
 import { ToastProvider } from "./components/Toast";
@@ -21,8 +21,8 @@ import { AboutPage } from "./pages/AboutPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { api } from "./lib/api";
 import { iconSrc } from "./lib/appIcon";
-import { backgroundUrl, isVideoFile, musicUrl } from "./lib/media";
-import { useBackgroundPlayback } from "./lib/background";
+import { backgroundUrl, isVideoFile, mediaUrl, musicUrl } from "./lib/media";
+import { clampInterval, useBackgroundPlayback } from "./lib/background";
 import { attachAudio, pauseMusic, playMusic, setMusicVolume } from "./lib/music";
 import { playStartupSound, stopStartupSound } from "./lib/startupSound";
 import { afterFirstFrame, perfMark, perfTime } from "./lib/perf";
@@ -65,9 +65,58 @@ function Shell() {
   // 视频背景音量（0–1，默认 0 = 静音）：0 时把 <video> 直接 muted，否则用 ref 设 volume。
   const bgVideoVolume = Math.min(1, Math.max(0, settings?.backgroundVideoVolume ?? 0));
   const bgVideoRef = useRef<HTMLVideoElement | null>(null);
-  const bgUrl = backgroundUrl(media.data, playback.name);
+
+  // 背景来源三选：local / api / wallpaperEngine。local 与 wallpaperEngine 都用 settings.backgroundImage
+  // （文件名或绝对路径）；api 模式完全忽略 backgroundImage，改成向主进程要一张随机图。
+  const bgSource = settings?.backgroundSource ?? "local";
+  // API 随机图默认关闭：backgroundApiUrl 为空串就是「关」——一次请求都不发，背景层直接按「没有背景」处理。
+  const apiUrl = (settings?.backgroundApiUrl ?? "").trim();
+  const apiRequested = bgSource === "api";
+  const apiMode = apiRequested && apiUrl !== "";
+  const [apiBg, setApiBg] = useState<{ url: string; kind: "image" | "video" } | null>(null);
+  const apiPending = useRef(false);
+
+  const loadApiBackground = useCallback(async () => {
+    if (apiPending.current) return;
+    apiPending.current = true;
+    try {
+      const next = await api.media.apiBackground();
+      if (next) setApiBg({ url: next.url, kind: next.kind });
+    } catch {
+      // 拉失败沿用上一张；个性化页里有明确的失败提示，这里不重复打扰。
+    } finally {
+      apiPending.current = false;
+    }
+  }, []);
+
+  // 进入 API 模式先拉一张；个性化页的「立即换一张」会把新地址写进 backgroundImage，
+  // 这里只把它当刷新信号（API 模式不按 backgroundImage 显示）。
+  useEffect(() => {
+    if (!apiMode) {
+      setApiBg(null);
+      return;
+    }
+    void loadApiBackground();
+  }, [apiMode, loadApiBackground, settings?.backgroundImage]);
+
+  // API 模式轮播：single 只由「立即换一张」驱动，sequence / random 按轮播间隔换新图。
+  useEffect(() => {
+    if (!apiMode) return;
+    if ((settings?.backgroundMode ?? "single") === "single") return;
+    const timer = setInterval(
+      () => void loadApiBackground(),
+      clampInterval(settings?.backgroundIntervalSec ?? 20) * 1000,
+    );
+    return () => clearInterval(timer);
+  }, [apiMode, loadApiBackground, settings?.backgroundIntervalSec, settings?.backgroundMode]);
+
+  const bgUrl = apiRequested
+    ? (apiMode && apiBg ? mediaUrl("", apiBg.url) : "")
+    : backgroundUrl(media.data, playback.name);
   // 背景资源里可能是图片也可能是视频：按文件类型分流，轮播逻辑不变（换的只是 playback.name）。
-  const bgIsVideo = isVideoFile(playback.name) || isVideoFile(bgUrl);
+  const bgIsVideo = apiMode
+    ? apiBg?.kind === "video"
+    : (isVideoFile(playback.name) || isVideoFile(bgUrl));
 
   // 首屏：booted 之后这一次 commit 就是用户看到的第一帧主界面
   useEffect(() => {
@@ -166,7 +215,7 @@ function Shell() {
         backgroundDir={media.data?.dirs.backgrounds ?? ""}
         // 标题栏的「图片」样式只能吃图片：当前是视频时不传名字，让它回退到主题底色，
         // 免得塞一个 .mp4 给 background-image（那只会渲染成空白）。
-        backgroundName={bgIsVideo ? "" : playback.name}
+        backgroundName={apiRequested || bgIsVideo ? "" : playback.name}
       />
 
       <div className="app-shell">

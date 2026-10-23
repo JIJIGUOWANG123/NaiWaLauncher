@@ -387,6 +387,8 @@ export function createMockApi(): NaiwaApi {
   };
   /** 账号 id → 角色列表（第一次读取时按账号播种，切换后改 active）。 */
   const profileState = new Map<string, SkinProfile[]>();
+  /** API 随机图的调用序号：mock 每次换一张内置样例图。 */
+  let apiBackgroundSeq = 0;
   let instances: InstanceMeta[] = MOCK_INSTANCES.map((item) => ({ ...item }));
   const installedJava: InstalledJava[] = MOCK_INSTALLED_JAVA.map((item) => ({ ...item }));
 
@@ -856,6 +858,17 @@ export function createMockApi(): NaiwaApi {
     },
 
     media: {
+      // API 随机图：预览里在内置样例之间轮换；真实链路返回的是主进程下载好的绝对路径。
+      apiBackground: async () => {
+        apiBackgroundSeq += 1;
+        trace("media.apiBackground", { seq: apiBackgroundSeq });
+        await sleep(320);
+        return {
+          url: MOCK_MEDIA.backgrounds[apiBackgroundSeq % MOCK_MEDIA.backgrounds.length],
+          kind: "image" as const,
+          source: "mock-random-api",
+        };
+      },
       list: async () => {
         trace("media.list");
         await sleep(120);

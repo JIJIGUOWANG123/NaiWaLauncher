@@ -18,6 +18,8 @@ const SOURCE_IDS: DownloadSourceId[] = ["official", "bmclapi", "sjtu", "auto"];
 /** JDK 下载源（顺序即界面顺序）：auto 走测速，其余固定站点。 */
 const JAVA_SOURCES: JavaSourceId[] = ["auto", "bellsoft", "adoptium", "tuna"];
 const CLOSE_ACTIONS: Array<"ask" | "tray" | "quit"> = ["ask", "tray", "quit"];
+/** 背景来源：本地文件 / 随机图 API / Steam 壁纸引擎。 */
+const BACKGROUND_SOURCES: Array<"local" | "api" | "wallpaperEngine"> = ["local", "api", "wallpaperEngine"];
 
 /** 0–1 小数收敛（音量）。 */
 function clampUnit(value: unknown, fallback: number): number {
@@ -61,6 +63,8 @@ export function defaults(): Settings {
     showSplash: true,
     backgroundImage: "",
     backgroundVideoVolume: 0,
+    backgroundSource: "local",
+    backgroundApiUrl: "",
     closeAction: "ask",
     wallpaperEngineDir: "",
     backgroundMusic: "",
@@ -69,7 +73,7 @@ export function defaults(): Settings {
     titleBarText: "",
     backgroundMode: "single",
     backgroundIntervalSec: 20,
-    // 默认开启渐变：预设主题保持渐变观感；滑稽彩/欧皇彩在 theme.ts 里按「未指定两色时退化为纯色」处理
+    // 默认开启渐变：预设主题保持渐变观感；candy/lucky 在 theme.ts 里按「未指定两色时退化为纯色」处理
     customGradient: true,
     gradientFrom: "",
     gradientTo: "",
@@ -172,6 +176,8 @@ function normalize(raw: unknown, base: Settings): Settings {
     showSplash: pickBool(src.showSplash, base.showSplash),
     backgroundImage: pickString(src.backgroundImage, base.backgroundImage),
     backgroundVideoVolume: clampUnit(src.backgroundVideoVolume, base.backgroundVideoVolume),
+    backgroundSource: pickEnum(src.backgroundSource, BACKGROUND_SOURCES, base.backgroundSource),
+    backgroundApiUrl: pickString(src.backgroundApiUrl, base.backgroundApiUrl),
     closeAction: pickEnum(src.closeAction, CLOSE_ACTIONS, base.closeAction),
     wallpaperEngineDir: pickString(src.wallpaperEngineDir, base.wallpaperEngineDir),
     backgroundMusic: pickString(src.backgroundMusic, base.backgroundMusic),

@@ -1,6 +1,9 @@
 import type { MediaList } from "../../shared/types";
 
 const ABSOLUTE = /^(data:|file:|https?:|blob:)/i;
+/** Windows 盘符路径（F:\…）与 UNC 共享路径（\\server\share）：Wallpaper Engine 壁纸就是这种。 */
+const WIN_ABS = /^[a-zA-Z]:[\\/]/;
+const UNC_ABS = /^\\\\[^\\]/;
 
 /** 绝对路径 → file:// URL；空格与中文由 encodeURI 处理。 */
 export function toFileUrl(target: string): string {
@@ -17,6 +20,9 @@ export function toFileUrl(target: string): string {
 export function mediaUrl(dir: string, name: string): string {
   if (!name) return "";
   if (ABSOLUTE.test(name)) return name;
+  // 盘符/UNC 绝对路径（例如 Wallpaper Engine 的壁纸视频）不能当「目录下的文件名」拼接，
+  // 否则会得到 ...\NaiWa\backgrounds\F:\SteamLibrary\... 这种非法 URL，视频直接不加载。
+  if (WIN_ABS.test(name) || UNC_ABS.test(name)) return toFileUrl(name);
   return toFileUrl(`${dir.replace(/[\\/]+$/, "")}/${name}`);
 }
 

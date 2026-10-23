@@ -34,6 +34,8 @@ export const DEFAULT_SETTINGS: Settings = {
   accentColor: "#F6D365",
   uiOpacity: 1,
   showSplash: true,
+  backgroundSource: "local",
+  backgroundApiUrl: "",
   backgroundImage: "",
   backgroundMusic: "",
   musicVolume: 0.5,
@@ -1166,13 +1168,14 @@ export const MOCK_LOCAL_CAPES: LocalCape[] = [
   },
 ];
 
-/** Steam 创意工坊 431960 下的壁纸样例：三条都带绝对路径（背景层按视频播放）。 */
+/** Steam 创意工坊 431960 下的壁纸样例：两个视频（另有 imagePath 预览图）+ 两个只有静态图的。 */
 export const MOCK_WALLPAPERS: WallpaperEntry[] = [
   {
     id: "2345678901",
     title: "霓虹雨夜 · Neon Rain",
     dir: "D:\\Steam\\steamapps\\workshop\\content\\431960\\2345678901",
     videoPath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\2345678901\\video.mp4",
+    imagePath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\2345678901\\preview.jpg",
     previewPath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\2345678901\\preview.jpg",
     kind: "video",
   },
@@ -1181,6 +1184,7 @@ export const MOCK_WALLPAPERS: WallpaperEntry[] = [
     title: "暮色森林 · 动态",
     dir: "D:\\Steam\\steamapps\\workshop\\content\\431960\\3456789012",
     videoPath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\3456789012\\video.webm",
+    imagePath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\3456789012\\preview.gif",
     previewPath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\3456789012\\preview.gif",
     kind: "video",
   },
@@ -1189,7 +1193,18 @@ export const MOCK_WALLPAPERS: WallpaperEntry[] = [
     title: "星海漂流（场景素材）",
     dir: "D:\\Steam\\steamapps\\workshop\\content\\431960\\4567890123",
     videoPath: "",
+    imagePath: "",
     previewPath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\4567890123\\preview.jpg",
+    kind: "scene",
+  },
+  {
+    // 只有静态图、没有视频：个性化页点击时应走「静态图背景」分支
+    id: "5678901234",
+    title: "雪山清晨 · 静态图",
+    dir: "D:\\Steam\\steamapps\\workshop\\content\\431960\\5678901234",
+    videoPath: "",
+    imagePath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\5678901234\\preview.jpg",
+    previewPath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\5678901234\\preview.jpg",
     kind: "scene",
   },
 ];
