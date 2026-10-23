@@ -13,14 +13,26 @@ import { setSystemFetcher } from "./core/netfetch";
 import { registerIpc } from "./ipc/register";
 import type { Settings } from "../shared/types";
 import { createSplash, fadeInWindow, fadeOutSplash, logoPathFor, splashHoldRemaining } from "./splash";
-import { hideInsteadOfClose, markQuitting, syncTray } from "./tray";
+import { destroyTray, hasTray, hideInsteadOfClose, markQuitting, syncTray } from "./tray";
 import { stopSkinApi } from "./skins/localapi";
 
 let mainWindow: BrowserWindow | null = null;
 const log = logger("main");
 
+/**
+ * 固定应用身份（AppUserModelID）。Windows 按「exe 路径 + AUMID」识别一个应用：
+ * 0.2.x 把 exe 从 <root>\NaiWa Launcher.exe 挪到了 <root>\main\NaiWa Launcher.exe，
+ * 没有 AUMID 时新路径会被当成另一个应用 —— 用户之前设过的通知区域「显示/溢出」偏好
+ * 与任务栏分组都会失效，托盘图标默认被收进溢出区。
+ * 显式指定后路径变了身份不变，偏好与分组沿用。
+ */
+const APP_USER_MODEL_ID = "Naiwa.Launcher";
+
 // 模块载入：main.ts 的 import 全部求值完的时刻，作为启动计时的第一个锚点
 perfMark("main-module-loaded");
+
+// 越早越好：必须早于任何窗口/Tray 创建（第二个实例也设一次，代价可忽略）
+app.setAppUserModelId(APP_USER_MODEL_ID);
 
 function rootDir(): string {
   // 三种形态共用同一套便携布局（数据与程序同级）：
@@ -194,14 +206,17 @@ function startApp(): void {
   });
 
   app.on("window-all-closed", () => {
-    // 开了「关闭到托盘」时窗口只是隐藏，不该因为「没有窗口」就退出
-    if (getSettings().closeToTray) return;
+    // 开了「关闭到托盘」且托盘确实可用时，窗口只是隐藏，不该因为「没有窗口」就退出；
+    // 托盘不可用时若还留着进程，用户就再也叫不回窗口，所以这里照常退出。
+    if (getSettings().closeToTray && hasTray()) return;
     if (process.platform !== "darwin") quitApp();
   });
 
   // 本地皮肤 API 只在离线账号启动游戏时用：进程退出前关掉，别把 127.0.0.1 上的端口留着
   app.on("will-quit", () => {
     void stopSkinApi();
+    // 托盘图标常驻，只有真正退出时才销毁
+    destroyTray();
   });
 }
 

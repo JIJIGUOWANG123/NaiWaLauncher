@@ -1361,9 +1361,11 @@ export function createMockApi(): NaiwaApi {
         // 光影/资源包/整合包在预览里只有麦块社区（中文）源；模组按来源或「所有来源」合并。
         const source: ModSourceFilter = req.source ?? (kind === "mod" ? req.provider : "minekuai");
         // 自检脚本按这条 trace 断言筛选条件真的进了请求，所以版本/加载器/排序也一并记下。
+        // 分页参数也进 trace：自检脚本据此断言「加载更多」真的换了 offset。
         trace("mods.search", {
           source, query: req.query, kind, gameVersion: req.gameVersion ?? null, loader: req.loader ?? null,
           category: req.category ?? null, resolution: req.resolution ?? null, sort: req.sort ?? null,
+          offset: req.offset ?? 0, limit: req.limit ?? 20,
         });
         if (source === "curseforge") requireCurseforgeKey();
         await sleep(480);

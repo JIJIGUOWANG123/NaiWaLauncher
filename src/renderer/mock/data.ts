@@ -396,11 +396,35 @@ export const MOCK_MODPACKS: ModSearchResult[] = [
   { provider: "minekuai", projectId: "pack-create-above", slug: "create-above-and-beyond", title: "Create: Above and Beyond", description: "Automation-focused pack built around Create technology.", author: "Create Team", downloads: 4_320_000, iconUrl: icon("CA", "#E0A93B"), categories: ["科技", "机械"], titleZh: "机械动力：星辰之上", summaryZh: "围绕机械动力搭起来的自动化整合包，教程齐全。" },
 ];
 
+/**
+ * 分页用的填充条目：把样例循环复制到 total 条，projectId / slug / 标题带上序号。
+ * 只影响「搜索结果条数」：mockFindProject 也从 MOCK_CONTENT 里找，所以填充条目的详情/文件面板照样能开。
+ */
+function fillForPaging(seed: ModSearchResult[], total: number): ModSearchResult[] {
+  const out: ModSearchResult[] = [];
+  for (let i = 0; out.length < total; i += 1) {
+    const base = seed[i % seed.length];
+    const round = Math.floor(i / seed.length);
+    out.push(round === 0
+      ? { ...base }
+      : {
+        ...base,
+        projectId: `${base.projectId}-p${round}`,
+        slug: `${base.slug}-p${round}`,
+        title: `${base.title} #${round + 1}`,
+        titleZh: base.titleZh ? `${base.titleZh} ${round + 1}` : base.titleZh,
+        downloads: Math.max(1_000, Math.round(base.downloads / (round + 1))),
+      });
+  }
+  return out;
+}
+
 /** 按内容类型取搜索数据源；地图走 MOCK_MAPS，不在这里。 */
 export const MOCK_CONTENT: Record<ModContentKind, ModSearchResult[]> = {
-  mod: MOCK_MODS,
-  shader: MOCK_SHADERS,
-  resourcepack: MOCK_RESOURCEPACKS,
+  // 模组 126 条（> 3 页 × 40），光影/资源包 45 条（> 1 页 × 40），整合包保持原样
+  mod: fillForPaging(MOCK_MODS, 126),
+  shader: fillForPaging(MOCK_SHADERS, 45),
+  resourcepack: fillForPaging(MOCK_RESOURCEPACKS, 45),
   modpack: MOCK_MODPACKS,
   map: [],
 };
@@ -442,9 +466,9 @@ export const MOCK_CONTENT_META: Record<string, MockContentMeta> = {
   "pack-create-above": { versions: ["1.20.1", "1.19.2"], loaders: ["forge"], updatedAt: daysAgo(25) },
 };
 
-/** 文件列表与安装要能按 projectId 反查四类内容。 */
+/** 文件列表与安装要能按 projectId 反查四类内容（含分页填充出来的条目）。 */
 export function mockFindProject(projectId: string): ModSearchResult | undefined {
-  return [...MOCK_MODS, ...MOCK_SHADERS, ...MOCK_RESOURCEPACKS, ...MOCK_MODPACKS]
+  return [...MOCK_CONTENT.mod, ...MOCK_CONTENT.shader, ...MOCK_CONTENT.resourcepack, ...MOCK_CONTENT.modpack]
     .find((project) => project.projectId === projectId);
 }
 
@@ -464,12 +488,25 @@ const DETAIL_VERSIONS = [
  * 麦块社区地图样例：2 条与默认实例（1.20.1）版本重叠、1 条只标 1.12.2（不适配）、
  * 1 条没有直链（需登录下载）。compatible 由 mock 的 maps 按实例版本计算，这里不写死。
  */
-export const MOCK_MAPS: MapEntry[] = [
+const MOCK_MAPS_SEED: MapEntry[] = [
   { id: "map-skycity", title: "天空之城 · 空岛生存", description: "漂浮岛屿群组成的空岛生存地图，自带任务书、出生点商店与传送门。", versions: ["1.20.1", "1.21.4"], fileSize: 24_600_000, category: "生存", author: "奶块建筑组", coverUrl: galleryShot("天空之城", "#8FB8F0", "#1F68BC"), downloadUrl: "https://bbs.minekuai.com/resources/maps/skycity/download" },
   { id: "map-puzzle", title: "迷箱解谜 · 十二道机关", description: "十二个独立关卡的红石解谜地图，支持单人挑战与速通计时。", versions: ["1.20.1"], fileSize: 6_800_000, category: "解谜", author: "红石工坊", coverUrl: galleryShot("迷箱解谜", "#F6D365", "#E0A93B"), downloadUrl: "https://bbs.minekuai.com/resources/maps/puzzle/download" },
   { id: "map-legacy", title: "旧时光 · 1.12.2 怀旧跑酷", description: "为 1.12.2 打造的城市跑酷地图，用新版本打开会缺方块。", versions: ["1.12.2"], fileSize: 12_300_000, category: "跑酷", author: "Parkour老张", coverUrl: galleryShot("旧时光跑酷", "#9BC53D", "#4C7326"), downloadUrl: "https://bbs.minekuai.com/resources/maps/legacy/download" },
   { id: "map-login", title: "深海遗迹 · 探险地图", description: "海底遗迹探索与 BOSS 战，作者要求到网页登录后再下载完整包。", versions: ["1.20.1", "1.19.2"], fileSize: 38_900_000, category: "冒险", author: "深海工作室", coverUrl: galleryShot("深海遗迹", "#3E6E8C", "#12293B") },
 ];
+
+/** 地图样例只有 4 条：复制填充到 45 条，让「加载更多」（每页 20）有 3 页可翻。 */
+export const MOCK_MAPS: MapEntry[] = (() => {
+  const out: MapEntry[] = [];
+  for (let i = 0; out.length < 45; i += 1) {
+    const base = MOCK_MAPS_SEED[i % MOCK_MAPS_SEED.length];
+    const round = Math.floor(i / MOCK_MAPS_SEED.length);
+    out.push(round === 0
+      ? { ...base }
+      : { ...base, id: `${base.id}-p${round}`, title: `${base.title} #${round + 1}` });
+  }
+  return out;
+})();
 
 function projectUrl(provider: ModSearchResult["provider"], slug: string): string {
   // 麦块社区的项目 id/slug 来自 Modrinth，主页也指向 Modrinth。

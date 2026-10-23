@@ -25,6 +25,8 @@
   background-repeat: no-repeat;
   /* 轮播换图时先淡出再淡入（lib/background.ts 的 BG_FADE_MS 与此一致） */
   transition: opacity 0.32s ease;
+  /* 视频可能比容器大一两个像素，裁掉避免溢出到页面外产生滚动条 */
+  overflow: hidden;
 }
 
 .app-bg.is-fading {
@@ -42,11 +44,17 @@
 }
 
 .app-bg-video {
-  position: absolute;
+  /* 用视口单位而非百分比：父容器高度算错（例如某个祖先被 transform/flex 改成内容高度）时，
+     百分比会退化成「按视频原始比例」而只铺一部分；100vw/100vh 保证始终铺满整个窗口 */
+  position: fixed;
   inset: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
+  min-width: 100%;
+  min-height: 100%;
   object-fit: cover;
+  object-position: center;
+  display: block;
   pointer-events: none;
   border: 0;
 }

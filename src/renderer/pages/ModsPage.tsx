@@ -461,23 +461,43 @@ export function ModsPage() {
   const effectiveLoader = filters.loader
     || (looseSearch ? "" : showsLoader(kind) ? currentInstance?.loader ?? "" : "");
 
-  const search = useAsync(async () => {
-    if (!isBackendKind(kind) || isMap || noKey) return [] as ModSearchResult[];
+  /** 一页拉多少条：首屏与「加载更多」共用同一个页大小。 */
+  const SEARCH_PAGE_SIZE = 40;
+  const MAPS_PAGE_SIZE = 20;
+  /** 列表刷新的依赖清单：useAsync 与分页复位共用，保证两边永远同步。 */
+  const searchDeps = [
+    source, kind, submitted, effectiveVersion, effectiveLoader, filters.resolution, filters.categories.join(","),
+    sort, tick, noKey, isMap,
+  ];
+
+  /** 当前筛选对应的搜索请求（首屏 offset=0，加载更多时 offset 递增）。 */
+  const buildSearchRequest = useCallback((offset: number, searchKind: ModContentKind): KindSearchRequest => ({
     // 来源是单选按钮：provider 与 source 始终同一个站点，不再走「所有来源」合并。
-    const request: KindSearchRequest = {
-      provider: source,
-      source,
-      query: submitted,
-      kind,
-      gameVersion: effectiveVersion || undefined,
-      loader: effectiveLoader ? (effectiveLoader as LoaderKind) : undefined,
-      resolution: filters.resolution || undefined,
-      limit: 40,
-      sort,
-    };
+    provider: source,
+    source,
+    query: submitted,
+    kind: searchKind,
+    gameVersion: effectiveVersion || undefined,
+    loader: effectiveLoader ? (effectiveLoader as LoaderKind) : undefined,
+    resolution: filters.resolution || undefined,
+    limit: SEARCH_PAGE_SIZE,
+    offset,
+    sort,
+  }), [effectiveLoader, effectiveVersion, filters.resolution, sort, source, submitted]);
+
+  /**
+   * 拉某一页：分类多选时每个分类各查一次再合并去重（去重键 provider:projectId，跨页同样有效）。
+   * full = 这一页还是满的，说明后面可能还有。
+   */
+  const fetchSearchPage = useCallback(async (offset: number): Promise<{ items: ModSearchResult[]; full: boolean }> => {
+    if (!isBackendKind(kind) || isMap || noKey) return { items: [], full: false };
+    const request = buildSearchRequest(offset, kind);
     const categories = filters.categories;
-    if (categories.length === 0) return api.mods.search(request);
-    // 分类是多选、后端只认单个 category：每个分类各查一次再合并去重。
+    if (categories.length === 0) {
+      const items = await api.mods.search(request);
+      return { items, full: items.length >= SEARCH_PAGE_SIZE };
+    }
+    // 分类是多选、后端只认单个 category：每个分类各查一次再合并去重（每个分类都用同一个 offset）。
     const lists = await Promise.all(categories.map((category) => api.mods.search({ ...request, category })));
     const seen = new Set<string>();
     const merged: ModSearchResult[] = [];
@@ -487,11 +507,72 @@ export function ModsPage() {
       seen.add(key);
       merged.push(item);
     }
-    return merged;
-  }, [
-    source, kind, submitted, effectiveVersion, effectiveLoader, filters.resolution, filters.categories.join(","),
-    sort, tick, noKey, isMap,
-  ]);
+    // 任一分类这一页还是满的，就说明还有下一页可翻。
+    return { items: merged, full: lists.some((list) => list.length >= SEARCH_PAGE_SIZE) };
+  }, [buildSearchRequest, filters.categories, isMap, kind, noKey]);
+
+  /** 首屏那页是不是满的（决定还有没有下一页）：先写 ref，等 data 落地再同步到 state。 */
+  const firstPageFull = useRef(true);
+  const search = useAsync(async () => {
+    const page = await fetchSearchPage(0);
+    firstPageFull.current = page.full;
+    return page.items;
+  }, searchDeps);
+
+  // 「加载更多」的累积页单独放 state：首屏渲染路径与改造前完全一致。
+  const [extraResults, setExtraResults] = useState<ModSearchResult[]>([]);
+  const [nextOffset, setNextOffset] = useState(SEARCH_PAGE_SIZE);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [reachedEnd, setReachedEnd] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // 任一筛选/刷新变化：清空累积页、offset 归零、hasMore 复位（与 useAsync 依赖同一份清单）。
+  useEffect(() => {
+    setExtraResults([]);
+    setNextOffset(SEARCH_PAGE_SIZE);
+    setReachedEnd(false);
+    setLoadingMore(false);
+    loadingMoreRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, searchDeps);
+
+  // 首屏结果落地：用它判断到底了没有。
+  useEffect(() => {
+    if (search.data === null) return;
+    setNextOffset(SEARCH_PAGE_SIZE);
+    setReachedEnd(!firstPageFull.current);
+  }, [search.data]);
+
+  const hasMore = !reachedEnd && !search.loading && search.data !== null;
+
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMore || isMap || noKey || !isBackendKind(kind)) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const page = await fetchSearchPage(nextOffset);
+      setExtraResults((prev) => [...prev, ...page.items]);
+      setNextOffset((prev) => prev + SEARCH_PAGE_SIZE);
+      if (!page.full) setReachedEnd(true);
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [fetchSearchPage, hasMore, isMap, kind, nextOffset, noKey, push]);
+
+  // 滚到接近底部自动加载；按钮仍保留，作为手动兜底与无障碍入口。
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || !hasMore) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
+    }, { rootMargin: "240px 0px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore]);
 
   const files = useAsync(
     () => {
@@ -513,6 +594,69 @@ export function ModsPage() {
     () => (isMap ? api.mods.maps(submitted, 1, currentInstance?.id) : Promise.resolve([] as MapEntry[])),
     [isMap, submitted, currentInstance?.id, tick],
   );
+
+  // 地图分页：第 1 页由上面的 useAsync 拉，之后按 page 递增追加。
+  const [extraMaps, setExtraMaps] = useState<MapEntry[]>([]);
+  const [nextMapPage, setNextMapPage] = useState(2);
+  const [mapsLoadingMore, setMapsLoadingMore] = useState(false);
+  const [mapsEnd, setMapsEnd] = useState(false);
+  const mapsLoadingRef = useRef(false);
+  const mapsSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setExtraMaps([]);
+    setNextMapPage(2);
+    setMapsEnd(false);
+    setMapsLoadingMore(false);
+    mapsLoadingRef.current = false;
+  }, [isMap, submitted, currentInstance?.id, tick]);
+
+  useEffect(() => {
+    if (maps.data === null) return;
+    setNextMapPage(2);
+    setMapsEnd(maps.data.length < MAPS_PAGE_SIZE);
+  }, [maps.data]);
+
+  /** 第 1 页 + 追加页：按地图 id 去重。 */
+  const allMaps = useMemo(() => {
+    const seen = new Set<string>();
+    const out: MapEntry[] = [];
+    for (const item of [...(maps.data ?? []), ...extraMaps]) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      out.push(item);
+    }
+    return out;
+  }, [extraMaps, maps.data]);
+
+  const mapsHasMore = isMap && !mapsEnd && !maps.loading && maps.data !== null;
+
+  const loadMoreMaps = useCallback(async () => {
+    if (mapsLoadingRef.current || !mapsHasMore) return;
+    mapsLoadingRef.current = true;
+    setMapsLoadingMore(true);
+    try {
+      const page = await api.mods.maps(submitted, nextMapPage, currentInstance?.id);
+      setExtraMaps((prev) => [...prev, ...page]);
+      setNextMapPage((prev) => prev + 1);
+      if (page.length < MAPS_PAGE_SIZE) setMapsEnd(true);
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      mapsLoadingRef.current = false;
+      setMapsLoadingMore(false);
+    }
+  }, [currentInstance?.id, mapsHasMore, nextMapPage, push, submitted]);
+
+  useEffect(() => {
+    const node = mapsSentinelRef.current;
+    if (!node || !mapsHasMore) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreMaps();
+    }, { rootMargin: "240px 0px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [loadMoreMaps, mapsHasMore]);
 
   /**
    * 实例里已装的内容：只查当前实例（没选实例就是空，界面自然不显示任何标记）。
@@ -547,13 +691,25 @@ export function ModsPage() {
     perfSince("mods-page-installed-refs", mountedAt.current);
   }, [installedRefs.data]);
 
+  /** 首屏页 + 累积页：按 provider:projectId 去重（跨页重复也能挡住）。 */
+  const allResults = useMemo(() => {
+    const seen = new Set<string>();
+    const out: ModSearchResult[] = [];
+    for (const item of [...(search.data ?? []), ...extraResults]) {
+      const key = `${item.provider}:${item.projectId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+    return out;
+  }, [extraResults, search.data]);
+
   /** 卡片列表：后端排序之外再兜一层本地排序，切换排序立即见效。 */
   const results = useMemo(() => {
-    const list = search.data ?? [];
-    if (sort === "downloads") return [...list].sort((a, b) => b.downloads - a.downloads);
-    if (sort === "updated") return [...list].sort((a, b) => sortTime(b) - sortTime(a));
-    return list;
-  }, [search.data, sort]);
+    if (sort === "downloads") return [...allResults].sort((a, b) => b.downloads - a.downloads);
+    if (sort === "updated") return [...allResults].sort((a, b) => sortTime(b) - sortTime(a));
+    return allResults;
+  }, [allResults, sort]);
 
   const sortedFiles = useMemo(() => {
     const list = files.data ?? [];
@@ -1067,20 +1223,40 @@ export function ModsPage() {
               {maps.loading ? <SkeletonRows count={4} /> : null}
               {maps.error ? <ErrorState message={maps.error} onRetry={maps.reload} /> : null}
 
-              {!maps.loading && !maps.error && (maps.data ?? []).length === 0 ? (
+              {!maps.loading && !maps.error && allMaps.length === 0 ? (
                 <EmptyState
                   title="没有搜到地图"
                   hint={submitted ? `「${submitted}」没有结果，换个关键词试试。` : KIND_EMPTY_HINT.map}
                 />
               ) : null}
 
-              {(maps.data ?? []).length > 0 ? (
+              {allMaps.length > 0 ? (
                 <MapCards
-                  entries={maps.data ?? []}
+                  entries={allMaps}
                   mcVersion={currentInstance?.mcVersion}
                   onDownload={(entry) => void downloadMap(entry)}
                   onOpenWeb={() => void openMapsWeb()}
                 />
+              ) : null}
+
+              {allMaps.length > 0 ? (
+                <div className="load-more" data-mods-load-more="maps" data-loaded-count={allMaps.length}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    data-load-more-maps
+                    data-load-more-state={mapsLoadingMore ? "loading" : mapsHasMore ? "idle" : "end"}
+                    disabled={mapsLoadingMore || !mapsHasMore}
+                    onClick={() => void loadMoreMaps()}
+                  >
+                    {mapsLoadingMore
+                      ? "正在加载更多…"
+                      : mapsHasMore
+                        ? `加载更多（已加载 ${allMaps.length} 条）`
+                        : `已全部加载（${allMaps.length} 条）`}
+                  </button>
+                  <div ref={mapsSentinelRef} className="load-more-sentinel" aria-hidden="true" />
+                </div>
               ) : null}
             </>
           ) : null}
@@ -1242,6 +1418,28 @@ export function ModsPage() {
                   </article>
                 );
               })}
+            </div>
+          ) : null}
+
+          {/* 加载更多：按钮给手动与无障碍入口，哨兵给滚到底自动加载；两路共用同一个 loadMore。 */}
+          {!isMap && !isDatapack && !noKey && results.length > 0 ? (
+            <div className="load-more" data-mods-load-more="search" data-loaded-count={results.length}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                data-load-more
+                data-load-more-state={loadingMore ? "loading" : hasMore ? "idle" : "end"}
+                data-loaded-count={results.length}
+                disabled={loadingMore || !hasMore}
+                onClick={() => void loadMore()}
+              >
+                {loadingMore
+                  ? "正在加载更多…"
+                  : hasMore
+                    ? `加载更多（已加载 ${results.length} 条）`
+                    : `已全部加载（${results.length} 条）`}
+              </button>
+              <div ref={sentinelRef} className="load-more-sentinel" aria-hidden="true" />
             </div>
           ) : null}
         </div>

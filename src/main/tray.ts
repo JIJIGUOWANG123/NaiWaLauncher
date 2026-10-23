@@ -39,24 +39,39 @@ function showWindow(getWindow: () => BrowserWindow | null): void {
   win.focus();
 }
 
+/** 应用真正退出时销毁托盘图标（「关闭到托盘」开关不再决定它存在与否）。 */
+export function destroyTray(): void {
+  if (!tray) return;
+  tray.destroy();
+  tray = null;
+  log.info("已销毁托盘图标");
+}
+
+/** 当前是否真的有可用托盘（关闭窗口时据此决定能否隐藏）。 */
+export function hasTray(): boolean {
+  return tray !== null;
+}
+
 /**
- * 按当前设置同步托盘：开启就建、关闭就销毁。
- * 设置改变时也调用它，避免「设置关了图标还在」。
+ * 确保托盘图标存在并绑定窗口/退出回调，返回「调用结束后是否真的有可用托盘」。
+ * 语义（用户要求）：图标常驻，与「关闭到托盘」开关无关 —— 那个开关只决定点 X 时
+ * 是隐藏到托盘还是退出。所以这里没有「关掉开关就销毁图标」的分支；
+ * 只有应用真正退出（quitting，由 before-quit 置位）时才不创建、并销毁。
  */
-export function syncTray(getWindow: () => BrowserWindow | null, quit: () => void): void {
-  const enabled = getSettings().closeToTray;
-  if (!enabled) {
-    if (tray) {
-      tray.destroy();
-      tray = null;
-      log.info("已按设置移除托盘图标");
-    }
-    return;
+export function syncTray(getWindow: () => BrowserWindow | null, quit: () => void): boolean {
+  if (quitting) {
+    destroyTray();
+    return false;
   }
-  if (tray) return;
+  // 已经建过：菜单/回调是闭包，不必重建（设置变化时也只是走到这里）
+  if (tray) return true;
 
   try {
-    const image = nativeImage.createFromPath(trayIconPath());
+    const source = nativeImage.createFromPath(trayIconPath());
+    // Windows 通知区域按 16×16 显示：显式缩放，避免个别 DPI 下直接取到 256×256 时模糊/空白
+    const scaled = source.isEmpty() ? source : source.resize({ width: 16, height: 16 });
+    // resize 失败（个别 ico 编码）时退回原始图，宁可大一点也别没有图标
+    const image = scaled.isEmpty() ? source : scaled;
     tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
     tray.setToolTip("奶娃启动器 NaiWa Launcher");
     tray.setContextMenu(
@@ -76,9 +91,11 @@ export function syncTray(getWindow: () => BrowserWindow | null, quit: () => void
     tray.on("click", () => showWindow(getWindow));
     tray.on("double-click", () => showWindow(getWindow));
     log.info("已创建托盘图标：" + trayIconPath());
+    return true;
   } catch (err) {
     tray = null;
     log.warn("创建托盘失败（不影响使用）：" + (err instanceof Error ? err.message : String(err)));
+    return false;
   }
 }
 
@@ -87,7 +104,12 @@ export function hideInsteadOfClose(getWindow: () => BrowserWindow | null, quit: 
   if (quitting || !getSettings().closeToTray) return false;
   const win = getWindow();
   if (!win) return false;
-  syncTray(getWindow, quit);
+  // 托盘不可用时绝不能 hide：藏起来就没有任何入口能把窗口叫回来了，退一步只最小化
+  if (!syncTray(getWindow, quit)) {
+    win.minimize();
+    log.warn("托盘不可用，已改为最小化而不是隐藏");
+    return false;
+  }
   win.hide();
   log.info("已隐藏到托盘（设置：关闭到托盘）");
   return true;

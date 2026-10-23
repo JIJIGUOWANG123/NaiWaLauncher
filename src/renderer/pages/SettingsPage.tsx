@@ -277,7 +277,7 @@ export function SettingsPage() {
             />
             <Toggle
               label="关闭到托盘"
-              hint="开启后点关闭不再退出，而是隐藏到系统托盘；右下角图标可重新打开界面，右键菜单里才能真正退出"
+              hint="托盘图标始终显示：随时点右下角图标都能叫回界面。开启本项后点关闭不再退出、改为隐藏到托盘；关掉则点关闭直接退出。若右下角看不到图标，点任务栏的 ^ 展开通知区域，把奶娃启动器拖到显示区即可"
               checked={settings.closeToTray}
               onChange={(value) => void saveSettings({ closeToTray: value })}
             />
