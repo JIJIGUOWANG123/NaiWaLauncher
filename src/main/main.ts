@@ -13,6 +13,7 @@ import { setSystemFetcher } from "./core/netfetch";
 import { registerIpc } from "./ipc/register";
 import type { Settings } from "../shared/types";
 import { createSplash, fadeInWindow, fadeOutSplash, logoPathFor, splashHoldRemaining } from "./splash";
+import { hideInsteadOfClose, markQuitting, syncTray } from "./tray";
 import { stopSkinApi } from "./skins/localapi";
 
 let mainWindow: BrowserWindow | null = null;
@@ -65,6 +66,12 @@ function createMainWindow(settings: Settings): BrowserWindow {
   const customIcon = settings.appIcon ? join(getPaths().dataRoot, "icons", settings.appIcon) : "";
   if (customIcon && existsSync(customIcon)) win.setIcon(customIcon);
 
+  // 「关闭到托盘」：拦下真正的关闭，改成隐藏窗口；真正退出时（托盘菜单 / 系统退出）放行
+  win.on("close", (event) => {
+    if (!hideInsteadOfClose(() => mainWindow, () => quitApp())) return;
+    event.preventDefault();
+  });
+
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
     return { action: "deny" };
@@ -79,6 +86,12 @@ function createMainWindow(settings: Settings): BrowserWindow {
   if (devUrl) void win.loadURL(devUrl);
   else void win.loadFile(join(__dirname, "../../dist/renderer/index.html"));
   return win;
+}
+
+/** 真正退出：置 quitting 让 close 处理器放行，再走正常退出流程（服务端由 before-quit 停掉）。 */
+function quitApp(): void {
+  markQuitting();
+  app.quit();
 }
 
 async function bootstrap(): Promise<void> {
@@ -136,7 +149,10 @@ app.whenReady().then(async () => {
     await fadeOutSplash(splash);
   });
   mainWindow.on("closed", () => { mainWindow = null; });
+  // 启动时按设置决定有没有托盘图标（关掉设置的用户不会看到多余图标）
+  syncTray(() => mainWindow, () => quitApp());
 
+  app.on("before-quit", () => { markQuitting(); });
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       mainWindow = createMainWindow(getSettings());
@@ -145,7 +161,11 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
+app.on("window-all-closed", () => {
+  // 开了「关闭到托盘」时窗口只是隐藏，不该因为「没有窗口」就退出
+  if (getSettings().closeToTray) return;
+  if (process.platform !== "darwin") quitApp();
+});
 
 // 本地皮肤 API 只在离线账号启动游戏时用：进程退出前关掉，别把 127.0.0.1 上的端口留着
 app.on("will-quit", () => {

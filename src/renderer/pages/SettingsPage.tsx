@@ -277,7 +277,7 @@ export function SettingsPage() {
             />
             <Toggle
               label="关闭到托盘"
-              hint="点击关闭按钮时最小化到系统托盘而不是退出"
+              hint="开启后点关闭不再退出，而是隐藏到系统托盘；右下角图标可重新打开界面，右键菜单里才能真正退出"
               checked={settings.closeToTray}
               onChange={(value) => void saveSettings({ closeToTray: value })}
             />

@@ -8,6 +8,7 @@ import type {
 import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
+import { syncTray } from "../tray";
 import { checkAppUpdates } from "../core/updates";
 import { installUpdate } from "../core/updater";
 import { isPortListening, listLanAddresses, probeTcp } from "../net/index";
@@ -192,6 +193,11 @@ export function registerIpc(): void {
   handle<Settings>(IPC.settingsGet, () => getSettings());
   handle<Settings>(IPC.settingsUpdate, async (patch: Partial<Settings>) => {
     const next = await updateSettings(patch);
+    // 「关闭到托盘」是窗口行为，改完立刻让托盘图标出现/消失
+    if ("closeToTray" in patch) {
+      const { BrowserWindow } = await import("electron");
+      syncTray(() => BrowserWindow.getAllWindows()[0] ?? null, () => app.quit());
+    }
     setActiveSource(next.downloadSource);
     return next;
   });
