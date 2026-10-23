@@ -80,8 +80,14 @@ export interface Settings {
   uiOpacity: number;
   /** 启动时是否播放 logo 渐显动画。 */
   showSplash: boolean;
-  /** 背景图片文件名（NaiWa/backgrounds 下），空串表示不使用。 */
+  /** 背景（图片或视频）：NaiWa/backgrounds 下的文件名，或 Wallpaper Engine 视频的绝对路径；空串表示不使用。 */
   backgroundImage: string;
+  /** 视频背景音量 0–1；0 表示静音（默认）。图片背景忽略此值。 */
+  backgroundVideoVolume: number;
+  /** 关窗口时的行为：ask = 首次弹窗询问（默认）；tray = 隐藏到托盘；quit = 直接退出。 */
+  closeAction: "ask" | "tray" | "quit";
+  /** Wallpaper Engine 壁纸目录；留空表示自动探测 Steam 库。 */
+  wallpaperEngineDir: string;
   /** 背景音乐文件名（NaiWa/music 下），空串表示不播放。 */
   backgroundMusic: string;
   /** 背景音乐音量 0–1。 */
@@ -291,6 +297,22 @@ export type JavaSourceId = "auto" | "bellsoft" | "adoptium" | "tuna";
 export type JavaVendorId = "bellsoft" | "adoptium" | "tuna" | "system";
 
 /** 一个可下载的 JDK 版本。 */
+/** 本地 Wallpaper Engine 壁纸（Steam 创意工坊 431960 下的项目）。 */
+export interface WallpaperEntry {
+  /** 稳定 id：创意工坊 id（目录名）。 */
+  id: string;
+  /** 展示名：project.json 的 title，缺失时用目录名。 */
+  title: string;
+  /** 项目目录绝对路径。 */
+  dir: string;
+  /** 可当动态背景播放的视频绝对路径（没有则为空串）。 */
+  videoPath: string;
+  /** 预览图绝对路径（没有则为空串）。 */
+  previewPath: string;
+  /** 原始壁纸类型（video / scene / web / application…）。 */
+  kind: string;
+}
+
 export interface JavaRelease {
   /** Vendor version string, e.g. "21.0.5". */
   version: string;

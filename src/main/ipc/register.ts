@@ -5,7 +5,7 @@ import { IPC } from "../../shared/ipc";
 import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest,
 } from "../../shared/ipc";
-import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, ChangelogSection, JavaRelease, JavaSourceId, JavaSourceProbe, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
+import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, ChangelogSection, JavaRelease, JavaSourceId, JavaSourceProbe, WallpaperEntry, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { syncTray } from "../tray";
@@ -37,6 +37,7 @@ import {
   ready as readyDownloadJobs, remove as removeDownloadJob, resume as resumeDownloadJob, runCancellable,
 } from "../downloads/index";
 import type { ServerCreateRequest } from "../../shared/ipc";
+import { listWallpapers } from "../media/wallpaper";
 import type {
   ServerBuildInfo, ServerConsoleLine, ServerCoreId, ServerCoreInfo, ServerEntry, ServerMeta,
 } from "../../shared/types";
@@ -53,6 +54,7 @@ const handle = <T>(channel: string, fn: (...args: any[]) => Promise<T> | T): voi
 /** 背景除了静态图还支持视频（渲染层按扩展名决定用 img 还是 video；music/icons 仍只认图片/音频）。 */
 const BACKGROUND_EXT = /.(png|jpe?g|webp|gif|bmp|mp4|webm|ogv)$/i;
 const AUDIO_EXT = /.(mp3|ogg|wav|flac|m4a)$/i;
+
 
 function mediaDirs(): { backgrounds: string; music: string; icons: string } {
   return {
@@ -171,6 +173,9 @@ export function registerIpc(): void {
   handle<LanAddress[]>(IPC.netInterfaces, () => listLanAddresses());
   handle<PortProbeResult>(IPC.netProbe, (host: string, port: number) => probeTcp(host, port));
   handle<boolean>(IPC.netPortCheck, (port: number) => isPortListening(port));
+
+  // 本地 Wallpaper Engine 壁纸（Steam 创意工坊 431960）
+  handle<WallpaperEntry[]>(IPC.wallpaperList, () => listWallpapers());
 
   handle<MediaList>(IPC.mediaList, async () => {
     const dirs = mediaDirs();

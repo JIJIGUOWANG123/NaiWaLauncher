@@ -62,6 +62,12 @@ function Shell() {
   const musicName = settings?.backgroundMusic ?? "";
   const musicSource = musicUrl(media.data, musicName);
   const volume = settings?.musicVolume ?? 0.5;
+  // 视频背景音量（0–1，默认 0 = 静音）：0 时把 <video> 直接 muted，否则用 ref 设 volume。
+  const bgVideoVolume = Math.min(1, Math.max(0, settings?.backgroundVideoVolume ?? 0));
+  const bgVideoRef = useRef<HTMLVideoElement | null>(null);
+  const bgUrl = backgroundUrl(media.data, playback.name);
+  // 背景资源里可能是图片也可能是视频：按文件类型分流，轮播逻辑不变（换的只是 playback.name）。
+  const bgIsVideo = isVideoFile(playback.name) || isVideoFile(bgUrl);
 
   // 首屏：booted 之后这一次 commit 就是用户看到的第一帧主界面
   useEffect(() => {
@@ -83,6 +89,14 @@ function Shell() {
   useEffect(() => {
     setMusicVolume(volume);
   }, [volume, musicSource]);
+
+  // 换视频（轮播到下一段）或改音量都要重新赋一次：<video> 的 muted/volume 不会被 React 自动带过去。
+  useEffect(() => {
+    const element = bgVideoRef.current;
+    if (!element) return;
+    element.volume = bgVideoVolume;
+    element.muted = bgVideoVolume === 0;
+  }, [bgUrl, bgVideoVolume]);
 
   // 启动音效：主界面出现（boot 完成）后播一次；切页面不重播，卸载时停止。
   useEffect(() => {
@@ -119,9 +133,6 @@ function Shell() {
   }
 
   const titleBar = settings?.titleBar ?? "compact";
-  const bgUrl = backgroundUrl(media.data, playback.name);
-  // 背景资源里可能是图片也可能是视频：按文件类型分流，轮播逻辑不变（换的只是 playback.name）。
-  const bgIsVideo = isVideoFile(playback.name) || isVideoFile(bgUrl);
 
   return (
     <div className="app-frame">
@@ -135,13 +146,15 @@ function Shell() {
           // key 跟着地址走：轮播换到下一段视频时重新挂载，从头播放。
           <video
             key={bgUrl}
+            ref={bgVideoRef}
             className="app-bg-video"
             src={bgUrl}
             autoPlay
-            muted
+            muted={bgVideoVolume === 0}
             loop
             playsInline
             preload="auto"
+            data-bg-video-volume={bgVideoVolume}
             aria-hidden="true"
           />
         ) : null}

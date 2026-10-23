@@ -3,7 +3,7 @@ import type {
   JavaSourceProbe, LoaderKind,
   LoaderVersionInfo, LocalCape, LocalSkin, MapEntry, ModContentKind, ModDependency, ModDetail, ModFileInfo, ModSearchResult, SaveInfo,
   ServerBuildInfo, ServerCoreId, ServerCoreInfo, ServerEntry,
-  Settings, VersionBrief,
+  Settings, VersionBrief, WallpaperEntry,
 } from "../../shared/types";
 
 export const MOCK_ROOT = "D:\\NaiWa Launcher";
@@ -21,6 +21,9 @@ export const DEFAULT_SETTINGS: Settings = {
   language: "zh-CN",
   closeToTray: true,
   gameInstanceLimit: "one",
+  backgroundVideoVolume: 0,
+  closeAction: "ask",
+  wallpaperEngineDir: "",
   memoryOptimize: true,
   advancedProcessTweaks: false,
   localSkinApi: false,
@@ -1160,5 +1163,33 @@ export const MOCK_LOCAL_CAPES: LocalCape[] = [
     width: 64,
     height: 32,
     active: false,
+  },
+];
+
+/** Steam 创意工坊 431960 下的壁纸样例：三条都带绝对路径（背景层按视频播放）。 */
+export const MOCK_WALLPAPERS: WallpaperEntry[] = [
+  {
+    id: "2345678901",
+    title: "霓虹雨夜 · Neon Rain",
+    dir: "D:\\Steam\\steamapps\\workshop\\content\\431960\\2345678901",
+    videoPath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\2345678901\\video.mp4",
+    previewPath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\2345678901\\preview.jpg",
+    kind: "video",
+  },
+  {
+    id: "3456789012",
+    title: "暮色森林 · 动态",
+    dir: "D:\\Steam\\steamapps\\workshop\\content\\431960\\3456789012",
+    videoPath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\3456789012\\video.webm",
+    previewPath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\3456789012\\preview.gif",
+    kind: "video",
+  },
+  {
+    id: "4567890123",
+    title: "星海漂流（场景素材）",
+    dir: "D:\\Steam\\steamapps\\workshop\\content\\431960\\4567890123",
+    videoPath: "",
+    previewPath: "D:\\Steam\\steamapps\\workshop\\content\\431960\\4567890123\\preview.jpg",
+    kind: "scene",
   },
 ];

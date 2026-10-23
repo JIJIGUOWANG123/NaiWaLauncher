@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { existsSync } from "node:fs";
 import { getPaths } from "./core/paths";
 import { ensureDirs, initPaths } from "./core/paths";
-import { getSettings, loadSettings, peekShowSplash } from "./core/settings";
+import { getSettings, loadSettings, peekShowSplash, updateSettings } from "./core/settings";
 import { setEventSink } from "./core/events";
 import { load as loadDownloadJobs, setChangedSink as setDownloadsChangedSink, trackProgress, trackResult } from "./downloads/index";
 import { setLogSink, logger } from "./core/logger";
@@ -13,7 +13,7 @@ import { setSystemFetcher } from "./core/netfetch";
 import { registerIpc } from "./ipc/register";
 import type { Settings } from "../shared/types";
 import { createSplash, fadeInWindow, fadeOutSplash, logoPathFor, splashHoldRemaining } from "./splash";
-import { destroyTray, hasTray, hideInsteadOfClose, markQuitting, syncTray } from "./tray";
+import { destroyTray, hasTray, isQuitting, markQuitting, syncTray } from "./tray";
 import { stopSkinApi } from "./skins/localapi";
 
 let mainWindow: BrowserWindow | null = null;
@@ -80,10 +80,19 @@ function createMainWindow(settings: Settings): BrowserWindow {
   const customIcon = settings.appIcon ? join(getPaths().dataRoot, "icons", settings.appIcon) : "";
   if (customIcon && existsSync(customIcon)) win.setIcon(customIcon);
 
-  // 「关闭到托盘」：拦下真正的关闭，改成隐藏窗口；真正退出时（托盘菜单 / 系统退出）放行
+  // 关闭策略由 settings.closeAction 决定：tray=隐藏到托盘、quit=直接退出、ask=弹窗询问
   win.on("close", (event) => {
-    if (!hideInsteadOfClose(() => mainWindow, () => quitApp())) return;
+    // 真正退出（托盘菜单 / app.quit / 系统退出）时一律放行，别拦
+    if (isQuitting()) return;
+    const action = effectiveCloseAction();
+    if (action === "quit") return; // 让窗口正常关闭，随后的 window-all-closed 会退出进程
     event.preventDefault();
+    if (action === "tray") {
+      hideToTray(win);
+      return;
+    }
+    // ask：弹窗期间不能重复弹（异步，窗口可能被连点）
+    void askCloseAction(win);
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -106,6 +115,77 @@ function createMainWindow(settings: Settings): BrowserWindow {
 function quitApp(): void {
   markQuitting();
   app.quit();
+}
+
+type CloseAction = "ask" | "tray" | "quit";
+
+/** 询问弹窗是否正在显示：防止连点关闭弹出多个对话框。 */
+let closePromptOpen = false;
+
+/**
+ * 实际生效的关闭策略。
+ * 兼容老配置：closeAction 还是默认的 "ask"、但用户以前勾过「关闭到托盘」（closeToTray=true）时，
+ * 直接按 tray 处理 —— 老用户的选择已经表达过，不该因为升级再被问一遍。
+ */
+function effectiveCloseAction(): CloseAction {
+  const settings = getSettings();
+  if (settings.closeAction !== "ask") return settings.closeAction;
+  return settings.closeToTray ? "tray" : "ask";
+}
+
+/** 隐藏到托盘；托盘不可用时改为最小化并 warn（绝不能把窗口藏丢）。 */
+function hideToTray(win: BrowserWindow): boolean {
+  if (!syncTray(() => mainWindow, () => quitApp())) {
+    win.minimize();
+    log.warn("托盘不可用，已改为最小化而不是隐藏");
+    return false;
+  }
+  win.hide();
+  log.info("已隐藏到托盘（closeAction=tray）");
+  return true;
+}
+
+/**
+ * 首次关闭询问：最小化到托盘 / 直接退出 / 取消。
+ * 勾了「记住我的选择」才写设置；取消则什么都不做（窗口保留）。
+ */
+async function askCloseAction(win: BrowserWindow): Promise<void> {
+  if (closePromptOpen) return;
+  closePromptOpen = true;
+  try {
+    const result = await dialog.showMessageBox(win, {
+      type: "question",
+      title: "关闭奶娃启动器",
+      message: "关闭后要退出启动器，还是最小化到托盘继续运行？",
+      detail: "托盘图标会一直显示，点它就能回到界面。",
+      buttons: ["最小化到托盘", "直接退出", "取消"],
+      defaultId: 0,
+      cancelId: 2,
+      checkboxLabel: "记住我的选择",
+      checkboxChecked: false,
+      noLink: true,
+    });
+    // 取消：什么都不做，窗口保留
+    if (result.response === 2) {
+      log.info("关闭询问：用户选择取消");
+      return;
+    }
+    const remember = result.checkboxChecked === true;
+    if (result.response === 0) {
+      if (!hideToTray(win)) return;
+      if (remember) await updateSettings({ closeAction: "tray", closeToTray: true });
+      log.info("关闭询问：最小化到托盘" + (remember ? "（已记住）" : ""));
+      return;
+    }
+    if (remember) await updateSettings({ closeAction: "quit", closeToTray: false });
+    log.info("关闭询问：直接退出" + (remember ? "（已记住）" : ""));
+    quitApp();
+  } catch (err) {
+    // 弹窗失败（极少见）：保持窗口打开，别把用户的东西弄丢
+    log.warn("关闭询问失败，保持窗口：" + (err instanceof Error ? err.message : String(err)));
+  } finally {
+    closePromptOpen = false;
+  }
 }
 
 async function bootstrap(): Promise<void> {
@@ -206,9 +286,11 @@ function startApp(): void {
   });
 
   app.on("window-all-closed", () => {
-    // 开了「关闭到托盘」且托盘确实可用时，窗口只是隐藏，不该因为「没有窗口」就退出；
-    // 托盘不可用时若还留着进程，用户就再也叫不回窗口，所以这里照常退出。
-    if (getSettings().closeToTray && hasTray()) return;
+    // closeAction=quit：窗口关掉就该退出；tray/ask 才可能留在后台，而且托盘必须真的可用，
+    // 否则用户再也叫不回窗口（安全网）。
+    const settings = getSettings();
+    const keepAlive = settings.closeAction !== "quit" && settings.closeToTray && hasTray();
+    if (keepAlive) return;
     if (process.platform !== "darwin") quitApp();
   });
 

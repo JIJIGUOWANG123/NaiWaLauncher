@@ -26,6 +26,9 @@ const api: NaiwaApi = {
     get: () => invoke(IPC.settingsGet),
     update: (patch) => invoke(IPC.settingsUpdate, patch),
   },
+  wallpaper: {
+    list: () => invoke(IPC.wallpaperList),
+  },
   media: {
     list: () => invoke(IPC.mediaList),
     openDir: async (kind) => {

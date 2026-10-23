@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { BackgroundMode, Settings, ThemeId, TitleBarStyle } from "../../shared/types";
+import type { BackgroundMode, Settings, ThemeId, TitleBarStyle, WallpaperEntry } from "../../shared/types";
 import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { usePersist } from "../lib/persist";
@@ -13,7 +13,7 @@ import {
 import { BACKGROUND_INTERVAL_MAX, BACKGROUND_INTERVAL_MIN, clampInterval } from "../lib/background";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
-import { Field, Select, TextInput, Toggle } from "../components/Form";
+import { Field, Select, Slider, TextInput, Toggle } from "../components/Form";
 import { ErrorState, LoadingState } from "../components/State";
 import { IconFolder, IconPause, IconPlay, IconRefresh } from "../components/icons";
 import logo from "../assets/logo.png";
@@ -41,6 +41,8 @@ export function PersonalizePage() {
   const { push } = useToast();
   const persist = usePersist();
   const media = useAsync(() => api.media.list(), []);
+  // Steam 壁纸引擎：读主进程扫描出的 <Steam 库>\steamapps\workshop\content\431960 下的视频壁纸
+  const wallpapers = useAsync<WallpaperEntry[]>(() => api.wallpaper.list(), []);
   const music = useMusicState();
   const [opacity, setOpacity] = useState<number>(settings?.uiOpacity ?? 1);
   const [volume, setVolume] = useState<number>(settings?.musicVolume ?? 0.5);
@@ -52,6 +54,8 @@ export function PersonalizePage() {
   const [gradFromDraft, setGradFromDraft] = useState<string>(settings?.gradientFrom ?? "");
   const [gradToDraft, setGradToDraft] = useState<string>(settings?.gradientTo ?? "");
   const [intervalDraft, setIntervalDraft] = useState<string>(String(settings?.backgroundIntervalSec ?? 20));
+  // 视频背景音量草稿（0–100，落盘时除 100）：拖动时只改本地，松手才写设置。
+  const [videoVolumeDraft, setVideoVolumeDraft] = useState<number>(Math.round((settings?.backgroundVideoVolume ?? 0) * 100));
 
   useEffect(() => {
     if (settings) setOpacity(settings.uiOpacity);
@@ -217,6 +221,18 @@ export function PersonalizePage() {
     );
 
   const commitStartupVolume = () => void persist({ startupVolume }, "启动音效音量");
+
+  // 设置回读（例如在别的页面改了音量）时把草稿拉回来，避免滑杆和真实值不一致。
+  useEffect(() => {
+    setVideoVolumeDraft(Math.round((settings?.backgroundVideoVolume ?? 0) * 100));
+  }, [settings?.backgroundVideoVolume]);
+
+  // 视频背景音量：0 = 静音（App 里会真的把 <video> muted），其余按 0–1 存。
+  const commitVideoVolume = () => {
+    const next = Math.min(100, Math.max(0, Math.round(videoVolumeDraft)));
+    if (next === Math.round((settings?.backgroundVideoVolume ?? 0) * 100)) return;
+    void persist({ backgroundVideoVolume: next / 100 }, next === 0 ? "视频音量（静音）" : "视频音量");
+  };
 
   // 试听与「启动时播放」互不影响：只临时播一遍，播完（或再点一次）停止。
   const togglePreview = async () => {
@@ -454,8 +470,12 @@ export function PersonalizePage() {
           >
             <Select
               value={settings.backgroundImage}
-              options={backgrounds.map((name, index) => ({ value: name, label: mediaLabel(name, index) }))}
-              placeholder="不使用背景图片"
+              // 第一项是「不使用背景」：空串是有效选项，所以 keepEmpty（否则 Select 会把它当成 placeholder）
+              options={[
+                { value: "", label: "不使用背景（只留主题色）" },
+                ...backgrounds.map((name, index) => ({ value: name, label: mediaLabel(name, index) })),
+              ]}
+              keepEmpty
               ariaLabel="背景图片"
               disabled={media.loading}
               onChange={pickBackground}
@@ -505,8 +525,34 @@ export function PersonalizePage() {
             </div>
           ) : null}
 
+          {/* 只有视频背景才有音量可调；图片背景不显示这一行 */}
           {isVideoFile(settings.backgroundImage) ? (
-            <p className="field-hint" data-bg-video-hint>视频背景自动循环播放，声音已静音。</p>
+            <Field
+              label="视频音量"
+              hint="0% 为静音；有声音时会和背景音乐一起播放，按需调小"
+            >
+              <div
+                data-bg-video-volume={videoVolumeDraft}
+                onPointerUp={commitVideoVolume}
+                onKeyUp={commitVideoVolume}
+                onBlur={commitVideoVolume}
+              >
+                <Slider
+                  value={videoVolumeDraft}
+                  min={0}
+                  max={100}
+                  step={1}
+                  onChange={setVideoVolumeDraft}
+                  format={(value) => (value === 0 ? "静音" : `${value}%`)}
+                />
+              </div>
+            </Field>
+          ) : null}
+
+          {isVideoFile(settings.backgroundImage) ? (
+            <p className="field-hint" data-bg-video-hint>
+              {videoVolumeDraft === 0 ? "视频背景自动循环播放，当前静音。" : `视频背景自动循环播放，音量 ${videoVolumeDraft}%。`}
+            </p>
           ) : null}
 
           <div className="media-actions">
@@ -519,6 +565,71 @@ export function PersonalizePage() {
               刷新背景图片
             </button>
           </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">Steam 壁纸引擎</h2>
+            <button type="button" className="btn btn-ghost btn-sm" data-action="refresh-wallpapers" onClick={() => wallpapers.reload()}>
+              <IconRefresh size={14} />
+              刷新
+            </button>
+          </div>
+
+          <p className="field-hint">
+            识别路径：<code className="mono">&lt;Steam 库&gt;\steamapps\workshop\content\431960</code>；只识别视频类壁纸（creative workshop 应用 id 431960），扫不到时可以在设置里手动指定目录。
+          </p>
+
+          {wallpapers.loading ? <LoadingState label="扫描壁纸引擎目录…" /> : null}
+          {wallpapers.error ? <ErrorState message={wallpapers.error} onRetry={wallpapers.reload} /> : null}
+
+          {!wallpapers.loading && !wallpapers.error && (wallpapers.data ?? []).length === 0 ? (
+            <p className="media-empty" data-wallpaper-empty>
+              没有找到壁纸：确认 Wallpaper Engine 已安装并订阅过壁纸（应用 id 431960），或到设置里把「Wallpaper Engine 目录」指到
+              {" "}<code className="mono">&lt;Steam 库&gt;\steamapps\workshop\content\431960</code> 后点刷新。
+            </p>
+          ) : null}
+
+          {(wallpapers.data ?? []).length > 0 ? (
+            <div className="wp-grid" data-wallpaper-grid>
+              {(wallpapers.data ?? []).map((entry) => {
+                const using = Boolean(entry.videoPath) && settings.backgroundImage === entry.videoPath;
+                const preview = entry.previewPath ? mediaUrl("", entry.previewPath) : "";
+                return (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className={`wp-card ${using ? "is-active" : ""}`.trim()}
+                    data-wallpaper-card={entry.id}
+                    data-wallpaper-kind={entry.kind}
+                    onClick={() => {
+                      if (!entry.videoPath) {
+                        push("这条壁纸没有可播放的视频文件（可能是场景 / 网页类型），不能当背景", "info");
+                        return;
+                      }
+                      pickBackground(entry.videoPath);
+                    }}
+                    title={entry.videoPath || entry.dir}
+                  >
+                    {preview ? (
+                      <img
+                        className="wp-preview"
+                        src={preview}
+                        alt=""
+                        loading="lazy"
+                        onError={(event) => { event.currentTarget.style.visibility = "hidden"; }}
+                      />
+                    ) : (
+                      <span className="wp-preview wp-preview-empty" aria-hidden="true" />
+                    )}
+                    <span className="wp-title" title={entry.title}>{entry.title}</span>
+                    <span className="badge wp-kind">{entry.kind}</span>
+                    {using ? <span className="wp-in-use" data-wallpaper-in-use>当前使用</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
 
         <div className="panel">

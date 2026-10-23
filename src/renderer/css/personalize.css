@@ -442,3 +442,76 @@ html[data-bg-tint="on"] .app-bg.has-image::after {
   font-size: 12.5px;
   color: var(--text-dim);
 }
+
+/* ---------- Steam 壁纸引擎 ---------- */
+
+.wp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.wp-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-recess);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.wp-card:hover {
+  border-color: color-mix(in srgb, var(--text) 26%, transparent);
+  background: var(--surface-hover);
+}
+
+.wp-card.is-active {
+  border-color: color-mix(in srgb, var(--accent-2) 55%, transparent);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--accent-2) 13%, transparent), color-mix(in srgb, var(--accent) 4%, transparent));
+}
+
+.wp-preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--surface-recess-strong);
+  display: block;
+}
+
+.wp-title {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wp-kind {
+  align-self: flex-start;
+  font-size: 10.5px;
+}
+
+.wp-in-use {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  color: var(--green);
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+}
+
+@media (max-width: 780px) {
+  .wp-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}

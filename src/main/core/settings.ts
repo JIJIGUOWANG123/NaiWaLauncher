@@ -17,6 +17,15 @@ export const BUILTIN_MICROSOFT_CLIENT_ID = "fd3e219a-6e6a-4188-8a39-e241f0e63324
 const SOURCE_IDS: DownloadSourceId[] = ["official", "bmclapi", "sjtu", "auto"];
 /** JDK 下载源（顺序即界面顺序）：auto 走测速，其余固定站点。 */
 const JAVA_SOURCES: JavaSourceId[] = ["auto", "bellsoft", "adoptium", "tuna"];
+const CLOSE_ACTIONS: Array<"ask" | "tray" | "quit"> = ["ask", "tray", "quit"];
+
+/** 0–1 小数收敛（音量）。 */
+function clampUnit(value: unknown, fallback: number): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(1, Math.max(0, n));
+}
+
 /** 同时运行的游戏实例上限：默认一个，可在设置里放开。 */
 const GAME_LIMITS: Array<"one" | "unlimited"> = ["one", "unlimited"];
 const PROVIDER_IDS: ModProviderId[] = ["modrinth", "curseforge", "minekuai"];
@@ -51,6 +60,9 @@ export function defaults(): Settings {
     uiOpacity: 1,
     showSplash: true,
     backgroundImage: "",
+    backgroundVideoVolume: 0,
+    closeAction: "ask",
+    wallpaperEngineDir: "",
     backgroundMusic: "",
     musicVolume: 0.5,
     titleBar: "compact",
@@ -159,6 +171,9 @@ function normalize(raw: unknown, base: Settings): Settings {
     uiOpacity: clampFloat(src.uiOpacity, 0.6, 1, base.uiOpacity),
     showSplash: pickBool(src.showSplash, base.showSplash),
     backgroundImage: pickString(src.backgroundImage, base.backgroundImage),
+    backgroundVideoVolume: clampUnit(src.backgroundVideoVolume, base.backgroundVideoVolume),
+    closeAction: pickEnum(src.closeAction, CLOSE_ACTIONS, base.closeAction),
+    wallpaperEngineDir: pickString(src.wallpaperEngineDir, base.wallpaperEngineDir),
     backgroundMusic: pickString(src.backgroundMusic, base.backgroundMusic),
     musicVolume: clampFloat(src.musicVolume, 0, 1, base.musicVolume),
     // 旧配置里的 "default"（系统标题栏）已移除，统一迁移到 "compact"

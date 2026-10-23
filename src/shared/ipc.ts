@@ -3,7 +3,7 @@ import type {
   ChangelogSection, DownloadJob, InstalledModInfo, InstalledContentRef, LocalCape, LocalSkin, LocalSkinSelection, SkinApplyResult, ServerBuildInfo, ServerConsoleLine, ServerCoreId, ServerCoreInfo, ServerEntry, ServerMeta, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
   PortProbeResult, SaveInfo, UpdateCheckResult, InstanceExportResult, InstanceImportResult,
   LoaderKind, LoaderVersionInfo, LogLine, ModCategory, ModFileInfo, ModFilterOptions, ModProviderId,
-  JavaSourceId, JavaSourceProbe,
+  JavaSourceId, JavaSourceProbe, WallpaperEntry,
   ModSearchResult, ModSourceFilter, Settings, SkinInfo, SkinProfile, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
   WardrobeSkin,
 } from "./types";
@@ -43,6 +43,7 @@ export const IPC = {
   log: "app:log",
 
   mediaList: "media:list",
+  wallpaperList: "wallpaper:list",
   windowMinimize: "window:minimize",
   windowToggleMaximize: "window:toggleMaximize",
   windowClose: "window:close",
@@ -232,6 +233,10 @@ export interface NaiwaApi {
   settings: {
     get(): Promise<Settings>;
     update(patch: Partial<Settings>): Promise<Settings>;
+  };
+  /** 本地 Wallpaper Engine 壁纸（Steam 创意工坊 431960）。 */
+  wallpaper: {
+    list(): Promise<WallpaperEntry[]>;
   };
   media: {
     /** 列出 NaiWa/backgrounds 与 NaiWa/music 下的可用文件。 */

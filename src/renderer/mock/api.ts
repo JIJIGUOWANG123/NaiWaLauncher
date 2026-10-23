@@ -4,6 +4,7 @@ import type {
 import type {
   Account, DownloadJob, InstalledContentRef, InstalledModInfo, InstanceMeta, InstalledJava, LanAddress, LoaderKind,
   JavaRelease, JavaSourceId, JavaSourceProbe, JavaVendorId, LocalCape, LocalSkin, MapEntry, MicrosoftLoginState, ModCategory, ModContentKind, ModDependency, ModFilterOptions, ModProviderId,
+  WallpaperEntry,
   ModSearchResult,
   NatfrpStatus, NatfrpTunnel, NatfrpUser, PortProbeResult, ServerConsoleLine, ServerCoreId, ServerEntry, ServerStatus,
   SkinInfo, SkinProfile, TaskKind,
@@ -14,6 +15,7 @@ import {
   DEFAULT_SETTINGS, MOCK_ACCOUNTS, MOCK_APP_INFO, MOCK_INSTALLED_JAVA, MOCK_INSTALLED_MODS, MOCK_INSTANCES,
   MOCK_JAVA_RELEASES, MOCK_DATA_ROOT, MOCK_GAME_ROOT, MOCK_CONTENT, MOCK_CONTENT_META, MOCK_MAPS, MOCK_MEDIA,
   MOCK_INSTALLED_PACKS, MOCK_JAVA_SOURCES, MOCK_LOCAL_CAPES, MOCK_LOCAL_SKINS, MOCK_MOD_DEPENDENCIES, MOCK_MOD_UPDATES, MOCK_PACK_DEPENDENCIES, MOCK_PACK_UPDATES,
+  MOCK_WALLPAPERS,
   MOCK_SERVER_CORES, MOCK_SERVERS, mockServerBuilds,
   MOCK_ROOT, MOCK_SAVES, MOCK_SCANNED_CONTENT, MOCK_SOURCES, MOCK_STARTUP_SOUND, MOCK_VERSIONS,
   mockDependencyFile, mockDetailFor, mockFiles, mockFindProject, mockIconUrl, mockLoaderVersions,
@@ -631,7 +633,7 @@ export function createMockApi(): NaiwaApi {
     return flags?.[scope] === true;
   }
 
-  return {
+  const mockApi: NaiwaApi = {
     app: {
       info: async () => {
         await sleep(160);
@@ -1964,6 +1966,14 @@ export function createMockApi(): NaiwaApi {
       },
     },
 
+    wallpaper: {
+      list: async () => {
+        trace("wallpaper.list");
+        await sleep(240);
+        return MOCK_WALLPAPERS.map((item) => ({ ...item }));
+      },
+    },
+
     events: {
       onProgress: (cb) => {
         mockBus.progress.add(cb);
@@ -1979,4 +1989,6 @@ export function createMockApi(): NaiwaApi {
       },
     },
   };
+
+  return mockApi;
 }

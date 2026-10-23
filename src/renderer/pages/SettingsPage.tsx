@@ -11,6 +11,13 @@ import { Field, Segmented, Slider, TextInput, Toggle } from "../components/Form"
 import { ErrorState, LoadingState } from "../components/State";
 import { IconEye, IconEyeOff, IconInfo, IconZap } from "../components/icons";
 
+/** 关闭窗口的三种行为：ask 会弹窗询问并记住，tray/quit 直接按选择走。 */
+const CLOSE_ACTIONS: Array<{ value: Settings["closeAction"]; label: string }> = [
+  { value: "ask", label: "询问我" },
+  { value: "tray", label: "隐藏到托盘" },
+  { value: "quit", label: "直接退出" },
+];
+
 const MOD_PROVIDERS: Array<{ value: ModProviderId; label: string }> = [
   { value: "modrinth", label: "Modrinth" },
   { value: "curseforge", label: "CurseForge" },
@@ -29,6 +36,27 @@ export function SettingsPage() {
   const [savingKey, setSavingKey] = useState(false);
   const [thresholdDraft, setThresholdDraft] = useState("");
   const [savingThreshold, setSavingThreshold] = useState(false);
+
+  const [wallpaperDraft, setWallpaperDraft] = useState("");
+  const [savingWallpaper, setSavingWallpaper] = useState(false);
+
+  useEffect(() => {
+    if (settings) setWallpaperDraft(settings.wallpaperEngineDir);
+  }, [settings?.wallpaperEngineDir]);
+
+  const saveWallpaperDir = async () => {
+    const next = wallpaperDraft.trim();
+    if (next === settings?.wallpaperEngineDir) return;
+    setSavingWallpaper(true);
+    try {
+      await saveSettings({ wallpaperEngineDir: next });
+      push(next ? "已保存 Wallpaper Engine 目录" : "已改为自动探测 Wallpaper Engine 目录", "success");
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      setSavingWallpaper(false);
+    }
+  };
 
   const [connectionsDraft, setConnectionsDraft] = useSliderDraft(settings?.connectionsPerFile ?? 4, (value) => {
     void persist({ connectionsPerFile: value }, "单文件分片连接数");
@@ -276,11 +304,61 @@ export function SettingsPage() {
               onChange={(value) => void persist({ javaAutoMatch: value }, "Java 自动匹配")}
             />
             <Toggle
-              label="关闭到托盘"
-              hint="托盘图标始终显示：随时点右下角图标都能叫回界面。开启本项后点关闭不再退出、改为隐藏到托盘；关掉则点关闭直接退出。若右下角看不到图标，点任务栏的 ^ 展开通知区域，把奶娃启动器拖到显示区即可"
+              label="关闭到托盘（旧开关）"
+              hint="托盘图标始终显示：随时点右下角图标都能叫回界面。这个开关只在「关闭窗口时」选择「询问我」时才起作用；一旦在下面把关闭行为定成「隐藏到托盘 / 直接退出」，就以那个选择为准，本开关被忽略。若右下角看不到图标，点任务栏的 ^ 展开通知区域，把奶娃启动器拖到显示区即可"
               checked={settings.closeToTray}
               onChange={(value) => void saveSettings({ closeToTray: value })}
             />
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">窗口与壁纸</h2>
+          </div>
+          <div className="form-grid">
+            <Field
+              label="关闭窗口时"
+              hint="询问我：第一次点关闭会弹窗问，勾了「记住」后不再问；隐藏到托盘 / 直接退出：以后点关闭就按这里处理，上面的旧开关不再生效"
+            >
+              {/* data-close-action 带上当前值，便于自检 */}
+              <div data-close-action={settings.closeAction}>
+                <Segmented
+                  value={settings.closeAction}
+                  options={CLOSE_ACTIONS}
+                  onChange={(value) => void saveSettings({ closeAction: value })}
+                />
+              </div>
+            </Field>
+
+            <Field
+              label="Wallpaper Engine 目录"
+              hint="Steam 创意工坊应用 id 431960 的壁纸目录：<Steam 库>\steamapps\workshop\content\431960；留空则自动探测 Steam 库"
+            >
+              <div className="key-row">
+                <TextInput
+                  value={wallpaperDraft}
+                  placeholder="留空 = 自动探测"
+                  aria-label="Wallpaper Engine 目录"
+                  spellCheck={false}
+                  autoComplete="off"
+                  onChange={(event) => setWallpaperDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void saveWallpaperDir();
+                  }}
+                  onBlur={() => void saveWallpaperDir()}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  data-save-wallpaper-dir
+                  onClick={() => void saveWallpaperDir()}
+                  disabled={savingWallpaper}
+                >
+                  {savingWallpaper ? "保存中…" : "保存"}
+                </button>
+              </div>
+            </Field>
           </div>
         </div>
 
