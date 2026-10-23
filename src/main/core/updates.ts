@@ -91,8 +91,11 @@ export async function checkAppUpdates(): Promise<UpdateCheckResult> {
     const assets = Array.isArray(payload.assets) ? (payload.assets as Record<string, unknown>[]) : [];
     const exeAsset = assets.find((a) => String(a.name || "").toLowerCase() === "naiwalauncher.exe");
     const assetUrl = exeAsset && typeof exeAsset.browser_download_url === "string" ? exeAsset.browser_download_url : undefined;
+    // 安装版更新包用固定文件名（NaiWaLauncher-Setup.exe），永远指向最新版
+    const setupAsset = assets.find((a) => String(a.name || "").toLowerCase() === "naiwalauncher-setup.exe");
+    const setupUrl = setupAsset && typeof setupAsset.browser_download_url === "string" ? setupAsset.browser_download_url : undefined;
     log.info(`[updates] ${channel.id} → 当前 ${current}，仓库 ${latest}（${hasUpdate ? "有更新" : "已是最新"}）`);
-    return { current, latest, hasUpdate, url, notes, publishedAt, channel: channel.id, assetUrl };
+    return { current, latest, hasUpdate, url, notes, publishedAt, channel: channel.id, assetUrl, setupUrl };
   }
   log.warn(`[updates] 检查更新失败：${lastError || "所有通道不可用"}`);
   return { current, latest: null, hasUpdate: false, channel: "none", error: lastError || "无法连接 GitHub（网络受限）" };

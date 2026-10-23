@@ -7,7 +7,9 @@ import { getSettings } from "../core/settings";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { getVersionJson } from "../minecraft/manifest";
-import { install as installLiberica, readJavaMeta } from "./liberica";
+import { readJavaMeta } from "./liberica";
+import { installJavaFrom } from "./sources";
+import { detectVendor } from "./vendor";
 
 const log = logger("java/locate");
 const VENDOR_UNKNOWN = "未知（系统安装）";
@@ -69,12 +71,14 @@ async function scanHome(home: string, vendorFallback: string): Promise<Installed
   const javawExe = join(home, "bin", "javaw.exe");
   if (!existsSync(javawExe)) return undefined;
   const meta = await readJavaMeta(home);
+  // 来源识别：来源记录 → 目录名前缀 → JDK release 文件 → system
+  const source = await detectVendor(home, meta?.vendor);
   if (meta) {
-    return { major: meta.major, version: meta.version, path: meta.javawExe, vendor: meta.vendor || vendorFallback };
+    return { major: meta.major, version: meta.version, path: meta.javawExe, vendor: meta.vendor || vendorFallback, source };
   }
   const major = await probeMajor(join(home, "bin", "java.exe"));
   if (major === undefined) return undefined;
-  return { major, version: `${major}`, path: javawExe, vendor: vendorFallback };
+  return { major, version: String(major), path: javawExe, vendor: vendorFallback, source };
 }
 
 /** 常见安装位置：只列固定父目录下的一级子目录，避免全盘扫描。 */
@@ -248,8 +252,8 @@ export async function resolveJavaFor(mcVersion: string): Promise<string> {
   if (!getSettings().javaAutoDownload) {
     throw new Error(`该版本需要 Java ${major}，当前未安装，请到 Java 页安装或允许自动下载`);
   }
-  log.info(`${mcVersion} 需要 Java ${major}，本机没有满足的版本，自动下载 Liberica JDK ${major}`);
-  const installed = await installLiberica(major);
+  log.info(`${mcVersion} 需要 Java ${major}，本机没有满足的版本，按设置的下载源自动安装`);
+  const installed = await installJavaFrom(major);
   invalidateJavaCache();
   if (installed.major < major) {
     throw new Error(`自动安装的 JDK 主版本 ${installed.major} 低于所需的 ${major}`);

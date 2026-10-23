@@ -93,9 +93,10 @@ const api: NaiwaApi = {
     setLoader: (id, loader, loaderVersion) => invoke(IPC.instancesSetLoader, id, loader, loaderVersion),
   },
   java: {
-    releases: () => invoke(IPC.javaReleases),
+    releases: (majors, source) => invoke(IPC.javaReleases, majors, source),
+    sources: () => invoke(IPC.javaSources),
     installed: () => invoke(IPC.javaInstalled),
-    install: (major, version) => invoke(IPC.javaInstall, major, version),
+    install: (major, version, source) => invoke(IPC.javaInstall, major, version, source),
   },
   mods: {
     search: (req) => invoke(IPC.modsSearch, req),

@@ -7,6 +7,7 @@ import { createTask, type TaskHandle } from "../core/events";
 import { downloadFile, fetchJson } from "../core/http";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
+import { installDirName, writeSourceRecord } from "./vendor";
 
 const log = logger("java/liberica");
 
@@ -177,15 +178,23 @@ export async function readJavaMeta(home: string): Promise<JavaMetaFile | undefin
 /** 已装过就直接复用（幂等），否则下载 zip → 解压 → 校验 javaw.exe → 写元信息。 */
 async function installRelease(major: number, release: BellSwRelease, signal?: AbortSignal): Promise<InstalledJava> {
   const paths = getPaths();
-  const segment = safeSegment(`${major}-${release.version}`);
+  // 目录名统一成 <source>-<major>-<version>，扫描时仅看名字也能认出是谁装的
+  const segment = installDirName("bellsoft", major, release.version);
   const home = join(paths.java, segment);
   const javawExe = join(home, "bin", "javaw.exe");
   const javaExe = join(home, "bin", "java.exe");
 
   if (existsSync(javawExe)) {
     const meta = await readJavaMeta(home);
+    // 补齐来源记录（老目录可能没有），让「来源识别」有据可依
+    await writeSourceRecord(home, {
+      source: "bellsoft",
+      version: meta?.version ?? release.version,
+      installedAt: Date.now(),
+      downloadUrl: release.downloadUrl,
+    }).catch(() => undefined);
     log.info(`JDK ${major} 已存在，复用 ${home}`);
-    return { major, version: meta?.version ?? release.version, path: javawExe, vendor: VENDOR };
+    return { major, version: meta?.version ?? release.version, path: javawExe, vendor: VENDOR, source: "bellsoft" };
   }
 
   await mkdir(paths.java, { recursive: true });
@@ -222,9 +231,15 @@ async function installRelease(major: number, release: BellSwRelease, signal?: Ab
       source: release.downloadUrl,
     };
     await writeFile(join(home, ".naiwa.json"), JSON.stringify(meta, null, 2), "utf8");
+    await writeSourceRecord(home, {
+      source: "bellsoft",
+      version: release.version,
+      installedAt: meta.installedAt,
+      downloadUrl: release.downloadUrl,
+    });
     log.info(`JDK ${major} 安装完成：${home}`);
     task.done({ major, version: release.version, path: javawExe });
-    return { major, version: release.version, path: javawExe, vendor: VENDOR };
+    return { major, version: release.version, path: javawExe, vendor: VENDOR, source: "bellsoft" };
   } catch (err) {
     task.fail(err);
     throw err;
@@ -262,6 +277,8 @@ export async function latestReleaseOf(major: number): Promise<JavaRelease> {
     lts: hit.LTS === true,
     downloadUrl: hit.downloadUrl,
     fileName: hit.filename,
-    sizeBytes: hit.size,
+    ...(hit.size !== undefined ? { sizeBytes: hit.size } : {}),
+    ...(hit.sha1 ? { sha1: hit.sha1 } : {}),
+    source: "bellsoft",
   };
 }

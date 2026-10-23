@@ -5,7 +5,7 @@ import { IPC } from "../../shared/ipc";
 import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest,
 } from "../../shared/ipc";
-import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, ChangelogSection, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
+import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, ChangelogSection, JavaRelease, JavaSourceId, JavaSourceProbe, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { syncTray } from "../tray";
@@ -28,7 +28,7 @@ import { createInstance, deleteInstance, instanceDiskUsage, listInstances, listS
 import { exportInstance, importInstance } from "../minecraft/share";
 import { launchInstance } from "../minecraft/launch";
 import { installLoader, listLoaderVersions } from "../loaders/index";
-import { installJava, listInstalledJava, listJavaReleases } from "../java/index";
+import { installJava, listInstalledJava, listJavaReleases, listJavaSources } from "../java/index";
 import { contentDirForInstance } from "../mods/install";
 import { listMapEntries } from "../mods/minekuai";
 import { checkUpdates, getModDependencies, getModDetail, installMod, installed, listInstalledContent, listInstalledMods, installModpack, listCategories, listFilterOptions, listModFiles, remove as removeMod, searchMods, update as updateMod } from "../mods/index";
@@ -138,7 +138,7 @@ export function registerIpc(): void {
 
   // 自定义界面图标：选中的图标存在就返回 file:// 直链，否则 null
   handle<UpdateCheckResult>(IPC.appCheckUpdates, () => checkAppUpdates());
-  handle<void>(IPC.appInstallUpdate, (url: string) => installUpdate(url));
+  handle<void>(IPC.appInstallUpdate, (url?: string) => installUpdate(url));
   // 导出到系统目录后的「打开所在文件夹」：shell.showItemInFolder 不受启动器根目录守卫限制
   handle<ChangelogSection[]>(IPC.appChangelog, (limit?: number) => getChangelog(limit));
   handle<void>(IPC.appReveal, (target: string) => {
@@ -283,11 +283,13 @@ export function registerIpc(): void {
     return runCancellable((signal) => setLoader(id, loader, loaderVersion, signal));
   });
 
-  handle(IPC.javaReleases, () => listJavaReleases());
+  // source 缺省由主进程取设置里的 javaDownloadSource；"auto" 会先探测三个源再挑最快的
+  handle<JavaRelease[]>(IPC.javaReleases, (source?: JavaSourceId) => listJavaReleases(source));
+  handle<JavaSourceProbe[]>(IPC.javaSources, () => listJavaSources());
   handle(IPC.javaInstalled, () => listInstalledJava());
-  handle(IPC.javaInstall, (major: number, version: string) => {
+  handle(IPC.javaInstall, (major: number, version: string, source?: JavaSourceId) => {
     hintNextJob({ kind: "java", detail: `JDK ${major}`, resume: JSON.stringify({ major, version }) });
-    return runCancellable((signal) => installJava(major, version, signal));
+    return runCancellable((signal) => installJava(major, version, source, signal));
   });
 
   handle(IPC.modsSearch, (req: ModSearchRequest) => searchMods(req));

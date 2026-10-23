@@ -99,6 +99,12 @@ if (pnpm) {
 }
 
 // 4) 打包：默认 dir 形态（安装包与 zip 都基于它），额外参数可透传给 electron-builder
+// 打 portable 前先改造自解压桩：解压过一次的目录要复用，否则每次双击都要解压 300MB
+if (process.argv.slice(2).includes("portable")) {
+  const { patchPortableTemplate } = await import("./patch-portable-template.mjs");
+  patchPortableTemplate(log);
+}
+
 const extra = process.argv.slice(2);
 const targets = extra.length > 0 ? extra : ["--win", "--dir"];
 run(process.execPath, [join(root, "node_modules", "electron-builder", "cli.js"), ...targets], env);

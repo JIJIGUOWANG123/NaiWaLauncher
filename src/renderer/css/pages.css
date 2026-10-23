@@ -362,6 +362,28 @@
 
 /* ---------- Java ---------- */
 
+/* 下载源切换行：复用资源页的 .source-tabs/.source-tab，只补容器与探测结果 */
+.java-source-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.java-source-row .source-tabs {
+  flex-wrap: wrap;
+}
+
+.java-source-probe {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.java-source-chip {
+  font-size: 11px;
+}
+
 .java-list {
   display: flex;
   flex-direction: column;

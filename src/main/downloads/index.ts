@@ -539,7 +539,8 @@ async function replay(job: DownloadJob, params: Record<string, unknown>, signal?
       const major = Number(params.major);
       if (!Number.isInteger(major) || major <= 0) throw new Error("该记录的重试参数缺少 major（JDK 大版本），无法继续");
       const version = requireString(params, "version", "version（JDK 版本）");
-      await installJava(major, version, signal);
+      // 第 3 个参数是下载源（缺省取设置），重试任务沿用设置里的源
+      await installJava(major, version, undefined, signal);
       return;
     }
     case "content": {

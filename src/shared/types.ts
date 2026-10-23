@@ -62,6 +62,8 @@ export interface Settings {
   /** Fall back to the mirror when the official source is slower than this many ms. */
   autoSwitchThresholdMs: number;
   javaAutoDownload: boolean;
+  /** JDK 下载源：auto = 自动测速挑最快，其余为固定站点。 */
+  javaDownloadSource: JavaSourceId;
   /** 按 Minecraft 版本自动匹配 JDK；关闭后只使用实例上指定的 Java。 */
   javaAutoMatch: boolean;
   language: "zh-CN" | "en-US";
@@ -277,6 +279,13 @@ export interface LoaderVersionInfo {
   stable: boolean;
 }
 
+/** JDK 下载源：auto = 自动测速挑最快；其余为具体站点。 */
+export type JavaSourceId = "auto" | "bellsoft" | "adoptium" | "tuna";
+
+/** 具体（非 auto）的 JDK 来源，用来标记发行方与已安装来源。 */
+export type JavaVendorId = "bellsoft" | "adoptium" | "tuna" | "system";
+
+/** 一个可下载的 JDK 版本。 */
 export interface JavaRelease {
   /** Vendor version string, e.g. "21.0.5". */
   version: string;
@@ -285,6 +294,11 @@ export interface JavaRelease {
   downloadUrl: string;
   fileName: string;
   sizeBytes?: number;
+  /** 这条记录来自哪个下载源（auto 不会出现在这里）。 */
+  source?: Exclude<JavaSourceId, "auto">;
+  /** 校验用（Adoptium 提供 sha256，BellSoft 提供 sha1）。 */
+  sha256?: string;
+  sha1?: string;
 }
 
 export interface InstalledJava {
@@ -292,6 +306,18 @@ export interface InstalledJava {
   version: string;
   path: string;
   vendor: string;
+  /** 这个 JDK 是谁装的/来自哪个源：bellsoft / adoptium / tuna / system（本机原有）。 */
+  source?: JavaVendorId;
+}
+
+/** 下载源探测结果：耗时越低越优先。 */
+export interface JavaSourceProbe {
+  source: Exclude<JavaSourceId, "auto">;
+  label: string;
+  /** 探测耗时（毫秒），失败时为 null。 */
+  latencyMs: number | null;
+  ok: boolean;
+  detail?: string;
 }
 
 export interface ModSearchResult {
@@ -337,6 +363,8 @@ export interface UpdateCheckResult {
   publishedAt?: string;
   /** 免安装版更新包的直链（Release 里的 NaiWaLauncher.exe）。 */
   assetUrl?: string;
+  /** 安装版更新包（Release 里的 NaiWaLauncher-Setup.exe，固定名）；安装版点更新用它装回原目录。 */
+  setupUrl?: string;
   /** 实际取数的通道（便于排查）。 */
   channel: "github-api" | "gh-proxy" | "jsdelivr" | "sakuramoe" | "raw" | "none";
   /** 检查失败时的原因。 */

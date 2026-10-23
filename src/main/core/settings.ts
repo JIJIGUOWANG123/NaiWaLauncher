@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-import type { DownloadSourceId, ModProviderId, Settings } from "../../shared/types";
+import type { DownloadSourceId, JavaSourceId, ModProviderId, Settings } from "../../shared/types";
 import { logger, registerSecret } from "./logger";
 import { getPaths } from "./paths";
 
@@ -15,6 +15,8 @@ export const DEFAULT_CURSEFORGE_API_KEY = "";
 export const BUILTIN_MICROSOFT_CLIENT_ID = "fd3e219a-6e6a-4188-8a39-e241f0e63324";
 
 const SOURCE_IDS: DownloadSourceId[] = ["official", "bmclapi", "sjtu", "auto"];
+/** JDK 下载源（顺序即界面顺序）：auto 走测速，其余固定站点。 */
+const JAVA_SOURCES: JavaSourceId[] = ["auto", "bellsoft", "adoptium", "tuna"];
 const PROVIDER_IDS: ModProviderId[] = ["modrinth", "curseforge", "minekuai"];
 const LANGUAGES: Settings["language"][] = ["zh-CN", "en-US"];
 
@@ -34,6 +36,7 @@ export function defaults(): Settings {
     modProvider: "modrinth",
     autoSwitchThresholdMs: 1500,
     javaAutoDownload: true,
+    javaDownloadSource: "auto",
     javaAutoMatch: true,
     language: "zh-CN",
     closeToTray: false,
@@ -141,6 +144,7 @@ function normalize(raw: unknown, base: Settings): Settings {
     modProvider: pickEnum(src.modProvider, PROVIDER_IDS, base.modProvider),
     autoSwitchThresholdMs: clampInt(src.autoSwitchThresholdMs, 100, 60_000, base.autoSwitchThresholdMs),
     javaAutoDownload: pickBool(src.javaAutoDownload, base.javaAutoDownload),
+    javaDownloadSource: pickEnum(src.javaDownloadSource, JAVA_SOURCES, base.javaDownloadSource),
     javaAutoMatch: pickBool(src.javaAutoMatch, base.javaAutoMatch),
     language: pickEnum(src.language, LANGUAGES, base.language),
     closeToTray: pickBool(src.closeToTray, base.closeToTray),

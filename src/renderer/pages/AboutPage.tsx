@@ -92,8 +92,8 @@ export function AboutPage() {
   const [installing, setInstalling] = useState(false);
   const [downloadHighlight, setDownloadHighlight] = useState(false);
   const version = info?.version ?? "0.1.5";
-  // 更新日志读随程序分发的 CHANGELOG.md（不再硬编码，否则永远落后于发版）
-  const changelog = useAsync(() => api.app.changelog(3), []);
+  // 只显示「当前发行版本」的更新内容：历史版本去仓库的 CHANGELOG.md 看，避免程序里的日志越滚越长
+  const changelog = useAsync(() => api.app.changelog(1), []);
   // 发布说明只展示前 3 行，避免长文档把首屏顶开。
   const updateNotes = (update?.notes ?? "")
     .split("\n")
@@ -137,9 +137,9 @@ export function AboutPage() {
     }
   };
 
-  // 一键更新：确认后下载免安装版包、替换自身并重启（真机由主进程完成，界面只轮询状态）。
+  // 一键更新：免安装版替换自身；安装版下载 Setup 静默装回当前目录后重启（主进程自行判断）
   const install = async () => {
-    const assetUrl = update?.assetUrl;
+    const assetUrl = update?.assetUrl ?? update?.setupUrl;
     if (!assetUrl) return;
     setConfirming(false);
     setInstalling(true);
@@ -224,8 +224,12 @@ export function AboutPage() {
               type="button"
               className="btn btn-primary btn-sm"
               data-about-install
-              disabled={installing || !update.assetUrl}
-              title={update.assetUrl ? "下载新版本并替换当前程序，完成后自动重启" : "该版本未提供免安装版更新包"}
+              disabled={installing || !(update.assetUrl || update.setupUrl)}
+              title={
+                update.assetUrl || update.setupUrl
+                  ? "下载新版本：免安装版替换自身；安装版会静默装回当前目录（如 D:\minecraft\NW）后自动重启"
+                  : "该版本还没有提供可自动更新的安装包"
+              }
               onClick={() => setConfirming(true)}
             >
               <IconRefresh size={14} />
@@ -246,9 +250,9 @@ export function AboutPage() {
               <li key={line}>{line}</li>
             ))}
           </ul>
-          {!update.assetUrl ? (
+          {!(update.assetUrl || update.setupUrl) ? (
             <p className="about-update-hint" data-about-no-asset>
-              该版本未提供免安装版更新包，请用「前往下载」手动安装。
+              该版本还没有提供可自动更新的安装包，请用「前往下载」手动安装。
             </p>
           ) : null}
           {installing ? (
@@ -325,14 +329,40 @@ export function AboutPage() {
       </section>
 
       <div className="about-columns">
+        {/* 核心团队在上、更新日志在下（原来是左右并排） */}
+        <section className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">核心团队</h2>
+          </div>
+          <ul className="about-team">
+            {TEAM.map((member) => (
+              <li className="about-member" data-about-member key={member.name}>
+                <span className="about-avatar" aria-hidden="true">
+                  {member.avatar ? <img src={member.avatar} alt="" loading="lazy" /> : member.initial}
+                </span>
+                <span className="about-member-text">
+                  <strong>{member.name}</strong>
+                  <small>{member.role}</small>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
         <section className="panel">
           <div className="panel-head">
             <h2 className="panel-title">
               <IconBook size={15} className="about-title-icon" />
               更新日志
             </h2>
-            <button type="button" className="btn btn-ghost btn-sm" data-about-changelog onClick={() => void openChangelog()}>
-              查看完整
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              data-about-changelog
+              title="历史版本的更新日志在项目仓库的 CHANGELOG.md"
+              onClick={() => void openChangelog()}
+            >
+              历史版本
               <IconChevronRight size={14} />
             </button>
           </div>
@@ -343,6 +373,9 @@ export function AboutPage() {
           {changelog.data && changelog.data.length === 0 ? (
             <p className="field-hint">这个安装包里没有附带 CHANGELOG.md，点右上「查看完整」去仓库看。</p>
           ) : null}
+          <p className="field-hint" data-changelog-scope>
+            只显示当前版本；更早的更新日志请在仓库的 CHANGELOG.md 查看。
+          </p>
           {(changelog.data ?? []).map((section: { version: string; lines: string[] }, index: number) => (
             <div className="about-log-version" key={section.version} data-changelog-version={section.version}>
               <p className="about-log-version-head">
@@ -366,24 +399,6 @@ export function AboutPage() {
           ))}
         </section>
 
-        <section className="panel">
-          <div className="panel-head">
-            <h2 className="panel-title">核心团队</h2>
-          </div>
-          <ul className="about-team">
-            {TEAM.map((member) => (
-              <li className="about-member" data-about-member key={member.name}>
-                <span className="about-avatar" aria-hidden="true">
-                  {member.avatar ? <img src={member.avatar} alt="" loading="lazy" /> : member.initial}
-                </span>
-                <span className="about-member-text">
-                  <strong>{member.name}</strong>
-                  <small>{member.role}</small>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
       </div>
 
       <p className="about-foot" data-about-foot>

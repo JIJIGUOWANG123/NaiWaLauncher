@@ -252,10 +252,10 @@
   padding: 1px 6px;
 }
 
-/* 更新日志 + 团队：宽屏并排，窄屏落回单列 */
+/* 核心团队在上、更新日志在下：固定单列上下排（窄屏本来也是单列） */
 .about-columns {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 

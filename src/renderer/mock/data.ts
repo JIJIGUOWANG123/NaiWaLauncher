@@ -1,6 +1,6 @@
 import type {
   Account, AppInfo, DownloadSourceInfo, InstalledContentRef, InstanceMeta, InstalledJava, InstalledModInfo, JavaRelease,
-  LoaderKind,
+  JavaSourceProbe, LoaderKind,
   LoaderVersionInfo, LocalCape, LocalSkin, MapEntry, ModContentKind, ModDependency, ModDetail, ModFileInfo, ModSearchResult, SaveInfo,
   ServerBuildInfo, ServerCoreId, ServerCoreInfo, ServerEntry,
   Settings, VersionBrief,
@@ -16,6 +16,7 @@ export const DEFAULT_SETTINGS: Settings = {
   modProvider: "modrinth",
   autoSwitchThresholdMs: 800,
   javaAutoDownload: true,
+  javaDownloadSource: "auto",
   javaAutoMatch: true,
   language: "zh-CN",
   closeToTray: true,
@@ -304,9 +305,43 @@ export const MOCK_JAVA_RELEASES: JavaRelease[] = [
   javaRelease(8, "8.0.422", false, 175_000_000),
 ];
 
+/** 已装 JDK：四个来源各一条（bellsoft / adoptium / tuna / system），覆盖徽标的四种取值。 */
 export const MOCK_INSTALLED_JAVA: InstalledJava[] = [
-  { major: 8, version: "1.8.0_442", path: "C:\\Program Files\\Java\\jre1.8.0_442\\bin\\javaw.exe", vendor: "Oracle" },
-  { major: 17, version: "17.0.13", path: `${MOCK_DATA_ROOT}\\java\\17-17.0.13\\bin\\javaw.exe`, vendor: "Liberica" },
+  {
+    major: 8,
+    version: "1.8.0_442",
+    path: "C:\\Program Files\\Java\\jre1.8.0_442\\bin\\javaw.exe",
+    vendor: "Oracle",
+    source: "system",
+  },
+  {
+    major: 17,
+    version: "17.0.13",
+    path: `${MOCK_DATA_ROOT}\\java\\17-17.0.13\\bin\\javaw.exe`,
+    vendor: "Liberica",
+    source: "bellsoft",
+  },
+  {
+    major: 21,
+    version: "21.0.5",
+    path: `${MOCK_DATA_ROOT}\\java\\21-21.0.5\\bin\\javaw.exe`,
+    vendor: "Temurin",
+    source: "adoptium",
+  },
+  {
+    major: 25,
+    version: "25.0.1",
+    path: `${MOCK_DATA_ROOT}\\java\\25-25.0.1\\bin\\javaw.exe`,
+    vendor: "Temurin (TUNA)",
+    source: "tuna",
+  },
+];
+
+/** 三个下载源的探测结果：TUNA 最快、Adoptium 次之、BellSoft 最慢（「自动」按它挑源）。 */
+export const MOCK_JAVA_SOURCES: JavaSourceProbe[] = [
+  { source: "tuna", label: "清华 TUNA 镜像", latencyMs: 96, ok: true, detail: "mirrors.tuna.tsinghua.edu.cn" },
+  { source: "adoptium", label: "Adoptium (Temurin)", latencyMs: 320, ok: true, detail: "api.adoptium.net" },
+  { source: "bellsoft", label: "BellSoft Liberica", latencyMs: 486, ok: true, detail: "download.bell-sw.com" },
 ];
 
 function icon(letters: string, color: string): string {

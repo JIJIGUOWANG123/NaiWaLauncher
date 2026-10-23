@@ -3,7 +3,7 @@ import type {
 } from "../../shared/ipc";
 import type {
   Account, DownloadJob, InstalledContentRef, InstalledModInfo, InstanceMeta, InstalledJava, LanAddress, LoaderKind,
-  LocalCape, LocalSkin, MapEntry, MicrosoftLoginState, ModCategory, ModContentKind, ModDependency, ModFilterOptions, ModProviderId,
+  JavaRelease, JavaSourceId, JavaSourceProbe, JavaVendorId, LocalCape, LocalSkin, MapEntry, MicrosoftLoginState, ModCategory, ModContentKind, ModDependency, ModFilterOptions, ModProviderId,
   ModSearchResult,
   NatfrpStatus, NatfrpTunnel, NatfrpUser, PortProbeResult, ServerConsoleLine, ServerCoreId, ServerEntry, ServerStatus,
   SkinInfo, SkinProfile, TaskKind,
@@ -13,7 +13,7 @@ import { loaderLabel } from "../lib/format";
 import {
   DEFAULT_SETTINGS, MOCK_ACCOUNTS, MOCK_APP_INFO, MOCK_INSTALLED_JAVA, MOCK_INSTALLED_MODS, MOCK_INSTANCES,
   MOCK_JAVA_RELEASES, MOCK_DATA_ROOT, MOCK_GAME_ROOT, MOCK_CONTENT, MOCK_CONTENT_META, MOCK_MAPS, MOCK_MEDIA,
-  MOCK_INSTALLED_PACKS, MOCK_LOCAL_CAPES, MOCK_LOCAL_SKINS, MOCK_MOD_DEPENDENCIES, MOCK_MOD_UPDATES, MOCK_PACK_DEPENDENCIES, MOCK_PACK_UPDATES,
+  MOCK_INSTALLED_PACKS, MOCK_JAVA_SOURCES, MOCK_LOCAL_CAPES, MOCK_LOCAL_SKINS, MOCK_MOD_DEPENDENCIES, MOCK_MOD_UPDATES, MOCK_PACK_DEPENDENCIES, MOCK_PACK_UPDATES,
   MOCK_SERVER_CORES, MOCK_SERVERS, mockServerBuilds,
   MOCK_ROOT, MOCK_SAVES, MOCK_SCANNED_CONTENT, MOCK_SOURCES, MOCK_STARTUP_SOUND, MOCK_VERSIONS,
   mockDependencyFile, mockDetailFor, mockFiles, mockFindProject, mockIconUrl, mockLoaderVersions,
@@ -321,6 +321,35 @@ function seedDownloadJobs(): DownloadJob[] {
       updatedAt: base - 5 * 3_600_000,
     },
   ];
+}
+
+/** 预览里的 JDK 来源：厂商展示名 + 下载前缀（不同源前缀不同，肉眼就能确认换源成功）。 */
+const JAVA_VENDOR_LABEL: Record<Exclude<JavaSourceId, "auto">, string> = {
+  bellsoft: "Liberica",
+  adoptium: "Temurin",
+  tuna: "Temurin (TUNA)",
+};
+
+const JAVA_BASE_URL: Record<Exclude<JavaSourceId, "auto">, string> = {
+  bellsoft: "https://download.bell-sw.com/java",
+  adoptium: "https://github.com/adoptium/temurin-release/releases/download",
+  tuna: "https://mirrors.tuna.tsinghua.edu.cn/Adoptium",
+};
+
+function javaFileName(version: string, source: Exclude<JavaSourceId, "auto">): string {
+  if (source === "bellsoft") return `bellsoft-jdk${version}-windows-amd64.zip`;
+  return `OpenJDK-${version}-windows-x64-${source}.zip`;
+}
+
+function javaReleaseUrl(fileName: string, source: Exclude<JavaSourceId, "auto">): string {
+  return `${JAVA_BASE_URL[source]}/${fileName}`;
+}
+
+/** 「自动」挑源：探测结果里 ok 且耗时最短的那个。 */
+function fastestJavaSource(): Exclude<JavaSourceId, "auto"> {
+  const usable = MOCK_JAVA_SOURCES.filter((item) => item.ok && item.latencyMs !== null);
+  const best = [...usable].sort((a, b) => (a.latencyMs ?? 0) - (b.latencyMs ?? 0))[0];
+  return best?.source ?? "bellsoft";
 }
 
 export function createMockApi(): NaiwaApi {
@@ -706,6 +735,9 @@ export function createMockApi(): NaiwaApi {
           assetUrl: noAsset
             ? undefined
             : "https://github.com/JIJIGUOWANG123/NaiWaLauncher/releases/download/v0.1.3/NaiWaLauncher.exe",
+          setupUrl: noAsset
+            ? undefined
+            : "https://github.com/JIJIGUOWANG123/NaiWaLauncher/releases/latest/download/NaiWaLauncher-Setup.exe",
           notes: "• 下载器重做断点续传，切镜像不再丢进度\n• 存档直进支持新建世界后自动进入\n• 中文翻译增加本地缓存，命中率更高",
           publishedAt: "2026-05-18T08:00:00.000Z",
           channel: "github-api" as const,
@@ -1271,27 +1303,54 @@ export function createMockApi(): NaiwaApi {
     },
 
     java: {
-      releases: async () => {
+      sources: async (): Promise<JavaSourceProbe[]> => {
+        trace("java.sources");
+        await sleep(280);
+        return MOCK_JAVA_SOURCES.map((item) => ({ ...item }));
+      },
+      releases: async (majors?: number[], requested?: JavaSourceId) => {
+        // source 缺省跟设置走；auto 直接用探测结果里最快的那个源。
+        const source = requested ?? settings.javaDownloadSource ?? "auto";
+        const picked: Exclude<JavaSourceId, "auto"> = source === "auto" ? fastestJavaSource() : source;
+        trace("java.releases", { majors: majors ?? null, source, picked });
         await sleep(520);
-        return [...MOCK_JAVA_RELEASES].sort((a, b) => (b.major - a.major) || b.version.localeCompare(a.version));
+        return MOCK_JAVA_RELEASES
+          .filter((item) => !majors || majors.length === 0 || majors.includes(item.major))
+          .map((item): JavaRelease => ({
+            ...item,
+            source: picked,
+            // 不同源的下载前缀不同，肉眼就能确认「真的换了源」。
+            downloadUrl: javaReleaseUrl(item.fileName, picked),
+            fileName: javaFileName(item.version, picked),
+          }))
+          .sort((a, b) => (b.major - a.major) || b.version.localeCompare(a.version));
       },
       installed: async () => {
         await sleep(300);
         return installedJava.map((item) => ({ ...item }));
       },
-      install: async (major, version) => {
+      install: async (major: number, version: string, requested?: JavaSourceId) => {
+        const source = requested ?? settings.javaDownloadSource ?? "auto";
+        const picked: Exclude<JavaSourceId, "auto"> = source === "auto" ? fastestJavaSource() : source;
+        trace("java.install", { major, version, source, picked });
         const release = MOCK_JAVA_RELEASES.find((item) => item.major === major && item.version === version)
           ?? MOCK_JAVA_RELEASES.find((item) => item.major === major);
-        if (!release) throw new Error(`BellSoft 上没有找到 Java ${major} 的可用版本`);
+        if (!release) throw new Error(`没有找到 Java ${major} ${version} 的可用版本`);
         await simulateTask("java", `安装 Java ${release.version}`, "下载并解压 JDK", release.sizeBytes ?? 180_000_000, 2400, 3);
         const installed: InstalledJava = {
           major: release.major,
           version: release.version,
           path: `${MOCK_DATA_ROOT}\\java\\${release.major}-${release.version}\\bin\\javaw.exe`,
-          vendor: "Liberica",
+          vendor: JAVA_VENDOR_LABEL[picked],
+          source: picked,
         };
         const exists = installedJava.some((item) => item.major === installed.major && item.version === installed.version);
-        if (!exists) installedJava.push(installed);
+        if (exists) {
+          const index = installedJava.findIndex((item) => item.major === installed.major && item.version === installed.version);
+          installedJava[index] = installed;
+        } else {
+          installedJava.push(installed);
+        }
         return { ...installed };
       },
     },

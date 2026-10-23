@@ -1,7 +1,7 @@
 {
   "name": "naiwa-launcher",
   "productName": "NaiWa Launcher",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "NaiWa Launcher (奶娃启动器) - a modern Minecraft launcher",
   "author": {
     "name": "奶龙"
@@ -20,9 +20,7 @@
     "dist:zip": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-zip.ps1"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "adm-zip": "^0.5.16"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.7",
@@ -30,6 +28,8 @@
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^4.7.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "electron": "^38.0.0",
     "electron-builder": "^26.0.12",
     "typescript": "^5.9.2",
@@ -46,7 +46,10 @@
     "files": [
       "dist/**",
       "dist-electron/**",
-      "package.json"
+      "package.json",
+      "!node_modules/react/**",
+      "!node_modules/react-dom/**",
+      "!node_modules/scheduler/**"
     ],
     "extraResources": [
       {
@@ -94,6 +97,10 @@
       "artifactName": "NaiWaLauncher-${version}-single-exe.exe",
       "unpackDirName": "NaiWaLauncher"
     },
-    "asar": false
+    "asar": false,
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ]
   }
 }

@@ -3,6 +3,7 @@ import type {
   ChangelogSection, DownloadJob, InstalledModInfo, InstalledContentRef, LocalCape, LocalSkin, LocalSkinSelection, SkinApplyResult, ServerBuildInfo, ServerConsoleLine, ServerCoreId, ServerCoreInfo, ServerEntry, ServerMeta, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
   PortProbeResult, SaveInfo, UpdateCheckResult, InstanceExportResult, InstanceImportResult,
   LoaderKind, LoaderVersionInfo, LogLine, ModCategory, ModFileInfo, ModFilterOptions, ModProviderId,
+  JavaSourceId, JavaSourceProbe,
   ModSearchResult, ModSourceFilter, Settings, SkinInfo, SkinProfile, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
   WardrobeSkin,
 } from "./types";
@@ -89,6 +90,7 @@ export const IPC = {
   instancesUsage: "instances:usage",
 
   javaReleases: "java:releases",
+  javaSources: "java:sources",
   javaInstalled: "java:installed",
   javaInstall: "java:install",
 
@@ -215,7 +217,8 @@ export interface NaiwaApi {
     /** 检查软件更新（GitHub 仓库最新版本）。 */
     checkUpdates(): Promise<UpdateCheckResult>;
     /** 下载最新免安装版并替换当前程序，成功后自动重启（仅免安装版可用）。 */
-    installUpdate(url: string): Promise<void>;
+      /** 下载并应用更新；url 只是提示，主进程会按当前是免安装版还是安装版自行选包。 */
+    installUpdate(url?: string): Promise<void>;
     /** 在资源管理器里定位文件/文件夹（不受启动器根目录限制，用于导出结果）。 */
     revealInFolder(path: string): Promise<void>;
     /** 读取随程序分发的 CHANGELOG.md，按版本倒序返回（默认最多 3 段）。 */
@@ -338,9 +341,12 @@ export interface NaiwaApi {
     setLoader(id: string, loader: LoaderKind, loaderVersion?: string): Promise<InstanceMeta>;
   };
   java: {
-    releases(): Promise<JavaRelease[]>;
+    /** 可下载的 JDK 列表；source 缺省用设置里的 javaDownloadSource，auto 会先测速挑源。 */
+    releases(majors?: number[], source?: JavaSourceId): Promise<JavaRelease[]>;
     installed(): Promise<InstalledJava[]>;
-    install(major: number, version: string): Promise<InstalledJava>;
+    install(major: number, version: string, source?: JavaSourceId): Promise<InstalledJava>;
+    /** 三个下载源的探测结果（耗时越低越优先）；「自动」按它挑源。 */
+    sources(): Promise<JavaSourceProbe[]>;
   };
   mods: {
     search(req: ModSearchRequest): Promise<ModSearchResult[]>;

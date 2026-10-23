@@ -1,7 +1,7 @@
 // 生成安装包：默认装到 C:\Program Files\naiwa，启动器文件平铺在该目录；
 // 游戏数据 <root>\.minecraft 与启动器数据 <root>\NaiWa 首次启动时生成，卸载保留。
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -37,7 +37,9 @@ const installDirVar = process.env.NAIWA_INSTALL_DIR || "$PROGRAMFILES64\\naiwa";
 const elevate = (process.env.NAIWA_ELEVATE || "admin").toLowerCase() === "user" ? "user" : "admin";
 
 const ico = join(root, "resources", "logo.ico");
-const out = join(root, "release", "NaiWaLauncher-Setup-" + version + ".exe");
+// 固定名（GitHub Release 与自动更新都认这个名字，永远指向最新版）+ 带版本号的副本（便于归档）
+const fixedOut = join(root, "release", "NaiWaLauncher-Setup.exe");
+const versionedOut = join(root, "release", "NaiWaLauncher-Setup-" + version + ".exe");
 const scriptPath = join(root, ".scratch", "installer.nsi");
 mkdirSync(join(root, ".scratch"), { recursive: true });
 const estimatedKb = Math.round(statSync(join(unpacked, "NaiWa Launcher.exe")).size / 1024) + 200000;
@@ -48,7 +50,7 @@ add("Unicode true",
   "SetCompressor /SOLID lzma",
   'Name "奶娃启动器 NaiWa Launcher"',
   'Caption "奶娃启动器 ' + version + ' 安装程序"',
-  'OutFile "' + out + '"',
+  'OutFile "' + fixedOut + '"',
   'InstallDir "' + installDirVar + '"',
   "RequestExecutionLevel " + elevate,
   'BrandingText "奶娃启动器 · NaiWa Launcher · 开发者 奶龙"',
@@ -73,9 +75,12 @@ add("Unicode true",
   "",
   "; 无论用户选哪个父目录，最终都落到 <父目录>\\naiwa",
   "Function AppendNaiwa",
+  "; /S 静默安装（自动更新用）时按 /D= 指定目录原样安装，不再追加 \\naiwa",
+  "  IfSilent done",
   '  StrCpy $1 "$INSTDIR" "" -6',
   '  StrCmp $1 "\\naiwa" +2',
   '  StrCpy $INSTDIR "$INSTDIR\\naiwa"',
+  "  done:",
   "FunctionEnd",
   "",
   "Function .onVerifyInstDir",
@@ -138,4 +143,6 @@ add("Unicode true",
 writeFileSync(scriptPath, "\uFEFF" + L.join("\r\n"), "utf8");
 console.log("makensis:", makensis);
 execFileSync(makensis, ["/V2", scriptPath], { stdio: "inherit" });
-console.log("installer:", out);
+console.log("installer(fixed):", fixedOut);
+copyFileSync(fixedOut, versionedOut);
+console.log("installer(versioned):", versionedOut);
