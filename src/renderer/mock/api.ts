@@ -1,18 +1,20 @@
 import type {
-  CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModSearchRequest, ModSourceFilter, NaiwaApi,
+  CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModSearchRequest, ModSourceFilter, NaiwaApi, ServerCreateRequest,
 } from "../../shared/ipc";
 import type {
   Account, DownloadJob, InstalledContentRef, InstalledModInfo, InstanceMeta, InstalledJava, LanAddress, LoaderKind,
-  MapEntry, MicrosoftLoginState, ModCategory, ModContentKind, ModDependency, ModFilterOptions, ModProviderId,
+  LocalSkin, MapEntry, MicrosoftLoginState, ModCategory, ModContentKind, ModDependency, ModFilterOptions, ModProviderId,
   ModSearchResult,
-  NatfrpStatus, NatfrpTunnel, NatfrpUser, PortProbeResult, SkinInfo, SkinProfile, TaskKind,
+  NatfrpStatus, NatfrpTunnel, NatfrpUser, PortProbeResult, ServerConsoleLine, ServerCoreId, ServerEntry, ServerStatus,
+  SkinInfo, SkinProfile, TaskKind,
   WardrobeSkin,
 } from "../../shared/types";
 import { loaderLabel } from "../lib/format";
 import {
   DEFAULT_SETTINGS, MOCK_ACCOUNTS, MOCK_APP_INFO, MOCK_INSTALLED_JAVA, MOCK_INSTALLED_MODS, MOCK_INSTANCES,
   MOCK_JAVA_RELEASES, MOCK_DATA_ROOT, MOCK_GAME_ROOT, MOCK_CONTENT, MOCK_CONTENT_META, MOCK_MAPS, MOCK_MEDIA,
-  MOCK_INSTALLED_PACKS, MOCK_MOD_DEPENDENCIES, MOCK_MOD_UPDATES, MOCK_PACK_DEPENDENCIES, MOCK_PACK_UPDATES,
+  MOCK_INSTALLED_PACKS, MOCK_LOCAL_SKINS, MOCK_MOD_DEPENDENCIES, MOCK_MOD_UPDATES, MOCK_PACK_DEPENDENCIES, MOCK_PACK_UPDATES,
+  MOCK_SERVER_CORES, MOCK_SERVERS, mockServerBuilds,
   MOCK_ROOT, MOCK_SAVES, MOCK_SCANNED_CONTENT, MOCK_SOURCES, MOCK_STARTUP_SOUND, MOCK_VERSIONS,
   mockDependencyFile, mockDetailFor, mockFiles, mockFindProject, mockIconUrl, mockLoaderVersions,
 } from "./data";
@@ -329,10 +331,101 @@ export function createMockApi(): NaiwaApi {
     ...item,
     updatedAt: Date.UTC(2024, 10, 1 + index, 9, 12),
   }));
+  /** 本地皮肤库内存态：官方内置只读，用户导入可增删。 */
+  let localSkins: LocalSkin[] = MOCK_LOCAL_SKINS.map((item) => ({ ...item }));
+  /** 账号 id → 选中的皮肤文件名；没有记录表示跟随账号原皮肤。 */
+  const skinSelection = new Map<string, string>(MOCK_ACCOUNTS.map((item) => [item.id, "steve.png"]));
+
+  /** 按账号标记 active，渲染层据此显示「使用中」。 */
+  const localSkinsFor = (accountId?: string): LocalSkin[] => {
+    const picked = accountId ? skinSelection.get(accountId) ?? "" : "";
+    return localSkins.map((item) => ({ ...item, active: item.fileName === picked }));
+  };
   /** 账号 id → 角色列表（第一次读取时按账号播种，切换后改 active）。 */
   const profileState = new Map<string, SkinProfile[]>();
   let instances: InstanceMeta[] = MOCK_INSTANCES.map((item) => ({ ...item }));
   const installedJava: InstalledJava[] = MOCK_INSTALLED_JAVA.map((item) => ({ ...item }));
+
+  // ---- 开服：内存态 + 日志缓冲 + 两个推送集合 + 每个服务端的假定时器 ----
+  let servers: ServerEntry[] = MOCK_SERVERS.map((item) => ({ ...item, meta: { ...item.meta } }));
+  const serverBuffers = new Map<string, ServerConsoleLine[]>();
+  const serverLineListeners = new Set<(line: ServerConsoleLine) => void>();
+  const serverStatusListeners = new Set<(entries: ServerEntry[]) => void>();
+  const serverTimers = new Map<string, Array<ReturnType<typeof setTimeout>>>();
+
+  const cloneServer = (entry: ServerEntry): ServerEntry => ({ status: entry.status, meta: { ...entry.meta } });
+  const serverSnapshot = (): ServerEntry[] => servers.map(cloneServer);
+
+  function requireServer(id: string): ServerEntry {
+    const found = servers.find((item) => item.meta.id === id);
+    if (!found) throw new Error(`服务端不存在：${id}`);
+    return found;
+  }
+
+  function emitServers(): void {
+    const snapshot = serverSnapshot();
+    for (const cb of serverStatusListeners) cb(snapshot);
+  }
+
+  function pushServerLine(serverId: string, stream: ServerConsoleLine["stream"], text: string): void {
+    const line: ServerConsoleLine = { serverId, at: Date.now(), stream, text };
+    const buffer = serverBuffers.get(serverId) ?? [];
+    buffer.push(line);
+    if (buffer.length > 500) buffer.splice(0, buffer.length - 500);
+    serverBuffers.set(serverId, buffer);
+    for (const cb of serverLineListeners) cb(line);
+  }
+
+  function patchServer(id: string, patch: Partial<ServerEntry["meta"]>, status?: ServerStatus): void {
+    servers = servers.map((item) => (item.meta.id === id
+      ? { ...item, status: status ?? item.status, meta: { ...item.meta, ...patch } }
+      : item));
+    emitServers();
+  }
+
+  function clearServerTimers(id: string): void {
+    for (const timer of serverTimers.get(id) ?? []) clearTimeout(timer);
+    serverTimers.delete(id);
+  }
+
+  function scheduleServer(id: string, ms: number, fn: () => void): void {
+    const timer = setTimeout(fn, ms);
+    serverTimers.set(id, [...(serverTimers.get(id) ?? []), timer]);
+  }
+
+  /** 第一次打开控制台时的假日志：按当前状态给 2-5 行（crashed 带 stderr）。 */
+  function seedServerBuffer(entry: ServerEntry): void {
+    const id = entry.meta.id;
+    const seed: Array<{ stream: ServerConsoleLine["stream"]; text: string }> = [
+      { stream: "system", text: `服务端目录：servers/${id}（${entry.meta.jarFile}）` },
+      { stream: "stdout", text: `[Server thread/INFO]: Starting minecraft server version ${entry.meta.mcVersion}` },
+    ];
+    if (entry.status === "running") {
+      seed.push({ stream: "stdout", text: "[Server thread/INFO]: Done (3.214s)! For help, type \"help\"" });
+    }
+    if (entry.status === "crashed") {
+      seed.push({ stream: "stdout", text: "[Server thread/INFO]: Preparing level \"world\"" });
+      seed.push({ stream: "stderr", text: "java.lang.OutOfMemoryError: Java heap space" });
+      seed.push({ stream: "system", text: `进程异常退出（exit ${entry.meta.lastExitCode ?? 1}），可以调大内存后重试` });
+    }
+    serverBuffers.set(id, seed.map((line, index) => ({
+      serverId: id,
+      at: Date.now() - (seed.length - index) * 1200,
+      stream: line.stream,
+      text: line.text,
+    })));
+  }
+
+  const stopServer = async (id: string): Promise<void> => {
+    requireServer(id);
+    clearServerTimers(id);
+    patchServer(id, {}, "stopping");
+    pushServerLine(id, "system", "正在保存世界并停止服务端…");
+    scheduleServer(id, 900, () => {
+      patchServer(id, { lastExitCode: 0 }, "stopped");
+      pushServerLine(id, "stdout", "[Server thread/INFO]: 服务器已安全关闭（exit 0）");
+    });
+  };
   // 实例各内容目录（mods/shaderpacks/resourcepacks）的内存态：按 实例+类型 分开存，首次访问时填种子。
   const installedMods = new Map<string, InstalledModInfo[]>();
   let taskSeq = 0;
@@ -1493,6 +1586,209 @@ export function createMockApi(): NaiwaApi {
       onChanged: (cb) => {
         downloadListeners.add(cb);
         return () => { downloadListeners.delete(cb); };
+      },
+    },
+
+    skinsLocal: {
+      list: async (accountId?: string) => {
+        trace("skinsLocal.list", { accountId: accountId ?? null });
+        await sleep(180);
+        return localSkinsFor(accountId);
+      },
+      select: async (accountId: string, fileName: string | null) => {
+        trace("skinsLocal.select", { accountId, fileName });
+        await sleep(120);
+        if (fileName === null) {
+          skinSelection.delete(accountId);
+        } else {
+          if (!localSkins.some((item) => item.fileName === fileName)) {
+            throw new Error(`皮肤库里没有这个文件：${fileName}`);
+          }
+          skinSelection.set(accountId, fileName);
+        }
+        return localSkinsFor(accountId);
+      },
+      import: async (filePaths: string[]) => {
+        trace("skinsLocal.import", { count: filePaths.length, filePaths });
+        await sleep(320);
+        const imported: string[] = [];
+        const skipped: string[] = [];
+        for (const target of filePaths) {
+          const fileName = target.split(/[\\/]/).pop() || "skin.png";
+          if (!/\.png$/i.test(fileName) || localSkins.some((item) => item.fileName === fileName)) {
+            skipped.push(fileName);
+            continue;
+          }
+          localSkins = [...localSkins, {
+            fileName,
+            name: fileName.replace(/\.png$/i, ""),
+            source: "user",
+            path: MOCK_SKIN_TEXTURE_UPLOADED,
+            sizeBytes: 64 * 64 * 4,
+            width: 64,
+            height: 64,
+            model: "classic",
+            active: false,
+          }];
+          imported.push(fileName);
+        }
+        return { imported, skipped };
+      },
+      remove: async (fileName: string) => {
+        trace("skinsLocal.remove", { fileName });
+        await sleep(220);
+        const target = localSkins.find((item) => item.fileName === fileName);
+        if (!target) throw new Error(`皮肤库里没有这个文件：${fileName}`);
+        if (target.source === "official") throw new Error("官方内置皮肤不能删除");
+        localSkins = localSkins.filter((item) => item.fileName !== fileName);
+        for (const [accountId, picked] of skinSelection) {
+          if (picked === fileName) skinSelection.delete(accountId);
+        }
+        return localSkinsFor();
+      },
+      applyToInstance: async (instanceId: string, accountId: string) => {
+        trace("skinsLocal.applyToInstance", { instanceId, accountId });
+        await sleep(420);
+        const picked = skinSelection.get(accountId);
+        if (!picked) {
+          return { applied: false, modInstalled: true, message: "这个账号还没有选中本地皮肤。" };
+        }
+        // 预览里故意返回 modInstalled:false，方便点验「一键安装 CustomSkinLoader」分支。
+        return {
+          applied: true,
+          modInstalled: false,
+          skinFile: picked,
+          message: `已把 ${picked} 写进实例；还差 CustomSkinLoader 才会在游戏里生效。`,
+        };
+      },
+      ensureMod: async (instanceId: string) => {
+        trace("skinsLocal.ensureMod", { instanceId });
+        await simulateTask("mod", "安装 CustomSkinLoader", "下载模组文件", 1_200_000, 900, 1);
+        return { installed: true, fileName: "CustomSkinLoader_Universal-15.0.5.jar" };
+      },
+      pathForFile: (file: File) => `${MOCK_SKINS_DIR}\\${file?.name || "skin.png"}`,
+    },
+
+    servers: {
+      cores: async () => {
+        trace("servers.cores");
+        await sleep(200);
+        return MOCK_SERVER_CORES.map((item) => ({ ...item, mcVersions: [...item.mcVersions] }));
+      },
+      builds: async (core: ServerCoreId, mcVersion: string) => {
+        trace("servers.builds", { core, mcVersion });
+        await sleep(240);
+        return mockServerBuilds(core, mcVersion);
+      },
+      list: async () => {
+        trace("servers.list");
+        await sleep(160);
+        return serverSnapshot();
+      },
+      create: async (req: ServerCreateRequest) => {
+        trace("servers.create", req);
+        await simulateTask("generic", `下载 ${req.core} ${req.coreVersion}`, "下载服务端 jar", 48_000_000, 1400, 1);
+        const id = `srv-${Date.now().toString(36)}`;
+        const entry: ServerEntry = {
+          status: "stopped",
+          meta: {
+            id,
+            name: req.name.trim() || `${req.core} ${req.mcVersion}`,
+            core: req.core,
+            mcVersion: req.mcVersion,
+            coreVersion: req.coreVersion,
+            jarFile: `${req.core.toLowerCase()}-${req.mcVersion}.jar`,
+            port: req.port ?? 25565,
+            memoryMb: req.memoryMb ?? 2048,
+            maxPlayers: req.maxPlayers ?? 20,
+            onlineMode: req.onlineMode ?? true,
+            eulaAgreed: true,
+            createdAt: Date.now(),
+          },
+        };
+        servers = [...servers, entry];
+        serverBuffers.set(id, [{
+          serverId: id,
+          at: Date.now(),
+          stream: "system",
+          text: `已写入 eula.txt（eula=true）与 server.properties（端口 ${entry.meta.port}，最大人数 ${entry.meta.maxPlayers}）`,
+        }]);
+        emitServers();
+        return cloneServer(entry);
+      },
+      remove: async (id: string) => {
+        trace("servers.remove", { id });
+        requireServer(id);
+        await sleep(180);
+        clearServerTimers(id);
+        servers = servers.filter((item) => item.meta.id !== id);
+        serverBuffers.delete(id);
+        emitServers();
+      },
+      update: async (id: string, patch) => {
+        trace("servers.update", { id, patch });
+        const current = requireServer(id);
+        const next = { ...current.meta, ...patch };
+        if (!Number.isInteger(next.port) || next.port < 1 || next.port > 65535) {
+          throw new Error("端口需要是 1-65535 的整数");
+        }
+        if (!Number.isInteger(next.memoryMb) || next.memoryMb < 512) throw new Error("内存至少 512 MB");
+        await sleep(160);
+        patchServer(id, patch);
+        return cloneServer(requireServer(id));
+      },
+      start: async (id: string) => {
+        trace("servers.start", { id });
+        const entry = requireServer(id);
+        if (entry.status === "running" || entry.status === "starting") return cloneServer(entry);
+        clearServerTimers(id);
+        patchServer(id, {}, "starting");
+        pushServerLine(id, "system", `正在启动 ${entry.meta.core} ${entry.meta.coreVersion}（${entry.meta.memoryMb} MB，端口 ${entry.meta.port}）`);
+        scheduleServer(id, 500, () => {
+          pushServerLine(id, "stdout", `[Server thread/INFO]: Starting minecraft server version ${entry.meta.mcVersion}`);
+        });
+        scheduleServer(id, 1200, () => {
+          pushServerLine(id, "stdout", "[Server thread/INFO]: Preparing level \"world\"");
+        });
+        scheduleServer(id, 1900, () => {
+          patchServer(id, { lastStartedAt: Date.now(), lastExitCode: undefined }, "running");
+          pushServerLine(id, "stdout", "[Server thread/INFO]: Done (3.214s)! For help, type \"help\"");
+        });
+        return cloneServer(requireServer(id));
+      },
+      stop: async (id: string) => {
+        trace("servers.stop", { id });
+        await stopServer(id);
+        return cloneServer(requireServer(id));
+      },
+      command: async (id: string, line: string) => {
+        trace("servers.command", { id, line });
+        const entry = requireServer(id);
+        if (entry.status !== "running") throw new Error("服务端没在运行，命令发不出去");
+        const trimmed = line.trim().replace(/^\//, "");
+        if (!trimmed) return;
+        pushServerLine(id, "system", `> ${trimmed}`);
+        if (trimmed === "stop" || trimmed === "end") {
+          await stopServer(id);
+          return;
+        }
+        pushServerLine(id, "stdout", `[Server thread/INFO]: 已执行 ${trimmed}`);
+      },
+      console: async (id: string, limit = 500) => {
+        trace("servers.console", { id, limit });
+        const entry = requireServer(id);
+        await sleep(120);
+        if (!serverBuffers.has(id)) seedServerBuffer(entry);
+        const buffer = serverBuffers.get(id) ?? [];
+        return buffer.slice(Math.max(0, buffer.length - limit)).map((line) => ({ ...line }));
+      },
+      onConsole: (cb: (line: ServerConsoleLine) => void) => {
+        serverLineListeners.add(cb);
+        return () => { serverLineListeners.delete(cb); };
+      },
+      onStatus: (cb: (entries: ServerEntry[]) => void) => {
+        serverStatusListeners.add(cb);
+        return () => { serverStatusListeners.delete(cb); };
       },
     },
 

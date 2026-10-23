@@ -1,6 +1,6 @@
 import type {
   Account, AppInfo, DeviceCodeChallenge, DownloadSourceId, DownloadSourceInfo, InstanceMeta, InstalledJava,
-  DownloadJob, InstalledModInfo, InstalledContentRef, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
+  DownloadJob, InstalledModInfo, InstalledContentRef, LocalSkin, LocalSkinSelection, SkinApplyResult, ServerBuildInfo, ServerConsoleLine, ServerCoreId, ServerCoreInfo, ServerEntry, ServerMeta, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
   PortProbeResult, SaveInfo, UpdateCheckResult, InstanceExportResult, InstanceImportResult,
   LoaderKind, LoaderVersionInfo, LogLine, ModCategory, ModFileInfo, ModFilterOptions, ModProviderId,
   ModSearchResult, ModSourceFilter, Settings, SkinInfo, SkinProfile, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
@@ -104,6 +104,24 @@ export const IPC = {
   modsInstallModpack: "mods:installModpack",
   modsCategories: "mods:categories",
   modsFilterOptions: "mods:filterOptions",
+  skinsLocalList: "skins:localList",
+  skinsLocalSelect: "skins:localSelect",
+  skinsLocalImport: "skins:localImport",
+  skinsLocalRemove: "skins:localRemove",
+  skinsLocalApply: "skins:localApply",
+  skinsLocalEnsureMod: "skins:localEnsureMod",
+  serversCores: "servers:cores",
+  serversBuilds: "servers:builds",
+  serversList: "servers:list",
+  serversCreate: "servers:create",
+  serversRemove: "servers:remove",
+  serversUpdate: "servers:update",
+  serversStart: "servers:start",
+  serversStop: "servers:stop",
+  serversCommand: "servers:command",
+  serversConsole: "servers:console",
+  serversConsoleLine: "servers:consoleLine",
+  serversStatus: "servers:status",
   modsInstalledContent: "mods:installedContent",
   instancesSetLoader: "instances:setLoader",
 } as const;
@@ -114,6 +132,17 @@ export interface CreateInstanceRequest {
   loader: LoaderKind;
   loaderVersion?: string;
   memoryMb?: number;
+}
+
+export interface ServerCreateRequest {
+  name: string;
+  core: ServerCoreId;
+  mcVersion: string;
+  coreVersion: string;
+  port?: number;
+  memoryMb?: number;
+  maxPlayers?: number;
+  onlineMode?: boolean;
 }
 
 export interface ModSearchRequest {
@@ -332,6 +361,46 @@ export interface NaiwaApi {
     update(instanceId: string, fileName: string, kind?: ModContentKind): Promise<{ fileName: string; path: string }>;
     /** 实例里已装内容的索引记录（资源页判断重复安装用；文件已被删除的记录不返回）。 */
     installedContent(instanceId: string): Promise<InstalledContentRef[]>;
+  };
+  /** 本地皮肤库：与账号解耦，账号只负责提供预览用的昵称。 */
+  skinsLocal: {
+    /** 列出官方内置与用户导入的皮肤；accountId 用于标记哪个是当前选中的。 */
+    list(accountId?: string): Promise<LocalSkin[]>;
+    /** 选中/取消选中某账号的本地皮肤（fileName 传 null 表示跟随账号原皮肤）。 */
+    select(accountId: string, fileName: string | null): Promise<LocalSkin[]>;
+    /** 导入皮肤文件（拖放/选择框拿到的绝对路径），返回导入与跳过的文件名。 */
+    import(filePaths: string[]): Promise<{ imported: string[]; skipped: string[] }>;
+    /** 删除用户导入的皮肤（官方内置的不能删）。 */
+    remove(fileName: string): Promise<LocalSkin[]>;
+    /** 把账号当前选中的皮肤写进实例（CustomSkinLoader 本地皮肤目录）。 */
+    applyToInstance(instanceId: string, accountId: string): Promise<SkinApplyResult>;
+    /** 一键把 CustomSkinLoader 装进实例。 */
+    ensureMod(instanceId: string): Promise<{ installed: boolean; fileName?: string; message?: string }>;
+    /** 拖放进来的 File 拿绝对路径（Electron 38 只允许经 webUtils 取，渲染层不能直接用 file.path）。 */
+    pathForFile(file: File): string;
+  };
+  /** 开服：服务端列表、下载、进程与控制台。 */
+  servers: {
+    /** FastMirror 的核心清单（含各自支持的游戏版本）。 */
+    cores(): Promise<ServerCoreInfo[]>;
+    /** 某核心某游戏版本的构建列表。 */
+    builds(core: ServerCoreId, mcVersion: string): Promise<ServerBuildInfo[]>;
+    list(): Promise<ServerEntry[]>;
+    /** 新建：创建目录、下载 jar、写 eula.txt 与 server.properties。 */
+    create(req: ServerCreateRequest): Promise<ServerEntry>;
+    remove(id: string): Promise<void>;
+    /** 只允许改 name / port / memoryMb / maxPlayers / onlineMode / eulaAgreed。 */
+    update(id: string, patch: Partial<Pick<ServerMeta, "name" | "port" | "memoryMb" | "maxPlayers" | "onlineMode" | "eulaAgreed">>): Promise<ServerEntry>;
+    start(id: string): Promise<ServerEntry>;
+    stop(id: string): Promise<ServerEntry>;
+    /** 往服务端控制台发一条命令（等价敲回车）。 */
+    command(id: string, line: string): Promise<void>;
+    /** 取回最近的日志缓冲（打开控制台时先拉一次）。 */
+    console(id: string, limit?: number): Promise<ServerConsoleLine[]>;
+    /** 控制台新行推送。 */
+    onConsole(cb: (line: ServerConsoleLine) => void): () => void;
+    /** 列表状态变化推送（启动/停止/崩溃）。 */
+    onStatus(cb: (entries: ServerEntry[]) => void): () => void;
   };
   events: {
     onProgress(cb: (p: TaskProgress) => void): () => void;

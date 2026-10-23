@@ -1,0 +1,297 @@
+/* 开服页：服务端卡片、状态点、控制台、新建/设置弹窗 */
+
+.server-page {
+  min-width: 0;
+}
+
+.server-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.server-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background-color: rgb(var(--surface-rgb) / calc(0.95 * var(--ui-opacity, 1)));
+  background-image: linear-gradient(170deg, color-mix(in srgb, var(--text) 2.2%, transparent), color-mix(in srgb, var(--shadow-color) 6%, transparent));
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.server-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent-2) 28%, transparent);
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--shadow-color) 36%, transparent);
+}
+
+.server-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+/* 核心徽标：Paper / Fabric / NeoForge… 用固定宽度的胶囊对齐 */
+.server-core-badge {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 42%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-ink);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.server-card-titles {
+  min-width: 0;
+  flex: 1;
+}
+
+.server-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.server-card-meta-item {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 状态点：灰 / 绿 / 黄 / 红（stopped / running / stopping / crashed） */
+.server-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.server-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.server-status.is-stopped {
+  color: var(--text-faint);
+}
+
+.server-status.is-starting,
+.server-status.is-running {
+  color: var(--ok);
+}
+
+.server-status.is-stopping {
+  color: var(--accent-ink);
+}
+
+.server-status.is-crashed {
+  color: #b8391f;
+}
+
+.server-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-recess-strong);
+}
+
+.server-facts dt {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.server-facts dd {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: auto;
+}
+
+.server-actions .server-play {
+  grid-column: 1 / -1;
+}
+
+/* ---- 新建 / 设置弹窗 ---- */
+
+.server-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.server-form-note {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-faint);
+}
+
+.server-form-error {
+  font-size: 12.5px;
+  color: #a8341c;
+}
+
+/* 设置弹窗底部：删除靠左，保存/取消靠右 */
+.modal-foot .modal-spacer {
+  margin-left: auto;
+}
+
+/* ---- 控制台 ---- */
+
+.console-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.console-hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  min-width: 0;
+}
+
+.console-toolbar-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.console-log {
+  flex: 1;
+  min-height: 280px;
+  max-height: 56vh;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: #14161c;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.console-line {
+  display: flex;
+  gap: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.console-time {
+  flex: 0 0 auto;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+
+.console-text {
+  min-width: 0;
+}
+
+/* 三种流各一个颜色：stdout 常规 / stderr 红 / system 主题色 */
+.console-line.is-stdout .console-text {
+  color: #d6dae2;
+}
+
+.console-line.is-stderr .console-text {
+  color: #ff8a7a;
+}
+
+.console-line.is-system .console-text {
+  color: var(--accent-2);
+}
+
+.console-empty {
+  color: #7c8494;
+  font-size: 12px;
+}
+
+.console-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.console-prompt {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  color: var(--text-faint);
+}
+
+.console-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-recess-strong);
+  color: var(--text);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12.5px;
+  outline: none;
+}
+
+.console-input:focus-visible {
+  border-color: color-mix(in srgb, var(--accent-2) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.console-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 780px) {
+  .server-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .server-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .console-log {
+    min-height: 220px;
+    max-height: 46vh;
+  }
+
+  .console-toolbar-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+}

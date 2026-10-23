@@ -16,6 +16,8 @@ import "./css/settings-pages.css";
 import "./css/accounts.css";
 import "./css/about.css";
 import "./css/downloads.css";
+import "./css/skins.css";
+import "./css/servers.css";
 
 perfMark("renderer-module-loaded");
 

@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   InstanceMeta, InstalledContentRef, LoaderKind, MapEntry, ModCategory, ModContentKind, ModDependency, ModFileInfo,
-  ModFilterOptions, ModSearchResult,
+  ModFilterOptions, ModProviderId, ModSearchResult,
 } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatAgo, formatCount, formatDate, loaderLabel } from "../lib/format";
 import {
   KIND_BADGE, KIND_DIR, KIND_EMPTY_HINT, KIND_FILE_ACTION, KIND_INSTALL_LABEL, KIND_PLACEHOLDER, KIND_TABS,
-  MAPS_NOTICE, MAPS_WEB_URL, SORT_OPTIONS, SOURCE_BADGE, SOURCE_OPTIONS, isBackendKind, kindLabel, loaderOptionLabel,
+  MAPS_NOTICE, MAPS_WEB_URL, SORT_OPTIONS, SOURCE_BADGE, isBackendKind, kindLabel, loaderOptionLabel,
   showsLoader, showsResolution,
-  type KindFilesRequest, type KindInstallRequest, type KindSearchRequest, type ModSort, type ModSourceFilter,
+  type KindFilesRequest, type KindInstallRequest, type KindSearchRequest, type ModSort,
   type UiContentKind,
 } from "../lib/modKind";
 import { perfNow, perfSince } from "../lib/perf";
@@ -29,20 +29,56 @@ import { IconChevronDown, IconClose, IconDownload, IconRefresh, IconSearch } fro
 /** 详情面板底部按钮没有具体文件 id，用它作为「正在安装」的占位标记。 */
 const INSTALL_PANEL_KEY = "__panel__";
 
-/** 筛选记忆：来源/版本/加载器/分辨率/分类按内容类型分别记在本地，不新增设置字段。 */
+/** 筛选记忆：版本/加载器/分辨率/分类按内容类型分别记在本地，不新增设置字段。 */
 const FILTERS_KEY = "naiwa.res.filters";
+/** 来源：一级选择，跨类型共用一份（类型是二级，来源不是） */
+const SOURCE_KEY = "naiwa.res.source";
 /** 收藏：本地记忆，暂不落库。 */
 const FAVORITES_KEY = "naiwa.res.favorites";
 
 interface StoredFilters {
-  source: ModSourceFilter;
   version: string;
   loader: string;
   resolution: string;
   categories: string[];
 }
 
-const DEFAULT_FILTERS: StoredFilters = { source: "all", version: "", loader: "", resolution: "", categories: [] };
+const DEFAULT_FILTERS: StoredFilters = { version: "", loader: "", resolution: "", categories: [] };
+
+/**
+ * 一级「来源」与它支持的二级「类型」。
+ * 数据包没有后端接口，继续以 disabled 的占位标签出现（与改造前一致）。
+ */
+const SOURCE_TABS: Array<{ value: ModProviderId; label: string; kinds: UiContentKind[] }> = [
+  { value: "modrinth", label: "Modrinth", kinds: ["modpack", "mod", "resourcepack", "datapack", "shader"] },
+  { value: "minekuai", label: "麦块社区", kinds: ["modpack", "mod", "resourcepack", "shader", "map"] },
+  { value: "curseforge", label: "CurseForge", kinds: ["modpack", "mod"] },
+];
+
+/** 某来源支持的二级类型：按 KIND_TABS 的顺序过滤，保证按钮顺序稳定。 */
+function kindsForSource(source: ModProviderId): typeof KIND_TABS {
+  const supported = SOURCE_TABS.find((item) => item.value === source)?.kinds ?? [];
+  return KIND_TABS.filter((tab) => supported.includes(tab.value));
+}
+
+/** 读来源：只认具体站点；历史存过 "all" 或没存过的，默认落在 Modrinth。 */
+function readSource(): ModProviderId {
+  try {
+    const raw = localStorage.getItem(SOURCE_KEY);
+    if (raw === "modrinth" || raw === "minekuai" || raw === "curseforge") return raw;
+  } catch {
+    // 隐私模式读不到：用默认值即可。
+  }
+  return "modrinth";
+}
+
+function writeSource(source: ModProviderId): void {
+  try {
+    localStorage.setItem(SOURCE_KEY, source);
+  } catch {
+    // 记不住来源不影响使用。
+  }
+}
 
 function readFilters(kind: UiContentKind): StoredFilters {
   try {
@@ -50,9 +86,11 @@ function readFilters(kind: UiContentKind): StoredFilters {
     if (!raw) return { ...DEFAULT_FILTERS };
     const all = JSON.parse(raw) as Record<string, Partial<StoredFilters>>;
     const stored = all[kind] ?? {};
+    // 只取认识的字段：老版本存过 source，来源现在单独存一份，不再从筛选里读。
     return {
-      ...DEFAULT_FILTERS,
-      ...stored,
+      version: stored.version ?? "",
+      loader: stored.loader ?? "",
+      resolution: stored.resolution ?? "",
       categories: Array.isArray(stored.categories) ? stored.categories : [],
     };
   } catch {
@@ -246,9 +284,13 @@ export function ModsPage() {
     window.requestAnimationFrame(() => perfSince("mods-page-first-render", mountedAt.current));
   }, []);
   const { push } = useToast();
-  /** 一级标签：默认模组；数据包因后端缺口禁用。 */
+  /** 二级「类型」：默认模组；数据包因后端缺口禁用（是否出现由来源决定）。 */
   const [kind, setKind] = useState<UiContentKind>("mod");
-  /** 来源默认「所有来源」，其余筛选项跟着各标签的记忆走。 */
+  /** 一级「来源」：三个站点单选（不再有「所有来源」合并）。 */
+  const [source, setSourceState] = useState<ModProviderId>(readSource);
+  /** 一键清空筛选后置位：不再沿用实例的版本/加载器，避免实例版本把结果筛空。 */
+  const [looseSearch, setLooseSearch] = useState(false);
+  /** 详细筛选项：版本/加载器/分辨率/分类，按类型分别记在本地记忆中。 */
   const [filters, setFilters] = useState<StoredFilters>(() => readFilters("mod"));
   const [sort, setSort] = useState<ModSort>("relevance");
   const [query, setQuery] = useState("");
@@ -287,8 +329,10 @@ export function ModsPage() {
   /** 面板与文件列表只有后端支持的类型才会打开。 */
   const detailKind: ModContentKind = isBackendKind(kind) ? kind : "mod";
   const noInstance = instances.length === 0;
-  const source = filters.source;
-  const noKey = source === "curseforge" && !(settings?.curseforgeApiKey ?? "").trim();
+  const curseforgeReady = Boolean((settings?.curseforgeApiKey ?? "").trim());
+  const noKey = source === "curseforge" && !curseforgeReady;
+  /** 当前来源支持的二级类型（数据包仍是 disabled 占位）。 */
+  const kindTabs = useMemo(() => kindsForSource(source), [source]);
 
   /** 左侧「当前实例」：第一项是空选择，允许不选实例只浏览。 */
   const instanceOptions = useMemo(
@@ -308,14 +352,55 @@ export function ModsPage() {
     writeFilters(kind, merged);
   };
 
-  /** 切换一级标签：清掉已打开的详情/下拉，并换成该标签上次的筛选。 */
+  /** 只保留当前类型用得上的筛选项：分辨率只属于资源包，加载器只属于模组/整合包。 */
+  const sanitizeFilters = (next: StoredFilters, forKind: UiContentKind): StoredFilters => ({
+    ...next,
+    loader: showsLoader(forKind) ? next.loader : "",
+    resolution: showsResolution(forKind) ? next.resolution : "",
+  });
+
+  /** 切换二级类型：清掉已打开的详情/下拉，并换成该标签上次的筛选（顺手滤掉不适用的项）。 */
   const changeKind = (next: UiContentKind) => {
-    const tab = KIND_TABS.find((item) => item.value === next);
+    const tab = kindTabs.find((item) => item.value === next);
     if (!tab || tab.disabled) return;
     setKind(next);
-    setFilters(readFilters(next));
+    setFilters(sanitizeFilters(readFilters(next), next));
+    setLooseSearch(false);
     setSelected(null);
     setPicker(null);
+  };
+
+  const selectSource = (next: ModProviderId) => {
+    if (next === source) return;
+    if (next === "curseforge" && !curseforgeReady) return;
+    setSourceState(next);
+    writeSource(next);
+    setLooseSearch(false);
+    setSelected(null);
+    setPicker(null);
+    // 当前类型不被新来源支持时，落到该来源的第一个类型（数据包这种占位标签跳过）。
+    const tabs = kindsForSource(next);
+    if (!tabs.some((tab) => tab.value === kind && !tab.disabled)) {
+      const first = tabs.find((tab) => !tab.disabled);
+      if (first) {
+        setKind(first.value);
+        setFilters(sanitizeFilters(readFilters(first.value), first.value));
+      }
+      return;
+    }
+    // 同类型留着，但把新来源不适用的筛选项清掉（分类由 categoryList 落地后再校验）。
+    setFilters((prev) => sanitizeFilters(prev, kind));
+  };
+
+  /** 一键清空筛选：连实例版本/加载器也不再套用，否则老实例会把某些来源筛空。 */
+  const clearFilters = () => {
+    setFilters({ ...DEFAULT_FILTERS });
+    writeFilters(kind, { ...DEFAULT_FILTERS });
+    setLooseSearch(true);
+    // 关键词也是「筛选」的一部分：只清版本/分类而留着关键词，用户会看到空态点了没反应。
+    setQuery("");
+    setSubmitted("");
+    push("已清空筛选与关键词：不再限制版本、加载器、分类与分辨率", "info");
   };
 
   const toggleCategory = (id: string) => {
@@ -345,15 +430,42 @@ export function ModsPage() {
     [kind, source, isMap],
   );
 
-  /** 显式筛选优先，其次沿用当前实例的版本与加载器。 */
-  const effectiveVersion = filters.version || currentInstance?.mcVersion || "";
-  const effectiveLoader = filters.loader || (showsLoader(kind) ? currentInstance?.loader ?? "" : "");
+  /**
+   * 分类 id 是「来源 + 类型」各自的：切来源/切类型后，旧来源选的分类可能在新来源下不存在，
+   * 发出去就是一个空列表（事故形态）。分类列表落地后校验一次，把不存在的清掉并说明。
+   */
+  useEffect(() => {
+    if (categoryList.loading || categoryList.error) return;
+    const available = categoryList.data ?? [];
+    if (available.length === 0 || filters.categories.length === 0) return;
+    const ids = new Set(available.map((item) => item.id));
+    const kept = filters.categories.filter((id) => ids.has(id));
+    if (kept.length === filters.categories.length) return;
+    const next = { ...filters, categories: kept };
+    setFilters(next);
+    writeFilters(kind, next);
+    push(`已清掉 ${filters.categories.length - kept.length} 个当前来源不支持的分类筛选`, "info");
+  }, [categoryList.loading, categoryList.error, categoryList.data, filters, kind, push]);
+
+  // 存过 CurseForge 但 Key 被清掉：退回 Modrinth，避免停在一个点不动的来源上。
+  useEffect(() => {
+    if (settings === null) return;
+    if (source === "curseforge" && !curseforgeReady) {
+      setSourceState("modrinth");
+      writeSource("modrinth");
+    }
+  }, [settings, source, curseforgeReady]);
+
+  /** 显式筛选优先，其次沿用当前实例的版本与加载器；清空筛选后两者都不再兜底。 */
+  const effectiveVersion = filters.version || (looseSearch ? "" : currentInstance?.mcVersion) || "";
+  const effectiveLoader = filters.loader
+    || (looseSearch ? "" : showsLoader(kind) ? currentInstance?.loader ?? "" : "");
 
   const search = useAsync(async () => {
     if (!isBackendKind(kind) || isMap || noKey) return [] as ModSearchResult[];
+    // 来源是单选按钮：provider 与 source 始终同一个站点，不再走「所有来源」合并。
     const request: KindSearchRequest = {
-      // source="all" 时主进程忽略 provider，这里给个中性值满足类型。
-      provider: source === "all" ? "modrinth" : source,
+      provider: source,
       source,
       query: submitted,
       kind,
@@ -691,7 +803,23 @@ export function ModsPage() {
     [filterOptions.data],
   );
   const sortOptions = useMemo(() => SORT_OPTIONS.map((item) => ({ value: item.value, label: item.label })), []);
-  const sourceOptions = useMemo(() => SOURCE_OPTIONS.map((item) => ({ value: item.value, label: item.label })), []);
+  /** 空态要写清楚的「当前筛选」：来源 + 版本 + 加载器 + 分辨率 + 分类。 */
+  const activeFilterText = useMemo(() => {
+    const parts: string[] = [];
+    const sourceLabel = SOURCE_TABS.find((item) => item.value === source)?.label ?? source;
+    parts.push(`来源 ${sourceLabel}`);
+    if (!isMap) {
+      if (effectiveVersion) parts.push(`版本 ${effectiveVersion}`);
+      if (effectiveLoader) parts.push(`加载器 ${loaderOptionLabel(effectiveLoader)}`);
+      if (filters.resolution) parts.push(`分辨率 ${filters.resolution}`);
+      if (filters.categories.length > 0) {
+        const ids = new Set((categoryList.data ?? []).map((item) => item.id));
+        parts.push(`分类 ${filters.categories.map((id) => (ids.has(id) ? categoryName(id) : id)).join("、")}`);
+      }
+    }
+    return parts.join(" · ");
+  }, [source, isMap, effectiveVersion, effectiveLoader, filters.resolution, filters.categories, categoryList.data]);
+
 
   const subtitle = isMap
     ? (currentInstance
@@ -718,48 +846,66 @@ export function ModsPage() {
         </div>
       </header>
 
-      <div className="kind-tabs" role="tablist" aria-label="内容类型">
-        {KIND_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            role="tab"
-            aria-selected={tab.value === kind}
-            aria-disabled={tab.disabled ? true : undefined}
-            className={`kind-tab ${tab.value === kind ? "active" : ""} ${tab.disabled ? "is-disabled" : ""}`.trim()}
-            data-kind-tab={tab.value}
-            data-kind-disabled={tab.disabled ? "1" : undefined}
-            title={tab.hint}
-            disabled={tab.disabled}
-            onClick={() => changeKind(tab.value)}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="res-switcher">
+        {/* 一级：来源单选。没配 Key 的 CurseForge 直接禁用，并在 title 里说明原因。 */}
+        <div className="source-tabs" role="tablist" aria-label="资源来源">
+          {SOURCE_TABS.map((tab) => {
+            const disabled = tab.value === "curseforge" && !curseforgeReady;
+            const kindCount = tab.kinds.filter((item) => item !== "datapack").length;
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={tab.value === source}
+                aria-disabled={disabled ? true : undefined}
+                className={`source-tab ${tab.value === source ? "active" : ""} ${disabled ? "is-disabled" : ""}`.trim()}
+                data-source-tab={tab.value}
+                data-source-disabled={disabled ? "1" : undefined}
+                title={disabled
+                  ? "CurseForge 需要 API Key：请到「设置 → 联网与下载」填写后再用"
+                  : `只看 ${tab.label} 的资源`}
+                disabled={disabled}
+                onClick={() => selectSource(tab.value)}
+              >
+                {tab.label}
+                <span className="source-tab-count" data-source-kinds={kindCount}>{kindCount} 类</span>
+              </button>
+            );
+          })}
+          <span className="source-hint" data-source-hint>
+            {source === "minekuai"
+              ? "中文来源：卡片带译名与中文简介"
+              : source === "curseforge"
+                ? "英文源：搜索接口需要 API Key"
+                : "英文源：卡片显示原文，可开启实时翻译"}
+          </span>
+        </div>
+
+        {/* 二级：类型，只列当前来源支持的那几个（数据包在支持它的来源下仍是禁用占位）。 */}
+        <div className="kind-tabs" role="tablist" aria-label="内容类型">
+          {kindTabs.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={tab.value === kind}
+              aria-disabled={tab.disabled ? true : undefined}
+              className={`kind-tab ${tab.value === kind ? "active" : ""} ${tab.disabled ? "is-disabled" : ""}`.trim()}
+              data-kind-tab={tab.value}
+              data-kind-disabled={tab.disabled ? "1" : undefined}
+              title={tab.hint}
+              disabled={tab.disabled}
+              onClick={() => changeKind(tab.value)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="mods-layout">
         <aside className="mods-aside res-aside">
-          <div className="aside-block">
-            <span className="field-label">来源</span>
-            <Select
-              value={isMap ? "minekuai" : source}
-              options={sourceOptions}
-              onChange={(value) => patch({ source: value as ModSourceFilter })}
-              disabled={isMap}
-              ariaLabel="来源"
-            />
-            <p className="aside-hint" data-source-hint>
-              {isMap
-                ? "地图来自麦块社区（中文），下载需登录后到网页完成"
-                : source === "all"
-                  ? "同时搜索 Modrinth、CurseForge 与麦块社区"
-                  : source === "minekuai"
-                    ? "麦块社区提供中文译名与简介"
-                    : "英文源没有中文译名，卡片显示原文"}
-            </p>
-          </div>
-
           {!isMap ? (
             <>
               <div className="aside-block">
@@ -943,14 +1089,14 @@ export function ModsPage() {
             <div className="guide-card">
               <h3 className="hint-title">CurseForge 需要 API Key</h3>
               <p className="hint-text">
-                CurseForge 官方接口要求携带 API Key。请到设置页填写后返回；也可以直接用「所有来源」继续浏览。
+                CurseForge 官方接口要求携带 API Key。请到设置页填写后返回，或者先切到 Modrinth / 麦块社区继续浏览。
               </p>
               <div className="guide-actions">
                 <button type="button" className="btn btn-primary" onClick={() => navigate("settings")}>
                   去设置填写 Key
                 </button>
-                <button type="button" className="btn btn-ghost" onClick={() => patch({ source: "all" })}>
-                  改用所有来源
+                <button type="button" className="btn btn-ghost" data-action="switch-source-modrinth" onClick={() => selectSource("modrinth")}>
+                  改用 Modrinth
                 </button>
               </div>
             </div>
@@ -961,8 +1107,19 @@ export function ModsPage() {
 
           {!isMap && !isDatapack && !noKey && !search.loading && !search.error && results.length === 0 ? (
             <EmptyState
-              title={`没有搜到${kindLabel(kind)}`}
-              hint={submitted ? `「${submitted}」没有结果，换个关键词或换个来源试试。` : KIND_EMPTY_HINT[kind]}
+              title={submitted ? "没有匹配的结果" : `没有搜到${kindLabel(kind)}`}
+              hint={`当前筛选：${activeFilterText}${submitted ? ` · 关键词「${submitted}」` : ""}。换个关键词、换个子类型，或点右侧「清空筛选」放宽条件`}
+              action={(
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  data-action="clear-filters"
+                  onClick={clearFilters}
+                  title="清空版本、加载器、分辨率与分类，并忽略实例版本"
+                >
+                  清空筛选
+                </button>
+              )}
             />
           ) : null}
 

@@ -2,7 +2,7 @@ import type { ComponentType } from "react";
 import { useApp, type PageId } from "../lib/store";
 import { useTasks } from "../lib/tasks";
 import { isMockApi } from "../lib/api";
-import { IconDownload, IconInfo, IconInstances, IconJava, IconList, IconMods, IconPalette, IconRocket, IconSettings, IconSliders, IconUser, IconWifi } from "./icons";
+import { IconDownload, IconInfo, IconInstances, IconJava, IconList, IconMods, IconPalette, IconRocket, IconSettings, IconSkin, IconSliders, IconUser, IconWifi, IconZap } from "./icons";
 
 interface NavItem {
   id: PageId;
@@ -12,7 +12,9 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { id: "instances", label: "实例", Icon: IconInstances },
+  { id: "servers", label: "开服", Icon: IconZap },
   { id: "accounts", label: "账号", Icon: IconUser },
+  { id: "skins", label: "皮肤", Icon: IconSkin },
   { id: "download", label: "游戏", Icon: IconDownload },
   { id: "downloads", label: "管理", Icon: IconList },
   { id: "mods", label: "资源", Icon: IconMods },

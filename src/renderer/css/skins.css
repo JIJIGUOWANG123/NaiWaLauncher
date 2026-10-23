@@ -1,0 +1,335 @@
+/* 皮肤页：左边账号昵称 + CSS 3D 小人，右边本地皮肤库（分段 + 折叠 + 网格 + 拖放） */
+
+.skin-page .page-actions .select-wrap {
+  min-width: 200px;
+}
+
+.skin-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-glass);
+}
+
+.skin-toolbar .select-wrap {
+  min-width: 180px;
+}
+
+.skin-toolbar-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+/* 「应用到实例」之后的状态条：缺 CustomSkinLoader 时给一键安装 */
+.skin-apply-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.skin-apply-hint.is-ok {
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  color: var(--text);
+}
+
+.skin-apply-hint.is-warn {
+  border: 1px solid color-mix(in srgb, var(--accent-2) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+  color: var(--text);
+}
+
+.skin-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+/* ---- 左栏：昵称 + 3D 小人 ---- */
+
+.skin-stage {
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.skin-name {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.skin-doll {
+  width: 100%;
+  height: 200px;
+  display: grid;
+  place-items: center;
+  perspective: 900px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.skin-doll:active {
+  cursor: grabbing;
+}
+
+.skin-doll-empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-recess);
+  color: var(--text-dim);
+  font-size: 12.5px;
+  cursor: default;
+}
+
+.skin-doll-stage {
+  position: relative;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.skin-doll-part {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+
+/* 每个面：贴图由 inline style 的 background-* 裁出来，这里只负责不重复与像素感 */
+.skin-doll-face {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  backface-visibility: hidden;
+}
+
+.skin-rotate-hint {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.skin-edit {
+  margin-top: 2px;
+}
+
+/* ---- 右栏：分段 + 折叠 + 网格 ---- */
+
+.skin-library {
+  gap: 12px;
+}
+
+.skin-library.is-dragging {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background-image: linear-gradient(120deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent);
+}
+
+.skin-tabs {
+  align-self: flex-start;
+}
+
+.skin-fold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 2px;
+  border: 0;
+  border-bottom: 1px dashed var(--line);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.skin-fold:hover {
+  border-bottom-color: var(--line-strong);
+}
+
+.skin-fold-icon {
+  margin-left: auto;
+  color: var(--text-faint);
+  transition: transform 0.16s ease;
+}
+
+.skin-fold-icon.is-open {
+  transform: rotate(180deg);
+}
+
+.skin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.skin-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-recess);
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.skin-card:hover {
+  border-color: color-mix(in srgb, var(--text) 24%, transparent);
+  background: var(--surface-hover);
+}
+
+.skin-card.is-active {
+  border-color: color-mix(in srgb, var(--accent-2) 52%, transparent);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--accent-2) 13%, transparent), color-mix(in srgb, var(--accent) 4%, transparent));
+}
+
+.skin-card-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 10px 8px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+}
+
+.skin-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  background: var(--surface-recess-strong);
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.skin-card-name {
+  font-size: 12.5px;
+  font-weight: 500;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skin-card-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.skin-active-tag {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 10.5px;
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+/* 删除只在悬停/聚焦时出现，避免卡片太吵 */
+.skin-card-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--danger, #e5654b) 12%, var(--surface));
+  color: #a8341c;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.skin-card:hover .skin-card-del,
+.skin-card-del:focus-visible {
+  opacity: 1;
+}
+
+.skin-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 132px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--line-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease, background 0.16s ease;
+}
+
+.skin-add:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.skin-add-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* ---- 底部推荐 ---- */
+
+.skin-recommend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in srgb, var(--accent-2) 28%, transparent);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--accent-2) 8%, transparent), var(--surface-glass));
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+@media (max-width: 780px) {
+  .skin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .skin-doll {
+    height: 172px;
+  }
+
+  .skin-toolbar .select-wrap,
+  .skin-page .page-actions .select-wrap {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .skin-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+}

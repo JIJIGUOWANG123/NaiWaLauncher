@@ -1,7 +1,7 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC } from "../shared/ipc";
 import type { NaiwaApi } from "../shared/ipc";
-import type { DownloadJob, LogLine, MediaList, TaskProgress, TaskResult } from "../shared/types";
+import type { DownloadJob, LogLine, MediaList, ServerConsoleLine, ServerEntry, TaskProgress, TaskResult } from "../shared/types";
 
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> => ipcRenderer.invoke(channel, ...args);
 
@@ -119,6 +119,29 @@ const api: NaiwaApi = {
     remove: (id) => invoke(IPC.downloadsRemove, id),
     clearFinished: () => invoke(IPC.downloadsClearFinished),
     onChanged: (cb) => { const h = (_: unknown, jobs: DownloadJob[]) => cb(jobs); ipcRenderer.on(IPC.downloadsChanged, h); return () => ipcRenderer.off(IPC.downloadsChanged, h); },
+  },
+  skinsLocal: {
+    list: (accountId) => invoke(IPC.skinsLocalList, accountId),
+    select: (accountId, fileName) => invoke(IPC.skinsLocalSelect, accountId, fileName),
+    import: (filePaths) => invoke(IPC.skinsLocalImport, filePaths),
+    remove: (fileName) => invoke(IPC.skinsLocalRemove, fileName),
+    applyToInstance: (instanceId, accountId) => invoke(IPC.skinsLocalApply, instanceId, accountId),
+    ensureMod: (instanceId) => invoke(IPC.skinsLocalEnsureMod, instanceId),
+    pathForFile: (file) => webUtils.getPathForFile(file),
+  },
+  servers: {
+    cores: () => invoke(IPC.serversCores),
+    builds: (core, mcVersion) => invoke(IPC.serversBuilds, core, mcVersion),
+    list: () => invoke(IPC.serversList),
+    create: (req) => invoke(IPC.serversCreate, req),
+    remove: (id) => invoke(IPC.serversRemove, id),
+    update: (id, patch) => invoke(IPC.serversUpdate, id, patch),
+    start: (id) => invoke(IPC.serversStart, id),
+    stop: (id) => invoke(IPC.serversStop, id),
+    command: (id, line) => invoke(IPC.serversCommand, id, line),
+    console: (id, limit) => invoke(IPC.serversConsole, id, limit),
+    onConsole: (cb) => { const h = (_e: unknown, line: ServerConsoleLine) => cb(line); ipcRenderer.on(IPC.serversConsoleLine, h); return () => ipcRenderer.off(IPC.serversConsoleLine, h); },
+    onStatus: (cb) => { const h = (_e: unknown, entries: ServerEntry[]) => cb(entries); ipcRenderer.on(IPC.serversStatus, h); return () => ipcRenderer.off(IPC.serversStatus, h); },
   },
   events: {
     onProgress: (cb) => { const h = (_: unknown, p: TaskProgress) => cb(p); ipcRenderer.on("task:progress", h); return () => ipcRenderer.off("task:progress", h); },

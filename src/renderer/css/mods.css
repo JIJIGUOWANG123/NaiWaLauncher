@@ -38,6 +38,83 @@
   box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
+/* ---------- 两级切换：一级来源、二级类型 ---------- */
+
+.res-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.source-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.source-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 15px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-glass);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.source-tab:hover:not(:disabled) {
+  color: var(--text-strong);
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.source-tab.active {
+  color: var(--on-accent);
+  background: var(--accent-grad);
+  border-color: transparent;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.source-tab.is-disabled,
+.source-tab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* 类型数量：一眼看出这个来源下有几类资源 */
+.source-tab-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 550;
+  background: color-mix(in srgb, currentColor 15%, transparent);
+  opacity: 0.85;
+}
+
+.source-tab.active .source-tab-count {
+  background: color-mix(in srgb, var(--on-accent) 22%, transparent);
+  opacity: 1;
+}
+
+/* 选中来源的说明：贴在按钮行右端，窄屏会换行到下一行 */
+.source-hint {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+@media (max-width: 780px) {
+  .source-hint {
+    margin-left: 0;
+  }
+}
+
 /* 地图标签顶部的来源说明 */
 .kind-notice {
   padding: 9px 12px;

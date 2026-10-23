@@ -7,6 +7,8 @@ import { TitleBar } from "./components/TitleBar";
 import { TaskPanel } from "./components/TaskPanel";
 import { InstancesPage } from "./pages/InstancesPage";
 import { AccountsPage } from "./pages/AccountsPage";
+import { SkinPage } from "./pages/SkinPage";
+import { ServerPage } from "./pages/ServerPage";
 import { DownloadPage } from "./pages/DownloadPage";
 import { DownloadsPage } from "./pages/DownloadsPage";
 import { ModsPage } from "./pages/ModsPage";
@@ -138,7 +140,9 @@ function Shell() {
         <Sidebar />
         <main className="content">
           {page === "instances" ? <InstancesPage /> : null}
+          {page === "servers" ? <ServerPage /> : null}
           {page === "accounts" ? <AccountsPage /> : null}
+          {page === "skins" ? <SkinPage /> : null}
           {page === "download" ? <DownloadPage /> : null}
           {page === "downloads" ? <DownloadsPage /> : null}
           {page === "mods" ? <ModsPage /> : null}

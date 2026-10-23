@@ -17,6 +17,7 @@ import { getPaths, instanceDir, versionDir } from "../core/paths";
 import { getSettings } from "../core/settings";
 import { resolveJavaFor } from "../java/index";
 import { LAUNCH_FEATURES, mavenPathOf, missingPlaceholders, nativesClassifierAllowed, rulesAllow, splitArgs, substitute } from "./args";
+import { applyToInstance } from "../skins/local";
 import { getInstance, updateInstance } from "./instances";
 import { getVersionJson, resolveBaseVersionId } from "./manifest";
 
@@ -671,6 +672,21 @@ export async function launchInstance(id: string, quickPlayLevel?: string): Promi
   // 实例显式选了窗口形态才覆盖 options.txt；"跟随设置" 时不动玩家自己的全屏开关
   const windowSpec = resolveWindowSpec(instance);
   if (windowSpec.explicit) await applyWindowOptions(gameDir, windowSpec.fullscreen);
+
+  // 本地皮肤：只有该账号选过皮肤才写文件，任何失败都只记日志（绝不阻断启动）
+  const skinAccount = await getActiveAccount();
+  if (skinAccount) {
+    try {
+      const applied = await applyToInstance(instance.id, skinAccount.id);
+      if (applied.applied) {
+        log.info("启动前已应用本地皮肤：" + (applied.skinFile ?? "") + (applied.modInstalled ? "" : "（实例未装 CustomSkinLoader，需先安装才生效）"));
+      } else if (applied.message) {
+        log.info("本地皮肤未应用：" + applied.message);
+      }
+    } catch (err) {
+      log.warn("应用本地皮肤失败（不影响启动）：" + (err instanceof Error ? err.message : String(err)));
+    }
+  }
 
   const title = resolveWindowTitle(instance);
   const priority: ProcessPriority = settings.processPriority ?? "normal";

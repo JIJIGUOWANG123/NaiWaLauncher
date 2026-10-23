@@ -5,7 +5,7 @@ import { IPC } from "../../shared/ipc";
 import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest,
 } from "../../shared/ipc";
-import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
+import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { checkAppUpdates } from "../core/updates";
@@ -16,6 +16,9 @@ import { createOffline, listAccounts, removeAccount, setActiveAccount } from "..
 import { beginDeviceCode, pollDeviceCode } from "../auth/microsoft";
 import { loginYggdrasil, validateYggdrasilAccount } from "../auth/yggdrasil";
 import { addToWardrobe, getSkin, listSkinProfiles, listWardrobe, pickSkinFile, removeFromWardrobe, resetSkin, selectProfile, uploadSkin } from "../auth/skin";
+import {
+  applyToInstance, ensureMod, importLocalSkins, listLocalSkins, removeLocalSkin, selectLocalSkin,
+} from "../skins/local";
 import { SOURCES, probeSources, setActiveSource } from "../core/sources";
 import { listVersions } from "../minecraft/manifest";
 import { createInstance, deleteInstance, instanceDiskUsage, listInstances, listSaves, setLoader, updateInstance } from "../minecraft/instances";
@@ -30,6 +33,15 @@ import {
   cancel as cancelDownloadJob, clearFinished as clearFinishedDownloads, hintNextJob, list as listDownloadJobs,
   ready as readyDownloadJobs, remove as removeDownloadJob, resume as resumeDownloadJob, runCancellable,
 } from "../downloads/index";
+import type { ServerCreateRequest } from "../../shared/ipc";
+import type {
+  ServerBuildInfo, ServerConsoleLine, ServerCoreId, ServerCoreInfo, ServerEntry, ServerMeta,
+} from "../../shared/types";
+import {
+  builds as listServerBuilds, consoleLines as readServerConsole, cores as listServerCores,
+  createServer, installLifecycle as installServerLifecycle, listEntries as listServerEntries,
+  removeServer, sendCommand as sendServerCommand, startServer, stopServer, updateServer,
+} from "../servers/index";
 
 const handle = <T>(channel: string, fn: (...args: any[]) => Promise<T> | T): void => {
   ipcMain.handle(channel, async (_event, ...args: any[]) => fn(...args));
@@ -66,6 +78,9 @@ function focusedWindow(): BrowserWindow | null {
 }
 
 export function registerIpc(): void {
+  // 退出前确认：还有服务端在跑就先 stop（超时 kill），不留幽灵 java 进程
+  installServerLifecycle();
+
   handle<AppInfo>(IPC.appInfo, () => ({
     nameEn: "NaiWa Launcher",
     nameZh: "奶娃启动器",
@@ -195,6 +210,21 @@ export function registerIpc(): void {
   handle<void>(IPC.skinsRemoveFromWardrobe, (name: string) => removeFromWardrobe(name));
   handle<SkinProfile[]>(IPC.skinsProfiles, (id: string) => listSkinProfiles(id));
   handle<void>(IPC.skinsSelectProfile, (id: string, profileId: string) => selectProfile(id, profileId));
+  // 本地皮肤库（与账号解耦）：官方内置只读 + 用户导入，选中后写进实例的 CustomSkinLoader 本地皮肤目录
+  handle<LocalSkin[]>(IPC.skinsLocalList, (accountId?: string) => listLocalSkins(accountId));
+  handle<LocalSkin[]>(IPC.skinsLocalSelect, (accountId: string, fileName: string | null) =>
+    selectLocalSkin(accountId, fileName),
+  );
+  handle<{ imported: string[]; skipped: string[] }>(IPC.skinsLocalImport, (filePaths: string[]) =>
+    importLocalSkins(Array.isArray(filePaths) ? filePaths : []),
+  );
+  handle<LocalSkin[]>(IPC.skinsLocalRemove, (fileName: string) => removeLocalSkin(fileName));
+  handle<SkinApplyResult>(IPC.skinsLocalApply, (instanceId: string, accountId: string) =>
+    applyToInstance(instanceId, accountId),
+  );
+  handle<{ installed: boolean; fileName?: string; message?: string }>(IPC.skinsLocalEnsureMod, (instanceId: string) =>
+    ensureMod(instanceId),
+  );
 
   handle<void>(IPC.accountsSetActive, (id: string) => setActiveAccount(id));
   handle<DeviceCodeChallenge>(IPC.accountsBeginMicrosoft, () => beginDeviceCode());
@@ -280,4 +310,19 @@ export function registerIpc(): void {
   handle<void>(IPC.downloadsCancel, (id: string) => cancelDownloadJob(id));
   handle<void>(IPC.downloadsRemove, (id: string) => removeDownloadJob(id));
   handle<void>(IPC.downloadsClearFinished, () => clearFinishedDownloads());
+
+  // 开服：FastMirror 核心/构建、服务端增删改、进程与控制台（签名与 NaiwaApi.servers 逐位对齐）
+  handle<ServerCoreInfo[]>(IPC.serversCores, () => listServerCores());
+  handle<ServerBuildInfo[]>(IPC.serversBuilds, (core: ServerCoreId, mcVersion: string) => listServerBuilds(core, mcVersion));
+  handle<ServerEntry[]>(IPC.serversList, () => listServerEntries());
+  handle<ServerEntry>(IPC.serversCreate, (req: ServerCreateRequest) => createServer(req));
+  handle<void>(IPC.serversRemove, (id: string) => removeServer(id));
+  handle<ServerEntry>(IPC.serversUpdate, (
+    id: string,
+    patch: Partial<Pick<ServerMeta, "name" | "port" | "memoryMb" | "maxPlayers" | "onlineMode" | "eulaAgreed">>,
+  ) => updateServer(id, patch));
+  handle<ServerEntry>(IPC.serversStart, (id: string) => startServer(id));
+  handle<ServerEntry>(IPC.serversStop, (id: string) => stopServer(id));
+  handle<void>(IPC.serversCommand, (id: string, line: string) => sendServerCommand(id, line));
+  handle<ServerConsoleLine[]>(IPC.serversConsole, (id: string, limit?: number) => readServerConsole(id, limit));
 }

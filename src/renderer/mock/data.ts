@@ -1,7 +1,8 @@
 import type {
   Account, AppInfo, DownloadSourceInfo, InstalledContentRef, InstanceMeta, InstalledJava, InstalledModInfo, JavaRelease,
   LoaderKind,
-  LoaderVersionInfo, MapEntry, ModContentKind, ModDependency, ModDetail, ModFileInfo, ModSearchResult, SaveInfo,
+  LoaderVersionInfo, LocalSkin, MapEntry, ModContentKind, ModDependency, ModDetail, ModFileInfo, ModSearchResult, SaveInfo,
+  ServerBuildInfo, ServerCoreId, ServerCoreInfo, ServerEntry,
   Settings, VersionBrief,
 } from "../../shared/types";
 
@@ -850,5 +851,168 @@ export const MOCK_ACCOUNTS: Account[] = [
     uuid: "c4d18a6f2b03e7951a8c4d6f0b2e3958",
     createdAt: Date.UTC(2024, 9, 20, 16, 48),
     lastUsedAt: Date.UTC(2024, 9, 22, 21, 3),
+  },
+];
+
+
+/**
+ * 本地皮肤库假数据：官方内置 2 张（classic + slim）+ 用户导入 2 张（含一张 64×32 旧格式）。
+ * 浏览器预览没有真实文件系统，path 直接用内联 PNG —— 渲染层和真实链路一样把它当图片地址使用。
+ */
+const MOCK_SKIN_OFFICIAL_CLASSIC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAfElEQVR42u3aQQ3AIBBFQRRhAAeVVCwgomJ6qSrQQAjlsPOSb2COm03fc/eTS6cDAAAAAAAAAAAAAAAAAAAAAgKUq/WV5fpu3XZgAAAAAAAAAAAAAAAAAAAAICCAJEmSJEnSbKsHlfAPFgAAAAAAAAAAAAAAAAAAAMD/AAM4bEse8v1gBQAAAABJRU5ErkJggg==";
+const MOCK_SKIN_OFFICIAL_SLIM = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAfUlEQVR42u3aMQ3AIBCGUQQigrFTR0SgohqqqE5AAyGU4d6X/AbeeLn0va2fXDodAAAAAAAAAAAAAAAAAAAAEBCgXLWvLD/31m0HBgAAAAAAAAAAAAAAAAAAAAICSJIkSZIkzbZ6UAn/YAEAAAAAAAAAAAAAAAAAAAD8DzAA03lsrbjmMIUAAAAASUVORK5CYII=";
+const MOCK_SKIN_USER_CLASSIC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAe0lEQVR42u3aMQ0AIRBFQXzhgBI5aEDEibnmVIEGQjiKnZd8A1NuNn1PGzeXbgcAAAAAAAAAAAAAAAAAAAAEBMilj529tRzdcWAAAAAAAAAAAAAAAAAAAAAgIIAkSZIkSdJquweV8A8WAAAAAAAAAAAAAAAAAAAAwP8AE1TLN56YpKJcAAAAAElFTkSuQmCC";
+const MOCK_SKIN_USER_LEGACY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAAAgCAYAAACinX6EAAAAV0lEQVR42u3QQQ0AEABAUb00kMJRAiFMGok0IYSZg/e3X+CFOdp6eXgdAAAAAAAAAAAAAAAAAAAA8CFATH2dnEu9+nVgAAAAAAAAAAAAAAAAAAAA4D+ADbgHvVOUG7XJAAAAAElFTkSuQmCC";
+
+export const MOCK_LOCAL_SKINS: LocalSkin[] = [
+  {
+    fileName: "steve.png",
+    name: "Steve",
+    source: "official",
+    path: MOCK_SKIN_OFFICIAL_CLASSIC,
+    sizeBytes: 64 * 64 * 4,
+    width: 64,
+    height: 64,
+    model: "classic",
+    active: false,
+  },
+  {
+    fileName: "alex.png",
+    name: "Alex",
+    source: "official",
+    path: MOCK_SKIN_OFFICIAL_SLIM,
+    sizeBytes: 64 * 64 * 4,
+    width: 64,
+    height: 64,
+    model: "slim",
+    active: false,
+  },
+  {
+    fileName: "我的皮肤.png",
+    name: "我的皮肤",
+    source: "user",
+    path: MOCK_SKIN_USER_CLASSIC,
+    sizeBytes: 64 * 64 * 4,
+    width: 64,
+    height: 64,
+    model: "classic",
+    active: false,
+  },
+  {
+    fileName: "旧版皮肤.png",
+    name: "旧版皮肤",
+    source: "user",
+    path: MOCK_SKIN_USER_LEGACY,
+    sizeBytes: 64 * 32 * 4 + 4096,
+    width: 64,
+    height: 32,
+    model: "classic",
+    active: false,
+  },
+];
+
+
+/** FastMirror 的八个 Java 版核心；mcVersions 新的在前，预览里只给几条常用版本。 */
+export const MOCK_SERVER_CORES: ServerCoreInfo[] = [
+  {
+    core: "Vanilla",
+    tag: "vanilla",
+    homepage: "https://www.fastmirror.net",
+    mcVersions: ["1.21.4", "1.21.1", "1.20.6", "1.20.1", "1.12.2"],
+    recommend: true,
+  },
+  {
+    core: "Paper",
+    tag: "pure",
+    homepage: "https://www.fastmirror.net",
+    mcVersions: ["1.21.4", "1.21.1", "1.20.6", "1.20.1", "1.19.4", "1.12.2"],
+    recommend: true,
+  },
+  { core: "Purpur", tag: "pure", homepage: "https://www.fastmirror.net", mcVersions: ["1.21.4", "1.21.1", "1.20.6"], recommend: false },
+  { core: "Folia", tag: "pure", homepage: "https://www.fastmirror.net", mcVersions: ["1.21.4", "1.21.1", "1.20.6"], recommend: false },
+  {
+    core: "Fabric",
+    tag: "mod",
+    homepage: "https://www.fastmirror.net",
+    mcVersions: ["1.21.4", "1.21.1", "1.20.6", "1.20.1"],
+    recommend: true,
+  },
+  { core: "Forge", tag: "mod", homepage: "https://www.fastmirror.net", mcVersions: ["1.21.4", "1.20.1", "1.19.2", "1.12.2"], recommend: false },
+  { core: "NeoForge", tag: "mod", homepage: "https://www.fastmirror.net", mcVersions: ["1.21.4", "1.21.1", "1.20.6"], recommend: false },
+  { core: "Arclight", tag: "mod", homepage: "https://www.fastmirror.net", mcVersions: ["1.21.1", "1.20.1"], recommend: false },
+];
+
+/** 构建号按「核心 + 版本」编出来：真实链路会调 FastMirror 的构建接口。 */
+export function mockServerBuilds(core: ServerCoreId, mcVersion: string): ServerBuildInfo[] {
+  const base: Array<[string, string]> = [
+    ["latest", "2025-02-18 09:12"],
+    ["previous", "2025-01-30 15:40"],
+    ["legacy", "2024-12-11 11:05"],
+  ];
+  return base.map(([label, updateTime], index) => ({
+    core,
+    mcVersion,
+    coreVersion: `${mcVersion}-${label}-${index === 0 ? (core === "Fabric" ? "0.16.9" : "232") : index === 1 ? "228" : "214"}`,
+    sha1: `${core.toLowerCase()}${mcVersion.replace(/\./g, "")}${index}`.padEnd(40, "0"),
+    updateTime,
+  }));
+}
+
+/** 三个服务端种子：running / stopped / crashed 各一个。 */
+export const MOCK_SERVERS: ServerEntry[] = [
+  {
+    meta: {
+      id: "srv-paper",
+      name: "朋友服 Paper",
+      core: "Paper",
+      mcVersion: "1.21.4",
+      coreVersion: "1.21.4-latest-232",
+      jarFile: "paper-1.21.4-232.jar",
+      port: 25565,
+      memoryMb: 4096,
+      maxPlayers: 20,
+      onlineMode: true,
+      eulaAgreed: true,
+      createdAt: Date.UTC(2025, 1, 2, 10, 30),
+      lastStartedAt: Date.UTC(2025, 1, 18, 20, 12),
+    },
+    status: "running",
+  },
+  {
+    meta: {
+      id: "srv-fabric",
+      name: "模组测试服",
+      core: "Fabric",
+      mcVersion: "1.20.1",
+      coreVersion: "1.20.1-latest-0.16.9",
+      jarFile: "fabric-server-mc.1.20.1-loader.0.16.9.jar",
+      port: 25566,
+      memoryMb: 2048,
+      maxPlayers: 10,
+      onlineMode: false,
+      eulaAgreed: true,
+      createdAt: Date.UTC(2025, 0, 20, 21, 5),
+      lastStartedAt: Date.UTC(2025, 1, 10, 19, 40),
+    },
+    status: "stopped",
+  },
+  {
+    meta: {
+      id: "srv-neoforge",
+      name: "暮色生存服",
+      core: "NeoForge",
+      mcVersion: "1.21.1",
+      coreVersion: "1.21.1-latest-232",
+      jarFile: "neoforge-1.21.1-server.jar",
+      port: 25567,
+      memoryMb: 6144,
+      maxPlayers: 30,
+      onlineMode: true,
+      eulaAgreed: true,
+      createdAt: Date.UTC(2025, 1, 8, 12, 0),
+      lastStartedAt: Date.UTC(2025, 1, 16, 22, 3),
+      lastExitCode: 1,
+    },
+    status: "crashed",
   },
 ];

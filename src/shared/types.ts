@@ -555,6 +555,104 @@ export interface InstalledModInfo {
  * 实例里已装内容的一条索引记录：资源页据此判断「这个项目/这个文件已经装过了」。
  * 只包含磁盘上确实存在该文件的记录——索引里留着但用户已手动删除的不返回。
  */
+/** FastMirror 提供的 Java 版服务端核心（核心名大小写敏感，直接当 id 用）。 */
+export type ServerCoreId = "Vanilla" | "Paper" | "Purpur" | "Folia" | "Fabric" | "Forge" | "NeoForge" | "Arclight";
+
+/** 一个核心有哪些游戏版本可选。 */
+export interface ServerCoreInfo {
+  core: ServerCoreId;
+  /** pure = 插件服；mod = 模组服；vanilla = 原版。 */
+  tag: string;
+  homepage?: string;
+  /** 该核心支持的游戏版本（新的在前）。 */
+  mcVersions: string[];
+  recommend: boolean;
+}
+
+/** 某核心 + 某游戏版本下的一个构建。 */
+export interface ServerBuildInfo {
+  core: ServerCoreId;
+  mcVersion: string;
+  coreVersion: string;
+  sha1: string;
+  updateTime: string;
+}
+
+/** 每个服务端独立管理的元数据（落在 <root>/servers/<id>/server.json）。 */
+export interface ServerMeta {
+  id: string;
+  name: string;
+  core: ServerCoreId;
+  mcVersion: string;
+  coreVersion: string;
+  /** 落盘的 jar 文件名。 */
+  jarFile: string;
+  port: number;
+  memoryMb: number;
+  maxPlayers: number;
+  onlineMode: boolean;
+  eulaAgreed: boolean;
+  createdAt: number;
+  lastStartedAt?: number;
+  /** 最近一次退出码（用于界面上区分 崩溃 / 正常停止）。 */
+  lastExitCode?: number;
+}
+
+/** 运行状态由主进程托管，列表里一并返回。 */
+export type ServerStatus = "stopped" | "starting" | "running" | "stopping" | "crashed";
+
+export interface ServerEntry {
+  meta: ServerMeta;
+  status: ServerStatus;
+}
+
+/** 控制台一行：stdout/stderr 来自游戏进程，system 是启动器自己的提示。 */
+export interface ServerConsoleLine {
+  serverId: string;
+  at: number;
+  stream: "stdout" | "stderr" | "system";
+  text: string;
+}
+
+/** 本地皮肤：官方内置（<gameRoot>/skins，只读）或用户导入（<dataRoot>/skins，可增删）。 */
+export interface LocalSkin {
+  /** 文件名（含 .png），同目录内唯一。 */
+  fileName: string;
+  /** 展示名：文件名主干。 */
+  name: string;
+  source: "official" | "user";
+  /** 绝对路径：渲染层可直接当图片用。 */
+  path: string;
+  sizeBytes: number;
+  /** 64x64 现代格式；64x32 是旧版（没有左手层与腿部外层）。 */
+  width: number;
+  height: number;
+  /** 手臂模型：按皮肤贴图那一列是否全透明判定，slim = 细臂。 */
+  model: "classic" | "slim";
+  /** 当前账号是否选中了它。 */
+  active: boolean;
+}
+
+/** 某账号选中的本地皮肤；没有记录表示跟随账号原皮肤。 */
+export interface LocalSkinSelection {
+  accountId: string;
+  fileName: string;
+  source: "official" | "user";
+  model: "classic" | "slim";
+}
+
+/** 把本地皮肤写进实例（CustomSkinLoader 的本地皮肤目录）的结果。 */
+export interface SkinApplyResult {
+  /** 皮肤文件是否已写入实例。 */
+  applied: boolean;
+  /** 实例里是否已有 CustomSkinLoader（false 表示需要先一键安装）。 */
+  modInstalled: boolean;
+  /** 写进实例的皮肤文件名（相对玩家名的文件）。 */
+  skinFile?: string;
+  /** 给界面看的说明（失败原因或提示）。 */
+  message?: string;
+}
+
 export interface InstalledContentRef {
   provider: ModProviderId;
   /** Modrinth project_id / CurseForge modId（与搜索结果的项目 id 同一把钥匙）；扫描兜底来的条目为空串。 */

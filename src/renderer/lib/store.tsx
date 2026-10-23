@@ -5,7 +5,7 @@ import { NO_APP_ICON, fetchAppIcon, type AppIconInfo } from "./appIcon";
 import { afterFirstFrame, perfMark, perfNow, perfSince, perfTime } from "./perf";
 import { errorMessage } from "./useAsync";
 
-export type PageId = "instances" | "accounts" | "download" | "downloads" | "mods" | "net" | "java" | "personalize" | "launch" | "other" | "about" | "settings";
+export type PageId = "instances" | "servers" | "accounts" | "skins" | "download" | "downloads" | "mods" | "net" | "java" | "personalize" | "launch" | "other" | "about" | "settings";
 
 export interface AppContextValue {
   page: PageId;

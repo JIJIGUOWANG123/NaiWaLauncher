@@ -8,7 +8,7 @@ import { loaderLabel } from "./format";
  */
 export type UiContentKind = ModContentKind | "datapack";
 
-/** 来源筛选：具体站点或「所有来源」。 */
+/** 来源筛选：资源页已改成「站点单选」，all 仅作为类型占位保留。 */
 export type ModSourceFilter = ModProviderId | "all";
 
 /** 结果排序。 */
@@ -87,20 +87,12 @@ export function kindLabel(kind: UiContentKind): string {
 /** 结果为空时的提示。 */
 export const KIND_EMPTY_HINT: Record<UiContentKind, string> = {
   mod: "换个关键词试试，或切换来源。",
-  shader: "换个关键词试试，或把来源切回「所有来源」。",
-  resourcepack: "换个关键词试试，或把来源切回「所有来源」。",
-  modpack: "换个关键词试试，或把来源切回「所有来源」。",
+  shader: "换个关键词试试，或清空左侧筛选。",
+  resourcepack: "换个关键词试试，或清空左侧筛选。",
+  modpack: "换个关键词试试，或清空左侧筛选。",
   datapack: "数据包暂不支持。",
   map: "换个关键词试试，地图列表来自麦块社区。",
 };
-
-/** 来源下拉：默认「所有来源」。 */
-export const SOURCE_OPTIONS: Array<{ value: ModSourceFilter; label: string }> = [
-  { value: "all", label: "所有来源" },
-  { value: "modrinth", label: "Modrinth" },
-  { value: "curseforge", label: "CurseForge" },
-  { value: "minekuai", label: "麦块社区（中文）" },
-];
 
 /** 卡片上的来源徽标。 */
 export const SOURCE_BADGE: Record<ModProviderId, string> = {
