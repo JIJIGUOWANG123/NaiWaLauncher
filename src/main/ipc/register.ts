@@ -50,7 +50,8 @@ const handle = <T>(channel: string, fn: (...args: any[]) => Promise<T> | T): voi
   ipcMain.handle(channel, async (_event, ...args: any[]) => fn(...args));
 };
 
-const IMAGE_EXT = /.(png|jpe?g|webp|gif|bmp)$/i;
+/** 背景除了静态图还支持视频（渲染层按扩展名决定用 img 还是 video；music/icons 仍只认图片/音频）。 */
+const BACKGROUND_EXT = /.(png|jpe?g|webp|gif|bmp|mp4|webm|ogv)$/i;
 const AUDIO_EXT = /.(mp3|ogg|wav|flac|m4a)$/i;
 
 function mediaDirs(): { backgrounds: string; music: string; icons: string } {
@@ -174,7 +175,7 @@ export function registerIpc(): void {
   handle<MediaList>(IPC.mediaList, async () => {
     const dirs = mediaDirs();
     return {
-      backgrounds: await listFiles(dirs.backgrounds, IMAGE_EXT),
+      backgrounds: await listFiles(dirs.backgrounds, BACKGROUND_EXT),
       music: await listFiles(dirs.music, AUDIO_EXT),
       icons: await listFiles(dirs.icons, /.(png|ico|jpe?g|webp)$/i),
       dirs,

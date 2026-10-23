@@ -21,7 +21,7 @@ import { AboutPage } from "./pages/AboutPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { api } from "./lib/api";
 import { iconSrc } from "./lib/appIcon";
-import { backgroundUrl, musicUrl } from "./lib/media";
+import { backgroundUrl, isVideoFile, musicUrl } from "./lib/media";
 import { useBackgroundPlayback } from "./lib/background";
 import { attachAudio, pauseMusic, playMusic, setMusicVolume } from "./lib/music";
 import { playStartupSound, stopStartupSound } from "./lib/startupSound";
@@ -120,20 +120,40 @@ function Shell() {
 
   const titleBar = settings?.titleBar ?? "compact";
   const bgUrl = backgroundUrl(media.data, playback.name);
+  // 背景资源里可能是图片也可能是视频：按文件类型分流，轮播逻辑不变（换的只是 playback.name）。
+  const bgIsVideo = isVideoFile(playback.name) || isVideoFile(bgUrl);
 
   return (
     <div className="app-frame">
       <div
         className={`app-bg ${bgUrl ? "has-image" : ""} ${playback.fading ? "is-fading" : ""}`.trim()}
-        style={bgUrl ? { backgroundImage: `url("${bgUrl}")` } : undefined}
+        data-bg-kind={bgUrl ? (bgIsVideo ? "video" : "image") : "none"}
+        style={bgUrl && !bgIsVideo ? { backgroundImage: `url("${bgUrl}")` } : undefined}
         aria-hidden="true"
-      />
+      >
+        {bgIsVideo ? (
+          // key 跟着地址走：轮播换到下一段视频时重新挂载，从头播放。
+          <video
+            key={bgUrl}
+            className="app-bg-video"
+            src={bgUrl}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            aria-hidden="true"
+          />
+        ) : null}
+      </div>
 
       <TitleBar
         style={titleBar}
         text={settings?.titleBarText ?? ""}
         backgroundDir={media.data?.dirs.backgrounds ?? ""}
-        backgroundName={playback.name}
+        // 标题栏的「图片」样式只能吃图片：当前是视频时不传名字，让它回退到主题底色，
+        // 免得塞一个 .mp4 给 background-image（那只会渲染成空白）。
+        backgroundName={bgIsVideo ? "" : playback.name}
       />
 
       <div className="app-shell">

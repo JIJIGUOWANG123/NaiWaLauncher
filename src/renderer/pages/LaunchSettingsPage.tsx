@@ -12,6 +12,12 @@ const ISOLATION_OPTIONS = [
   { value: "none", label: "共用 .minecraft（不隔离）" },
 ];
 
+/** 同时运行的游戏实例数：默认只允许一个，改成无限即可多开。 */
+const INSTANCE_LIMIT_OPTIONS = [
+  { value: "one", label: "一个（推荐）" },
+  { value: "unlimited", label: "无限（允许同时多开）" },
+];
+
 const VISIBILITY_OPTIONS = [
   { value: "keep", label: "保持不变" },
   { value: "minimize", label: "最小化" },
@@ -128,6 +134,21 @@ function LaunchOptionsCard({ settings }: { settings: Settings }) {
             ariaLabel="默认版本隔离"
             onChange={(value) => void persist({ versionIsolation: value as Settings["versionIsolation"] }, "版本隔离")}
           />
+        </Field>
+
+        <Field
+          label="同时运行的实例"
+          hint="默认只允许运行一个游戏实例：已有实例在跑时再点启动会被拦下；改成「无限」即可同时开多个（内存与 CPU 要自己算好）"
+        >
+          {/* data-game-limit 带上当前值，便于自检脚本断言 */}
+          <div data-game-limit={settings.gameInstanceLimit}>
+            <Select
+              value={settings.gameInstanceLimit}
+              options={INSTANCE_LIMIT_OPTIONS}
+              ariaLabel="同时运行的实例"
+              onChange={(value) => void persist({ gameInstanceLimit: value as Settings["gameInstanceLimit"] }, "同时运行的实例")}
+            />
+          </div>
         </Field>
 
         <Field

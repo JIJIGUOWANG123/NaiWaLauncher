@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   javaAutoMatch: true,
   language: "zh-CN",
   closeToTray: true,
+  gameInstanceLimit: "one",
   memoryOptimize: true,
   advancedProcessTweaks: false,
   localSkinApi: false,
@@ -96,8 +97,9 @@ export const MOCK_INLINE_BACKGROUND_3 =
 
 /** 背景/音乐目录（契约新增的 media 面）在 mock 下的样例。 */
 export const MOCK_MEDIA = {
-  // 3 张内联 SVG 背景图：预览与轮播自检都不需要真实文件
-  backgrounds: [MOCK_INLINE_BACKGROUND, MOCK_INLINE_BACKGROUND_2, MOCK_INLINE_BACKGROUND_3],
+  // 3 张内联 SVG 背景图 + 1 个视频样例：视频用来验证背景层的 video 分支与个性化页的预览分流
+  
+  backgrounds: [MOCK_INLINE_BACKGROUND, MOCK_INLINE_BACKGROUND_2, MOCK_INLINE_BACKGROUND_3, "dynamic-bg.mp4"],
   music: ["sweden.mp3", "calm1.ogg", "wet-hands.flac"],
   icons: ["naiwa-256.png", "night-cat.ico"],
   dirs: {

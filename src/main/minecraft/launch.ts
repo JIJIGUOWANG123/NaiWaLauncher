@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream, existsSync } from "node:fs";
 import { promises as fs } from "node:fs";
@@ -24,6 +24,30 @@ import { getInstance, updateInstance } from "./instances";
 import { getVersionJson, resolveBaseVersionId } from "./manifest";
 
 const log = logger("launch");
+
+/**
+ * 本进程启动的游戏子进程（instanceId → 子进程）。
+ * 只用于「同时运行实例」的限制：启动器重启后这张表会清空，无法跨进程追踪 ——
+ * 也就是说重启启动器后，之前启动的游戏不会被算在并发里（不去扫系统进程，避免误伤）。
+ */
+const runningGames = new Map<string, { child: ChildProcess; name: string }>();
+
+/**
+ * 启动前的并发检查：
+ * · 同一实例重复启动 → 「该实例已经在运行」；
+ * · 设置 gameInstanceLimit = "one"（默认）且已有存活实例 → 报错并提示怎么放开；
+ * · "unlimited" 只拦同实例重复启动。
+ */
+function assertGameSlot(instanceId: string, instanceName: string, limit: "one" | "unlimited"): void {
+  const same = runningGames.get(instanceId);
+  if (same) throw new Error("该实例已经在运行：" + same.name + "（pid " + String(same.child.pid ?? 0) + "）");
+  if (limit !== "one") return;
+  const other = runningGames.values().next();
+  if (other.done || !other.value) return;
+  throw new Error(
+    "已经有一个游戏在运行（实例：" + other.value.name + "）。可在设置里把「同时运行实例」改成「无限」后再开第二个。",
+  );
+}
 
 /** 本地错误文案（launch 里已经有同语义的写法，单独抽一个避免重复三元表达式）。 */
 function messageOfLaunch(err: unknown): string {
@@ -721,6 +745,8 @@ export async function launchInstance(id: string, quickPlayLevel?: string): Promi
   const instance = await getInstance(id);
   if (!instance) throw new Error("实例不存在：" + id);
   const settings = getSettings();
+  // 并发上限要在解析 Java/建目录之前就判掉，否则用户会等半天才看到错误
+  assertGameSlot(instance.id, instance.name, settings.gameInstanceLimit ?? "one");
 
   // 先校验 quickPlay：存档名非法或版本太老要在解析 Java、创建目录之前就报错
   const requested = (quickPlayLevel ?? "").trim();
@@ -776,6 +802,11 @@ export async function launchInstance(id: string, quickPlayLevel?: string): Promi
     windowsHide: false,
   });
   const pid = child.pid ?? 0;
+  // 记进「正在运行」表：exit/error 时移除，表只在本进程内有效（见 runningGames 注释）
+  runningGames.set(instance.id, { child, name: instance.name });
+  const releaseSlot = (): void => {
+    runningGames.delete(instance.id);
+  };
 
   write("# " + new Date().toISOString() + " NaiWa Launcher 启动 " + instance.name + "\r\n");
   write("# 版本隔离: " + (settings.versionIsolation === "none" ? "none（共用 .minecraft）" : "all（每实例独立）") + "\r\n");
@@ -795,10 +826,12 @@ export async function launchInstance(id: string, quickPlayLevel?: string): Promi
   child.on("error", (err) => {
     write("# 启动失败：" + err.message + "\r\n");
     log.error("启动失败：" + err.message);
+    releaseSlot();
     stream.end();
   });
   child.on("exit", (code) => {
     write("# 进程已退出，code=" + String(code) + "\r\n");
+    releaseSlot();
     stream.end();
     if (code !== 0) log.warn("游戏进程退出码 " + String(code) + "，详见 " + logPath);
   });

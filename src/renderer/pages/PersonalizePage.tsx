@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { usePersist } from "../lib/persist";
 import { iconSrc, openIconsDir } from "../lib/appIcon";
-import { mediaLabel, mediaUrl } from "../lib/media";
+import { isVideoFile, mediaLabel, mediaUrl } from "../lib/media";
 import { pauseMusic, playMusic, setMusicVolume, useMusicState } from "../lib/music";
 import { playPreviewSound, stopPreviewSound } from "../lib/startupSound";
 import {
@@ -437,7 +437,7 @@ export function PersonalizePage() {
 
           {!media.loading && !media.error && backgrounds.length === 0 ? (
             <p className="media-empty">
-              还没有背景图片：把 png / jpg / webp / gif / bmp 放进 NaiWa/backgrounds，再点下面的「刷新背景图片」。
+              还没有背景资源：把图片（png / jpg / jpeg / webp / gif / bmp）或视频（mp4 / webm / ogv）放进 NaiWa/backgrounds，再点下面的「刷新背景图片」。
             </p>
           ) : null}
 
@@ -448,7 +448,10 @@ export function PersonalizePage() {
             onChange={toggleTint}
           />
 
-          <Field label="背景图" hint="支持 png / jpg / webp / gif / bmp，选中后立即铺满窗口">
+          <Field
+            label="背景图 / 视频"
+            hint="支持图片与视频（mp4 / webm / ogv）：把文件放进 NaiWa/backgrounds 后点刷新；选中后立即铺满窗口"
+          >
             <Select
               value={settings.backgroundImage}
               options={backgrounds.map((name, index) => ({ value: name, label: mediaLabel(name, index) }))}
@@ -491,10 +494,19 @@ export function PersonalizePage() {
           </Field>
 
           {bgUrl ? (
-            <div className="media-preview">
-              <img src={bgUrl} alt="背景图片预览" />
+            <div className="media-preview" data-media-preview={isVideoFile(settings.backgroundImage) ? "video" : "image"}>
+              {isVideoFile(settings.backgroundImage) ? (
+                // 预览也走视频元素：当图片渲染会是一块空白
+                <video src={bgUrl} muted loop autoPlay playsInline className="media-preview-video" />
+              ) : (
+                <img src={bgUrl} alt="背景图片预览" />
+              )}
               <span className="media-preview-name">{mediaLabel(settings.backgroundImage)}</span>
             </div>
+          ) : null}
+
+          {isVideoFile(settings.backgroundImage) ? (
+            <p className="field-hint" data-bg-video-hint>视频背景自动循环播放，声音已静音。</p>
           ) : null}
 
           <div className="media-actions">

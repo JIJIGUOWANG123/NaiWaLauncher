@@ -169,14 +169,17 @@ async function downloadSetup(url: string): Promise<string> {
 /** 安装版：下载 Setup 并静默装回当前目录，然后重启。 */
 async function installViaSetup(url: string): Promise<void> {
   const root = getPaths().root;
-  const appExe = join(root, "NaiWa Launcher.exe");
-  if (!existsSync(appExe)) {
-    throw new Error("没找到当前的启动器程序：" + appExe + "（安装版更新需要程序与数据在同一目录）");
+  // 安装版把程序放在 <root>\main，数据留在 <root>；老版本平铺在根目录时回退到根目录的 exe
+  const mainExe = join(root, "main", "NaiWa Launcher.exe");
+  const currentExe = existsSync(mainExe) ? mainExe : join(root, "NaiWa Launcher.exe");
+  if (!existsSync(currentExe)) {
+    throw new Error("没找到当前的启动器程序：" + mainExe + "（安装版把程序放在 main 子目录、数据放在根目录，请重新运行安装包）");
   }
   const installer = await downloadSetup(url);
   const script = join(tmpdir(), "naiwa-setup-update-" + Date.now() + ".cmd");
-  await writeFile(script, setupScriptBody(installer, root, appExe, script), "utf8");
-  log.info("[updater] 安装版更新：将静默安装到 " + root + "，脚本 " + script);
+  // 安装包一定把 exe 装到 <root>\main，重启目标就固定指向它（老版本的根目录 exe 交由安装包覆盖/丢弃）
+  await writeFile(script, setupScriptBody(installer, root, mainExe, script), "utf8");
+  log.info("[updater] 安装版更新：将静默安装到 " + root + "（程序在 main 子目录），脚本 " + script);
   const launch = updateLaunch(script);
   spawn(launch.command, launch.args, launch.options).unref();
   setTimeout(() => app.quit(), 300);

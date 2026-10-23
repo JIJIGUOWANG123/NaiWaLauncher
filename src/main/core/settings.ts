@@ -17,6 +17,8 @@ export const BUILTIN_MICROSOFT_CLIENT_ID = "fd3e219a-6e6a-4188-8a39-e241f0e63324
 const SOURCE_IDS: DownloadSourceId[] = ["official", "bmclapi", "sjtu", "auto"];
 /** JDK 下载源（顺序即界面顺序）：auto 走测速，其余固定站点。 */
 const JAVA_SOURCES: JavaSourceId[] = ["auto", "bellsoft", "adoptium", "tuna"];
+/** 同时运行的游戏实例上限：默认一个，可在设置里放开。 */
+const GAME_LIMITS: Array<"one" | "unlimited"> = ["one", "unlimited"];
 const PROVIDER_IDS: ModProviderId[] = ["modrinth", "curseforge", "minekuai"];
 const LANGUAGES: Settings["language"][] = ["zh-CN", "en-US"];
 
@@ -74,6 +76,7 @@ export function defaults(): Settings {
     translateMods: true,
     translateSearch: true,
     memoryOptimize: true,
+    gameInstanceLimit: "one",
     advancedProcessTweaks: false,
     localSkinApi: false,
     appIcon: "",
@@ -181,6 +184,7 @@ function normalize(raw: unknown, base: Settings): Settings {
     translateMods: pickBool(src.translateMods, base.translateMods),
     translateSearch: pickBool(src.translateSearch, base.translateSearch),
     memoryOptimize: pickBool(src.memoryOptimize, base.memoryOptimize),
+    gameInstanceLimit: pickEnum(src.gameInstanceLimit, GAME_LIMITS, base.gameInstanceLimit),
     advancedProcessTweaks: pickBool(src.advancedProcessTweaks, base.advancedProcessTweaks),
     localSkinApi: pickBool(src.localSkinApi, base.localSkinApi),
     appIcon: pickString(src.appIcon, base.appIcon),
