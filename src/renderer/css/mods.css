@@ -560,6 +560,22 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 「已安装」标记：卡片角标与文件行徽标共用，绿色=这个实例里已经有了。 */
+.res-installed {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 32%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+
+/* 装过的是别的版本：降成中性色，别和「就是这个文件」混淆。 */
+.res-installed[data-file-installed="other"] {
+  color: var(--text-dim);
+  border-color: var(--line);
+  background: var(--surface-recess);
+}
+
 /* 来源徽标：三家各自一个色系，扫一眼就知道文件从哪来。 */
 .res-source {
   flex: 0 0 auto;
@@ -967,6 +983,14 @@
   min-width: 0;
 }
 
+/* 名字与「内置规则」徽标同一行，名字过长时徽标换到下一行。 */
+.dep-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .dep-name {
   font-size: 13px;
   color: var(--text-strong);
@@ -984,6 +1008,14 @@
   color: var(--ok);
   border-color: color-mix(in srgb, var(--ok) 36%, transparent);
   background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+/* 内置规则 = 中性灰，与「已安装/将一并安装」的状态色区分开。 */
+.dep-badge-builtin {
+  font-size: 11px;
+  color: var(--text-dim);
+  border-color: var(--line);
+  background: var(--surface-recess);
 }
 
 .dep-badge-missing {

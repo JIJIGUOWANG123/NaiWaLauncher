@@ -1,6 +1,6 @@
 import type {
   Account, AppInfo, DeviceCodeChallenge, DownloadSourceId, DownloadSourceInfo, InstanceMeta, InstalledJava,
-  DownloadJob, InstalledModInfo, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
+  DownloadJob, InstalledModInfo, InstalledContentRef, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
   PortProbeResult, SaveInfo, UpdateCheckResult, InstanceExportResult, InstanceImportResult,
   LoaderKind, LoaderVersionInfo, LogLine, ModCategory, ModFileInfo, ModFilterOptions, ModProviderId,
   ModSearchResult, ModSourceFilter, Settings, SkinInfo, SkinProfile, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
@@ -103,6 +103,7 @@ export const IPC = {
   modsInstallModpack: "mods:installModpack",
   modsCategories: "mods:categories",
   modsFilterOptions: "mods:filterOptions",
+  modsInstalledContent: "mods:installedContent",
   instancesSetLoader: "instances:setLoader",
 } as const;
 
@@ -308,8 +309,8 @@ export interface NaiwaApi {
     detail(provider: ModProviderId, projectId: string): Promise<ModDetail>;
     files(req: ModFilesRequest): Promise<ModFileInfo[]>;
     install(req: ModInstallRequest): Promise<ModInstallResult>;
-    /** 查询某个文件（或项目当前最优文件）的必需前置，并标注实例里是否已装。 */
-    dependencies(provider: ModProviderId, projectId: string, instanceId: string, fileId?: string): Promise<ModDependency[]>;
+    /** 查询某个文件（或项目当前最优文件）的必需前置，并标注实例里是否已装；kind 决定是否套用光影内置规则。 */
+    dependencies(provider: ModProviderId, projectId: string, instanceId: string, fileId?: string, kind?: ModContentKind): Promise<ModDependency[]>;
     /** 麦块社区地图列表（可按实例标注版本兼容性）。 */
     maps(query: string, page: number, instanceId?: string): Promise<MapEntry[]>;
     /** 某内容类型的分类列表（分类下拉/侧栏）。 */
@@ -318,13 +319,16 @@ export interface NaiwaApi {
     filterOptions(kind: ModContentKind): Promise<ModFilterOptions>;
     /** 一键安装整合包：下载 .mrpack → 新建实例（名字默认取整合包名）→ 装加载器/模组。 */
     installModpack(provider: ModProviderId, projectId: string, fileId?: string, instanceName?: string): Promise<{ instanceId: string; name: string }>;
-    installed(instanceId: string): Promise<InstalledModInfo[]>;
-    /** 逐个文件反查远端，填充 update 字段。 */
-    checkUpdates(instanceId: string): Promise<InstalledModInfo[]>;
-    /** 删除实例 mods 目录中的某个 jar（同名 .bak 一并清掉）。 */
-    remove(instanceId: string, fileName: string): Promise<void>;
-    /** 把某个模组更新到适配当前实例的最佳版本，返回新文件名。 */
-    update(instanceId: string, fileName: string): Promise<{ fileName: string; path: string }>;
+    /** 实例里已装的内容（kind 缺省为 mod）：mod → mods 的 .jar，shader → shaderpacks，resourcepack → resourcepacks。 */
+    installed(instanceId: string, kind?: ModContentKind): Promise<InstalledModInfo[]>;
+    /** 逐个文件反查远端，填充 update 字段（光影/资源包同样按 sha1 反查）。 */
+    checkUpdates(instanceId: string, kind?: ModContentKind): Promise<InstalledModInfo[]>;
+    /** 删除实例对应目录中的某个文件（同名 .bak 一并清掉）：模组只认 .jar，光影/资源包只认 .zip。 */
+    remove(instanceId: string, fileName: string, kind?: ModContentKind): Promise<void>;
+    /** 把某个内容更新到适配当前实例的最佳版本，返回新文件名。 */
+    update(instanceId: string, fileName: string, kind?: ModContentKind): Promise<{ fileName: string; path: string }>;
+    /** 实例里已装内容的索引记录（资源页判断重复安装用；文件已被删除的记录不返回）。 */
+    installedContent(instanceId: string): Promise<InstalledContentRef[]>;
   };
   events: {
     onProgress(cb: (p: TaskProgress) => void): () => void;

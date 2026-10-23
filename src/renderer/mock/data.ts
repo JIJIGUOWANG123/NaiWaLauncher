@@ -49,10 +49,8 @@ export const DEFAULT_SETTINGS: Settings = {
   windowSize: "default",
   translateMods: true,
   translateSearch: true,
-  brandTitle: "",
-  brandSubtitle: "",
   appIcon: "",
-  startupSound: "",
+  startupSound: "off",
   startupVolume: 0.6,
   deeplApiKey: "mock:fx",
   natfrpToken: "",
@@ -651,6 +649,100 @@ export const MOCK_MOD_UPDATES: Record<string, NonNullable<InstalledModInfo["upda
     fileName: "sodium-fabric-0.6.9+mc1.20.1.jar",
     versionLabel: "0.6.9",
   },
+};
+
+/** 实例 shaderpacks / resourcepacks 目录的预置文件：样例保证「2 个光影 / 1 个资源包，各有 1 个可更新」。 */
+export const MOCK_INSTALLED_PACKS: Record<"shader" | "resourcepack", Record<string, InstalledModInfo[]>> = {
+  shader: {
+    "naiwa-create": [
+      {
+        fileName: "ComplementaryReimagined_r5.3.zip",
+        sizeBytes: 6_291_456,
+        sha1: "a1c4f70b92d83e6f05c7b2e4d9a3f16c8b5e0d27",
+        name: "Complementary Reimagined",
+        description: "轻写实风格光影，默认配置就有水面反射与体积光",
+        version: "r5.3",
+        provider: "modrinth",
+        projectId: "HV6i1n3q",
+        update: null,
+      },
+      {
+        fileName: "BSL_v8.2.01.zip",
+        sizeBytes: 3_145_728,
+        sha1: "c7e2b9403a6d15f8b0e4d92c7a3f6815d2b9e04a",
+        name: "BSL Shaders",
+        description: "偏暖色调的柔和光影，低配机器也能跑",
+        version: "8.2.01",
+        provider: "modrinth",
+        projectId: "bSLsH4kZ",
+        update: null,
+      },
+    ],
+  },
+  resourcepack: {
+    "naiwa-create": [
+      {
+        fileName: "Stay-True-1.20.zip",
+        sizeBytes: 8_912_896,
+        sha1: "f3b8d1a65c04e972b8a5d3f6c1e09b47a2d85c13",
+        name: "Stay True",
+        description: "接近原版的手绘贴图，保留原版轮廓只换质感",
+        version: "1.20",
+        provider: "modrinth",
+        projectId: "sTaYtrUe",
+        update: null,
+      },
+    ],
+  },
+};
+
+/** checkUpdates 反查到的远端目标文件：光影/资源包各一条，用于演示「可更新」高亮与更新按钮。 */
+export const MOCK_PACK_UPDATES: Record<string, NonNullable<InstalledModInfo["update"]>> = {
+  "ComplementaryReimagined_r5.3.zip": {
+    provider: "modrinth",
+    projectId: "HV6i1n3q",
+    fileId: "u-HV6i1n3q-r5.5",
+    fileName: "ComplementaryReimagined_r5.5.zip",
+    versionLabel: "r5.5",
+  },
+  "Stay-True-1.20.zip": {
+    provider: "modrinth",
+    projectId: "sTaYtrUe",
+    fileId: "u-sTaYtrUe-1.21",
+    fileName: "Stay-True-1.21.zip",
+    versionLabel: "1.21",
+  },
+};
+
+/**
+ * 光影/资源包的前置样例（按类型索引，mock 里任何光影都会命中）。
+ * 光影那条是「内置规则」：来源没声明前置时按加载器推断 Iris，落 mods 目录。
+ */
+export const MOCK_PACK_DEPENDENCIES: Record<"shader" | "resourcepack", Array<Omit<ModDependency, "installed" | "installedFileName">>> = {
+  shader: [
+    {
+      provider: "modrinth",
+      projectId: "YL57xq9U",
+      name: "Iris Shaders",
+      nameZh: "Iris 光影加载器",
+      slug: "iris",
+      required: true,
+      kind: "mod",
+      origin: "builtin",
+    },
+  ],
+  resourcepack: [
+    {
+      provider: "modrinth",
+      projectId: "base-pack-1.20",
+      name: "Base Pack",
+      nameZh: "基础资源包",
+      slug: "base-pack",
+      required: true,
+      kind: "resourcepack",
+      origin: "source",
+    },
+  ],
 };
 
 /** 各内容类型的文件扩展名：光影/资源包是 zip，整合包是 mrpack。 */

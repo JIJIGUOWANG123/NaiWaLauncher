@@ -1,5 +1,5 @@
 // 导出可直接推送到 GitHub 的源码快照：只拷贝源码与工程配置，排除运行期数据与构建产物。
-import { cpSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -37,4 +37,7 @@ writeFileSync(join(out, ".gitignore"), ignore, "utf8");
 
 console.log("source snapshot:", out);
 console.log("copied entries:", count);
-console.log("size:", (statSync(out).size / 1048576).toFixed(1) + " MB");
+// statSync 对目录返回的是元数据大小（恒为 0），这里递归求和才是快照真实体积
+const dirSize = (dir) => readdirSync(dir, { withFileTypes: true })
+  .reduce((sum, entry) => sum + (entry.isDirectory() ? dirSize(join(dir, entry.name)) : statSync(join(dir, entry.name)).size), 0);
+console.log("size:", (dirSize(out) / 1048576).toFixed(1) + " MB");

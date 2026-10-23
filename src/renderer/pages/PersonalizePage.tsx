@@ -4,7 +4,6 @@ import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { usePersist } from "../lib/persist";
 import { iconSrc, openIconsDir } from "../lib/appIcon";
-import { BRAND_SUBTITLE_MAX, BRAND_TITLE_MAX, setBrandPreview } from "../lib/brand";
 import { mediaLabel, mediaUrl } from "../lib/media";
 import { pauseMusic, playMusic, setMusicVolume, useMusicState } from "../lib/music";
 import { playPreviewSound, stopPreviewSound } from "../lib/startupSound";
@@ -50,11 +49,6 @@ export function PersonalizePage() {
   const [tint, setTint] = useState<boolean>(readBgTint);
   const [colorDraft, setColorDraft] = useState<string>(settings?.accentColor ?? "#E0A93B");
   const [titleDraft, setTitleDraft] = useState<string>(settings?.titleBarText ?? "");
-  const [brandTitleDraft, setBrandTitleDraft] = useState<string>(settings?.brandTitle ?? "");
-  const [brandSubtitleDraft, setBrandSubtitleDraft] = useState<string>(settings?.brandSubtitle ?? "");
-  // 防抖保存要用「最新草稿」，不能靠 setTimeout 闭包里那次渲染的 state。
-  const brandDraftRef = useRef({ title: brandTitleDraft, subtitle: brandSubtitleDraft });
-  const brandTimer = useRef<number | null>(null);
   const [gradFromDraft, setGradFromDraft] = useState<string>(settings?.gradientFrom ?? "");
   const [gradToDraft, setGradToDraft] = useState<string>(settings?.gradientTo ?? "");
   const [intervalDraft, setIntervalDraft] = useState<string>(String(settings?.backgroundIntervalSec ?? 20));
@@ -81,26 +75,6 @@ export function PersonalizePage() {
   useEffect(() => {
     if (settings) setTitleDraft(settings.titleBarText);
   }, [settings?.titleBarText]);
-
-  useEffect(() => {
-    if (settings) setBrandTitleDraft(settings.brandTitle);
-  }, [settings?.brandTitle]);
-
-  useEffect(() => {
-    if (settings) setBrandSubtitleDraft(settings.brandSubtitle);
-  }, [settings?.brandSubtitle]);
-
-  // 键盘输入即预览：侧边栏两行立刻跟着变，不需要等落盘。
-  useEffect(() => {
-    brandDraftRef.current = { title: brandTitleDraft, subtitle: brandSubtitleDraft };
-    setBrandPreview({ title: brandTitleDraft, subtitle: brandSubtitleDraft });
-  }, [brandTitleDraft, brandSubtitleDraft]);
-
-  // 离开个性化页：撤掉草稿覆盖与未落盘的定时器，侧边栏回到已保存的文案。
-  useEffect(() => () => {
-    setBrandPreview(null);
-    if (brandTimer.current !== null) window.clearTimeout(brandTimer.current);
-  }, []);
 
   useEffect(() => {
     if (settings) setGradFromDraft(settings.gradientFrom);
@@ -140,45 +114,6 @@ export function PersonalizePage() {
   const refreshIcons = () => {
     media.reload();
     push("已重新读取 NaiWa/icons 列表", "info");
-  };
-
-  const clearBrandTimer = () => {
-    if (brandTimer.current !== null) {
-      window.clearTimeout(brandTimer.current);
-      brandTimer.current = null;
-    }
-  };
-
-  // 品牌文案：留空即「恢复默认」，所以 trim 后空串照常写库。
-  const saveBrand = async (title: string, subtitle: string) => {
-    clearBrandTimer();
-    const nextTitle = title.trim();
-    const nextSubtitle = subtitle.trim();
-    const patch: Partial<Settings> = {};
-    if (nextTitle !== (settings?.brandTitle ?? "")) patch.brandTitle = nextTitle;
-    if (nextSubtitle !== (settings?.brandSubtitle ?? "")) patch.brandSubtitle = nextSubtitle;
-    if (Object.keys(patch).length === 0) return;
-    const saved = await persist(patch, "品牌文案");
-    // 落盘后撤掉草稿，侧边栏改读回读后的设置值（内容相同，不会闪）。
-    if (saved) setBrandPreview(null);
-  };
-
-  const scheduleBrandSave = () => {
-    clearBrandTimer();
-    brandTimer.current = window.setTimeout(() => {
-      brandTimer.current = null;
-      void saveBrand(brandDraftRef.current.title, brandDraftRef.current.subtitle);
-    }, 600);
-  };
-
-  const commitBrand = () => void saveBrand(brandTitleDraft, brandSubtitleDraft);
-  const resetBrandTitle = () => {
-    setBrandTitleDraft("");
-    void saveBrand("", brandSubtitleDraft);
-  };
-  const resetBrandSubtitle = () => {
-    setBrandSubtitleDraft("");
-    void saveBrand(brandTitleDraft, "");
   };
 
   // 图标换完要显式让主进程重算 file:// 直链，标题栏/侧边栏才会即时换图。
@@ -634,7 +569,7 @@ export function PersonalizePage() {
             <span className="panel-count">启动器打开时播放一次</span>
           </div>
 
-          <Field label="音效" hint="留空使用内置 bgm.mp3；把音频放进 NaiWa/music 后可在这里选择">
+          <Field label="音效" hint="默认关闭；选「默认（内置 bgm.mp3）」播放启动器自带音效，把音频放进 NaiWa/music 后可在这里选择">
             <Select
               value={settings.startupSound}
               keepEmpty
@@ -723,69 +658,10 @@ export function PersonalizePage() {
 
         <div className="panel" data-icon-panel>
           <div className="panel-head">
-            <h2 className="panel-title">品牌与图标</h2>
+            <h2 className="panel-title">界面图标</h2>
             <span className="panel-count">即时预览</span>
           </div>
 
-          <Field label="品牌主标题" hint={`侧边栏第一行；留空用默认「NaiWa」，最多 ${BRAND_TITLE_MAX} 字`}>
-            <div className="input-with-action">
-              <TextInput
-                value={brandTitleDraft}
-                placeholder="NaiWa"
-                aria-label="品牌主标题"
-                maxLength={BRAND_TITLE_MAX}
-                data-brand-input="title"
-                onChange={(event) => {
-                  setBrandTitleDraft(event.target.value);
-                  scheduleBrandSave();
-                }}
-                onBlur={commitBrand}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") commitBrand();
-                }}
-              />
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                data-action="reset-brand-title"
-                disabled={brandTitleDraft === ""}
-                onClick={resetBrandTitle}
-              >
-                恢复默认
-              </button>
-            </div>
-          </Field>
-
-          <Field label="品牌副标题" hint={`侧边栏第二行；留空用默认「奶娃启动器」，最多 ${BRAND_SUBTITLE_MAX} 字`}>
-            <div className="input-with-action">
-              <TextInput
-                value={brandSubtitleDraft}
-                placeholder="奶娃启动器"
-                aria-label="品牌副标题"
-                maxLength={BRAND_SUBTITLE_MAX}
-                data-brand-input="subtitle"
-                onChange={(event) => {
-                  setBrandSubtitleDraft(event.target.value);
-                  scheduleBrandSave();
-                }}
-                onBlur={commitBrand}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") commitBrand();
-                }}
-              />
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                data-action="reset-brand-subtitle"
-                disabled={brandSubtitleDraft === ""}
-                onClick={resetBrandSubtitle}
-              >
-                恢复默认
-              </button>
-            </div>
-          </Field>
-
-          {media.loading ? <LoadingState label="读取界面图标…" /> : null}
           {media.error ? <ErrorState message={media.error} onRetry={media.reload} /> : null}
 
           <div className="media-preview icon-preview">
@@ -799,7 +675,7 @@ export function PersonalizePage() {
             </p>
           ) : null}
 
-          <Field label="图标文件" hint="默认使用打包进启动器的 logo；选中 NaiWa/icons 里的文件后标题栏、侧边栏与启动画面即时换图">
+          <Field label="图标文件" hint="默认使用打包进启动器的 logo；选中 NaiWa/icons 里的文件后标题栏、侧边栏、启动画面与实例列表头像即时换图">
             <div className="icon-grid" role="radiogroup" aria-label="界面图标">
               <button
                 type="button"
@@ -837,10 +713,6 @@ export function PersonalizePage() {
               ))}
             </div>
           </Field>
-
-          <p className="field-hint" data-brand-note>
-            留空则使用默认文案；图标可选 NaiWa/icons 里的图片。
-          </p>
 
           <p className="field-hint" data-icon-note>
             把 png/ico（建议 256×256 及以上）放进 NaiWa/icons 即可在这里选择；Windows 任务栏图标会在下次启动时应用。

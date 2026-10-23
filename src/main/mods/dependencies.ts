@@ -1,15 +1,19 @@
 // 模组前置依赖：解析（各来源自己出）→ 补名称（复用带缓存的项目接口）→ 判断实例里是否已装
 // （安装索引 NaiWa/meta/mod-install-map.json + mods 目录扫描），最后由安装流程按顺序补齐缺失前置。
 // 名称与 installed 都只是「尽力而为」：任何一次查询失败都不阻塞安装，宁可让界面少显示一个名字。
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
-import type { InstanceMeta, ModContentKind, ModDependency, ModProviderId } from "../../shared/types";
+import type {
+  InstalledContentRef, InstanceMeta, ModContentKind, ModDependency, ModFileInfo, ModProviderId,
+} from "../../shared/types";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
-import { downloadModFile } from "./install";
+import { contentDirForInstance, downloadModFile, safeFileName } from "./install";
 import { modsDirForInstance, readModMetadata } from "./installed";
+import { shaderBuiltinDependency } from "./prereq";
 import {
-  bestFile, mapLimit, matchTier, messageOf, type MatchTier, type ModProvider, type RawDependency,
+  bestFile, loaderAppliesTo, mapLimit, matchTier, messageOf, versionOnlyTier, type MatchTier,
+  type ModProvider, type RawDependency,
 } from "./provider";
 
 const log = logger("mods");
@@ -125,6 +129,12 @@ export async function rememberInstalled(
   }
 }
 
+/** 光影/资源包的落盘子目录后缀：与安装目录口径一致（见 contentDirForInstance）。 */
+const PACK_SUFFIX: Partial<Record<ModContentKind, string>> = {
+  shader: "shaderpacks",
+  resourcepack: "resourcepacks",
+};
+
 /** slug 判定口径：小写 + 去掉所有非字母数字（"Fabric API" / "fabric_api" / "fabric-api" 同义）。 */
 export function normalizeSlug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -138,6 +148,101 @@ async function listJars(instanceId: string): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+/** 某类内容在磁盘上的文件：mod 只有 .jar，光影/资源包只有 .zip（.bak 是备份，不算已装）。 */
+async function listContentFiles(instanceId: string, kind: ModContentKind): Promise<string[]> {
+  if (kind === "mod") return listJars(instanceId);
+  const sub = PACK_SUFFIX[kind];
+  if (!sub) return [];
+  try {
+    const entries = await readdir(contentDirForInstance({ id: instanceId }, kind), { withFileTypes: true });
+    return entries.filter((entry) => entry.isFile() && /\.zip$/i.test(entry.name)).map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
+/** 光影/资源包的 zip 里没有 modId 可读：只能按文件名 slug 认（包名后面常跟版本号，故允许前缀命中）。 */
+function fileNameSlugMap(files: string[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const fileName of files) {
+    const key = normalizeSlug(basename(fileName, extname(fileName)));
+    if (key && !map.has(key)) map.set(key, fileName);
+  }
+  return map;
+}
+
+/** 一类内容的「是否已装」查找器：索引按 projectId，磁盘按文件名（mod 还读 jar 元数据）。 */
+interface InstalledFinder {
+  byIndex(candidates: string[]): string | undefined;
+  byScan(candidates: string[]): Promise<string | undefined>;
+}
+
+/**
+ * 本实例的已装判定上下文：安装索引只读一次，各类内容的查找器按需构建（同一次解析里可能同时出现
+ * 模组前置与资源包前置，各扫一次目录即可，不重复 readdir）。
+ */
+function installedContext(instance: InstanceMeta) {
+  const records = readInstallMap().then((map) => map[instance.id] ?? {});
+  const finders = new Map<ModContentKind, Promise<InstalledFinder>>();
+  return {
+    finder(kind: ModContentKind): Promise<InstalledFinder> {
+      let hit = finders.get(kind);
+      if (!hit) {
+        hit = (async (): Promise<InstalledFinder> => {
+          const known = await records;
+          const files = await listContentFiles(instance.id, kind);
+          const byIndex = indexedMatches(instance.id, known, new Set(files));
+          // 模组还能从 jar 元数据认出手动放进目录的前置
+          if (kind === "mod") {
+            const scanSlug = slugScanner(instance.id, files);
+            return { byIndex, byScan: (candidates: string[]) => scanSlug(candidates) };
+          }
+          const byName = fileNameSlugMap(files);
+          return {
+            byIndex,
+            byScan: async (candidates: string[]): Promise<string | undefined> => {
+              for (const candidate of candidates) {
+                const token = normalizeSlug(candidate);
+                if (!token) continue;
+                const exact = byName.get(token);
+                if (exact) return exact;
+                for (const [key, fileName] of byName) {
+                  if (key.startsWith(token)) return fileName;
+                }
+              }
+              return undefined;
+            },
+          };
+        })();
+        finders.set(kind, hit);
+      }
+      return hit;
+    },
+  };
+}
+
+/** 索引优先、扫描兜底：索引只记本启动器装的，手动放的包靠文件名/元数据认出来。 */
+async function lookupInstalled(finder: InstalledFinder, candidates: string[]): Promise<string | undefined> {
+  const names = candidates.filter((value) => value.length > 0);
+  if (names.length === 0) return undefined;
+  return finder.byIndex(names) ?? (await finder.byScan(names));
+}
+
+/** 依赖行落哪个目录：来源不公布项目类型（无 Key 的 CurseForge、接口失败）时按模组兜底。 */
+function dependencyKind(
+  provider: ModProvider,
+  projectId: string,
+  cache: Map<string, Promise<ModContentKind>>,
+): Promise<ModContentKind> {
+  if (!provider.getProjectType) return Promise.resolve<ModContentKind>("mod");
+  let hit = cache.get(projectId);
+  if (!hit) {
+    hit = provider.getProjectType(projectId).then((kind) => kind ?? "mod", () => "mod");
+    cache.set(projectId, hit);
+  }
+  return hit;
 }
 
 /**
@@ -185,80 +290,118 @@ function slugScanner(instanceId: string, jars: string[]) {
   };
 }
 
-/** 没有指定 fileId 时按五档匹配选最优文件，再去查它声明的依赖。 */
+/** 没有指定 fileId 时按匹配档位选最优文件，再去查它声明的依赖。 */
 async function targetFileId(
   provider: ModProvider,
   projectId: string,
   instance: InstanceMeta,
-  fileId?: string,
+  fileId: string | undefined,
+  kind: ModContentKind,
 ): Promise<string | undefined> {
   if (fileId) return fileId;
+  // 光影/资源包不吃加载器：带 fabric 之类的 facet 只会把可用文件筛空
+  const loader = loaderAppliesTo(kind) ? instance.loader : undefined;
   const files = await provider.listFiles({
     provider: provider.id,
     projectId,
     gameVersion: instance.mcVersion,
-    loader: instance.loader,
+    loader,
   });
-  return bestFile(files, instance.mcVersion, instance.loader)?.fileId;
+  return bestFile(files, instance.mcVersion, loader)?.fileId;
 }
 
-/**
- * 某个模组（或其中一个文件）的必需前置，附带名称与「本实例是否已装」。
- * 只返回 required=true 的项：来源侧的 optional/incompatible 一律不装。
- */
-export async function getModDependencies(
+/** 来源站点声明的必需前置，每行补上它自己的内容类型与实例内安装状态。 */
+async function sourceDependencies(
   provider: ModProvider,
   projectId: string,
   instance: InstanceMeta,
-  fileId?: string,
+  fileId: string | undefined,
+  kind: ModContentKind,
 ): Promise<ModDependency[]> {
   if (!provider.getDependencies) return [];
-  const target = await targetFileId(provider, projectId, instance, fileId);
+  const target = await targetFileId(provider, projectId, instance, fileId, kind);
   // 找不到可用文件等于不知道要装哪一版，也就没有依赖可查
   if (!target) return [];
 
   const raw = (await provider.getDependencies(projectId, target)).slice(0, MAX_DEPENDENCIES);
   if (raw.length === 0) return [];
 
-  const jars = await listJars(instance.id);
-  const rows = await readInstallMap();
-  const indexed = indexedMatches(instance.id, rows[instance.id] ?? {}, new Set(jars));
-  const scanSlug = slugScanner(instance.id, jars);
+  const context = installedContext(instance);
+  const kinds = new Map<string, Promise<ModContentKind>>();
 
   return mapLimit(raw, NAME_CONCURRENCY, async (dep: RawDependency) => {
     // 复用带缓存的项目接口：同一项目一次运行只查一次，拿不到名字就留空
     const project = provider.getProject
       ? await provider.getProject(dep.projectId).catch(() => undefined)
       : undefined;
-    const slug = project?.slug ?? "";
-    const candidates = [dep.projectId, slug].filter((value) => value.length > 0);
-    let installedFileName = indexed(candidates);
-    // 索引只记本启动器装的：手动放进 mods 的前置靠扫描 jar 元数据认出来
-    if (!installedFileName) installedFileName = await scanSlug(candidates);
+    // 依赖行自己的类型决定落哪个目录（资源包也可能依赖一个模组）
+    const depKind = await dependencyKind(provider, dep.projectId, kinds);
+    const installedFileName = await lookupInstalled(await context.finder(depKind), [
+      dep.projectId, project?.slug ?? "",
+    ]);
 
     const row: ModDependency = {
       provider: provider.id,
       projectId: dep.projectId,
       versionId: dep.versionId,
       name: project?.title,
-      slug: slug || undefined,
+      slug: project?.slug || undefined,
       required: true,
       installed: installedFileName !== undefined,
       installedFileName,
+      kind: depKind,
+      origin: "source",
     };
     return row;
   });
 }
 
+/**
+ * 某个项目（或其中一个文件）的必需前置，附带名称与「本实例是否已装」。
+ * 只返回 required=true 的项：来源侧的 optional/incompatible 一律不装。
+ * kind 是本体自己的内容类型：光影几乎不声明依赖，要靠内置规则补 Iris / Oculus。
+ */
+export async function getModDependencies(
+  provider: ModProvider,
+  projectId: string,
+  instance: InstanceMeta,
+  fileId?: string,
+  kind: ModContentKind = "mod",
+): Promise<ModDependency[]> {
+  const sources = await sourceDependencies(provider, projectId, instance, fileId, kind);
+  // 来源已经声明了必需依赖就不再叠加内置规则：来源说的比规则准
+  if (kind !== "shader" || sources.length > 0) return sources;
+
+  const builtin = await shaderBuiltinDependency(instance);
+  if (!builtin) return sources;
+  const context = installedContext(instance);
+  const installedFileName = await lookupInstalled(await context.finder(builtin.kind ?? "mod"), [
+    builtin.projectId, builtin.slug ?? "",
+  ]);
+  return [{ ...builtin, installed: installedFileName !== undefined, installedFileName }];
+}
+
 /** 依赖作者指定的版本只在「加载器也匹配」时才采信：档位 3/4 意味着换个加载器，宁可回退最优文件。 */
 const PIN_MAX_TIER: MatchTier = 2;
 
-/** 前置要装哪个文件：优先依赖指定的版本，其次按五档匹配挑最优。 */
-async function dependencyFileId(provider: ModProvider, dep: ModDependency, instance: InstanceMeta): Promise<string> {
+/** 依赖指定的版本在两个口径下是否可用：模组看五档匹配，光影/资源包只看版本档位。 */
+function pinnedAcceptable(info: ModFileInfo, instance: InstanceMeta, kind: ModContentKind): boolean {
+  return loaderAppliesTo(kind)
+    ? matchTier(info, instance.mcVersion, instance.loader) <= PIN_MAX_TIER
+    : versionOnlyTier(info, instance.mcVersion) <= 1;
+}
+
+/** 前置要装哪个文件：优先依赖指定的版本，其次按匹配档位挑最优。 */
+async function dependencyFileId(
+  provider: ModProvider,
+  dep: ModDependency,
+  instance: InstanceMeta,
+  kind: ModContentKind,
+): Promise<string> {
   if (dep.versionId) {
     try {
       const pinned = await provider.getFile(dep.projectId, dep.versionId);
-      if (matchTier(pinned.info, instance.mcVersion, instance.loader) <= PIN_MAX_TIER) return pinned.info.fileId;
+      if (pinnedAcceptable(pinned.info, instance, kind)) return pinned.info.fileId;
       log.warn(
         `前置 ${dep.name ?? dep.projectId} 指定的版本 ${dep.versionId} 不匹配 ${instance.mcVersion} / ${instance.loader}，改按最优文件安装`,
       );
@@ -267,36 +410,68 @@ async function dependencyFileId(provider: ModProvider, dep: ModDependency, insta
     }
   }
 
+  // 光影/资源包不吃加载器：与 top-level 安装同一口径
+  const loader = loaderAppliesTo(kind) ? instance.loader : undefined;
   const files = await provider.listFiles({
     provider: provider.id,
     projectId: dep.projectId,
     gameVersion: instance.mcVersion,
-    loader: instance.loader,
+    loader,
   });
-  const best = bestFile(files, instance.mcVersion, instance.loader);
+  const best = bestFile(files, instance.mcVersion, loader);
   if (!best) {
     throw new Error(`项目 ${dep.projectId} 没有适用于 ${instance.mcVersion} / ${instance.loader} 的文件`);
   }
   return best.fileId;
 }
 
-/** 装一个前置：选文件 → 下载（复用同名同哈希）→ 写索引。 */
+/**
+ * 实例里「索引有记录 + 磁盘上真的存在」的内容清单（资源页下载前的重复检测用）。
+ * 目录按记录自己的 kind 定位：同名文件躺在别的目录里不算这个资源装过；索引留着但用户手删过
+ *（或只剩 .bak）的条目也不返回。索引缺失/损坏/目录不存在一律退化成空数组，不抛错。
+ */
+export async function listInstalledContent(instanceId: string): Promise<InstalledContentRef[]> {
+  const records = (await readInstallMap())[instanceId] ?? {};
+  const found: InstalledContentRef[] = [];
+  for (const [fileName, record] of Object.entries(records)) {
+    try {
+      const dir = contentDirForInstance({ id: instanceId }, record.kind);
+      const info = await stat(join(dir, safeFileName(fileName)));
+      if (!info.isFile()) continue;
+      found.push({
+        provider: record.provider,
+        projectId: record.projectId,
+        versionId: record.versionId,
+        kind: record.kind,
+        fileName,
+      });
+    } catch {
+      // 文件名非法、该类型没有内容目录（地图）或文件已被删：一律不算已装
+    }
+  }
+  // 顺序稳定：界面与自检都按 kind 再按文件名比对
+  found.sort((a, b) => a.kind.localeCompare(b.kind) || a.fileName.localeCompare(b.fileName));
+  return found;
+}
+
+/** 装一个前置：选文件 → 下载（复用同名同哈希）→ 写索引；落盘目录与索引 kind 都取这一行自己的类型。 */
 export async function installDependency(
   provider: ModProvider,
   instance: InstanceMeta,
   dep: ModDependency,
   signal?: AbortSignal,
 ): Promise<{ fileName: string; path: string }> {
-  const fileId = await dependencyFileId(provider, dep, instance);
+  const kind = dep.kind ?? "mod";
+  const fileId = await dependencyFileId(provider, dep, instance, kind);
   const resolved = await provider.getFile(dep.projectId, fileId);
   // 名称与 slug 已经查过了，顺手当模板上下文，省掉一次项目请求
   const context = dep.name || dep.slug ? { name: dep.name, slug: dep.slug } : undefined;
-  const result = await downloadModFile(instance, resolved, context, "mod", signal);
+  const result = await downloadModFile(instance, resolved, context, kind, signal);
   await rememberInstalled(instance.id, result.fileName, {
     provider: provider.id,
     projectId: resolved.projectId ?? dep.projectId,
     versionId: resolved.info.fileId,
-    kind: "mod",
+    kind,
   });
   return result;
 }

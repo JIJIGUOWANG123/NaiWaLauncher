@@ -5,7 +5,7 @@ import { IPC } from "../../shared/ipc";
 import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest,
 } from "../../shared/ipc";
-import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledModInfo, LanAddress, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
+import type { Account, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { checkAppUpdates } from "../core/updates";
@@ -24,7 +24,7 @@ import { launchInstance } from "../minecraft/launch";
 import { installLoader, listLoaderVersions } from "../loaders/index";
 import { installJava, listInstalledJava, listJavaReleases } from "../java/index";
 import { listMapEntries } from "../mods/minekuai";
-import { checkUpdates, getModDependencies, getModDetail, installMod, installed, listInstalledMods, installModpack, listCategories, listFilterOptions, listModFiles, remove as removeMod, searchMods, update as updateMod } from "../mods/index";
+import { checkUpdates, getModDependencies, getModDetail, installMod, installed, listInstalledContent, listInstalledMods, installModpack, listCategories, listFilterOptions, listModFiles, remove as removeMod, searchMods, update as updateMod } from "../mods/index";
 import {
   cancel as cancelDownloadJob, clearFinished as clearFinishedDownloads, hintNextJob, list as listDownloadJobs,
   remove as removeDownloadJob, resume as resumeDownloadJob, runCancellable,
@@ -248,11 +248,18 @@ export function registerIpc(): void {
     hintNextJob({ kind: "content", detail: req.instanceId, resume: JSON.stringify(req) });
     return runCancellable((signal) => installMod(req, signal));
   });
-  handle<ModDependency[]>(IPC.modsDependencies, (provider: ModProviderId, projectId: string, instanceId: string, fileId?: string) => getModDependencies(provider, projectId, instanceId, fileId));
-  handle<InstalledModInfo[]>(IPC.modsInstalled, (instanceId: string) => installed(instanceId));
-  handle<InstalledModInfo[]>(IPC.modsCheckUpdates, (instanceId: string) => checkUpdates(instanceId));
-  handle<void>(IPC.modsRemove, (instanceId: string, fileName: string) => removeMod(instanceId, fileName));
-  handle<{ fileName: string; path: string }>(IPC.modsUpdate, (instanceId: string, fileName: string) => updateMod(instanceId, fileName));
+  // kind 由渲染进程按当前的资源类型传入（缺省 mod）：内容管理页对光影/资源包复用同一套接口
+  handle<ModDependency[]>(IPC.modsDependencies, (provider: ModProviderId, projectId: string, instanceId: string, fileId?: string, kind?: ModContentKind) =>
+    getModDependencies(provider, projectId, instanceId, fileId, kind),
+  );
+  handle<InstalledModInfo[]>(IPC.modsInstalled, (instanceId: string, kind?: ModContentKind) => installed(instanceId, kind));
+  handle<InstalledModInfo[]>(IPC.modsCheckUpdates, (instanceId: string, kind?: ModContentKind) => checkUpdates(instanceId, kind));
+  handle<void>(IPC.modsRemove, (instanceId: string, fileName: string, kind?: ModContentKind) => removeMod(instanceId, fileName, kind));
+  handle<{ fileName: string; path: string }>(IPC.modsUpdate, (instanceId: string, fileName: string, kind?: ModContentKind) =>
+    updateMod(instanceId, fileName, kind),
+  );
+  // 只读：资源页下载前的重复安装检测（索引记录 + 磁盘核对，同名不同目录不算）
+  handle<InstalledContentRef[]>(IPC.modsInstalledContent, (instanceId: string) => listInstalledContent(instanceId));
 
   // 下载记录：持久化的安装任务列表，重启后可继续
   handle<DownloadJob[]>(IPC.downloadsList, () => listDownloadJobs());

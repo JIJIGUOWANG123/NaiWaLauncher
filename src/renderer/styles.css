@@ -165,7 +165,7 @@ a {
   line-height: 1.2;
 }
 
-/* 品牌两行都单行省略：超长不换行、不撑高 */
+/* 侧边栏两行文案都单行省略：超长不换行、不撑高 */
 .brand-text strong,
 .brand-text span {
   max-width: 100%;

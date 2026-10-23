@@ -1,10 +1,15 @@
-﻿$ErrorActionPreference = 'Stop'
+﻿# 免安装压缩包：必须保存为 UTF-8 with BOM，否则 Windows PowerShell 5.1 会按 ANSI 读中文说明串而解析失败
+$ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $pkg = Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
 $version = $pkg.version
-$unpacked = $env:NAIWA_UNPACKED
-if (-not $unpacked) { $unpacked = Join-Path $root 'release\win-unpacked' }
-if (-not (Test-Path (Join-Path $unpacked 'NaiWa Launcher.exe'))) { throw '缺少 release/win-unpacked，请先执行 pnpm exec electron-builder --win --dir' }
+# electron-builder 改名失败/中断时会留下 win-unpacked.tmp，两个都认
+$candidates = @()
+if ($env:NAIWA_UNPACKED) { $candidates += $env:NAIWA_UNPACKED }
+$candidates += (Join-Path $root 'release\win-unpacked')
+$candidates += (Join-Path $root 'release\win-unpacked.tmp')
+$unpacked = $candidates | Where-Object { Test-Path (Join-Path $_ 'NaiWa Launcher.exe') } | Select-Object -First 1
+if (-not $unpacked) { throw '缺少 release/win-unpacked（或 win-unpacked.tmp），请先执行 node scripts/build-app.mjs' }
 $stage = Join-Path $root '.scratch\portable-stage'
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path (Join-Path $stage 'naiwa') -Force | Out-Null

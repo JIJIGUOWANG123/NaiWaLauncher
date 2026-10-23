@@ -22,7 +22,7 @@ export async function fetchAppIcon(): Promise<AppIconInfo> {
   }
 }
 
-/** 有自定义图标就用它，否则回落到打包进 assets 的内置 logo。 */
+/** 有自定义图标就用它，否则回落到打包进 assets 的内置 logo；标题栏/侧边栏/启动屏/实例头像共用。 */
 export function iconSrc(iconUrl: string | null): string {
   return iconUrl || logo;
 }

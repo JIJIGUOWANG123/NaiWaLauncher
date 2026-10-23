@@ -163,6 +163,25 @@
   color: var(--cream);
 }
 
+/* 模组 / 光影 / 资源包三个分区共用的搜索行 */
+.detail-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 320px;
+}
+
+/* 有搜索词时的「匹配 N 个」：和统计行其它数字区分开 */
+.detail-match-count {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
 .detail-mods-actions {
   display: flex;
   gap: 8px;
@@ -217,6 +236,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 光影/资源包没有版本列：按「内容 / 大小 / 操作」三列排。 */
+.detail-mods-row.is-packs {
+  grid-template-columns: minmax(0, 1fr) 76px auto;
+}
+
+/* pack.mcmeta 里的说明：允许两行，超出省略。 */
+.detail-mod-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
 }
 
 .detail-mod-file {
@@ -369,7 +404,9 @@
     grid-template-columns: 1fr;
   }
 
-  .detail-mods-row {
+  /* .is-packs 的列定义权重更高，窄屏里也要压成两列。 */
+  .detail-mods-row,
+  .detail-mods-row.is-packs {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
@@ -377,5 +414,10 @@
   .detail-mod-version,
   .detail-mod-size {
     display: none;
+  }
+
+  /* 窄屏里搜索框占满整行 */
+  .detail-search-input {
+    max-width: none;
   }
 }

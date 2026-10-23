@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import { iconSrc } from "../lib/appIcon";
-import { resolveBrand, useBrandPreview } from "../lib/brand";
+import { DEFAULT_BRAND } from "../lib/brand";
 import { useApp, type PageId } from "../lib/store";
 import { useTasks } from "../lib/tasks";
 import { isMockApi } from "../lib/api";
@@ -28,10 +28,8 @@ const NAV: NavItem[] = [
 ];
 
 export function Sidebar() {
-  const { page, navigate, info, iconUrl, settings, update } = useApp();
+  const { page, navigate, info, iconUrl, update } = useApp();
   const { runningCount } = useTasks();
-  // 输入框草稿优先，其次已保存的设置，最后内置文案。
-  const brand = resolveBrand(settings, useBrandPreview());
 
   return (
     <aside className="sidebar">
@@ -45,8 +43,8 @@ export function Sidebar() {
           data-app-icon={iconUrl ? "custom" : "default"}
         />
         <div className="brand-text">
-          <strong title={brand.title} data-brand-title>{brand.title}</strong>
-          <span title={brand.subtitle} data-brand-subtitle>{brand.subtitle}</span>
+          <strong title={DEFAULT_BRAND.title} data-brand-title>{DEFAULT_BRAND.title}</strong>
+          <span title={DEFAULT_BRAND.subtitle} data-brand-subtitle>{DEFAULT_BRAND.subtitle}</span>
         </div>
       </div>
 

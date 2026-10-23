@@ -2,8 +2,9 @@ import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModSearchRequest, ModSourceFilter, NaiwaApi,
 } from "../../shared/ipc";
 import type {
-  Account, DownloadJob, InstalledModInfo, InstanceMeta, InstalledJava, LanAddress, LoaderKind, MapEntry,
-  MicrosoftLoginState, ModCategory, ModContentKind, ModFilterOptions, ModProviderId, ModSearchResult,
+  Account, DownloadJob, InstalledContentRef, InstalledModInfo, InstanceMeta, InstalledJava, LanAddress, LoaderKind,
+  MapEntry, MicrosoftLoginState, ModCategory, ModContentKind, ModDependency, ModFilterOptions, ModProviderId,
+  ModSearchResult,
   NatfrpStatus, NatfrpTunnel, NatfrpUser, PortProbeResult, SkinInfo, SkinProfile, TaskKind,
   WardrobeSkin,
 } from "../../shared/types";
@@ -11,8 +12,8 @@ import { loaderLabel } from "../lib/format";
 import {
   DEFAULT_SETTINGS, MOCK_ACCOUNTS, MOCK_APP_INFO, MOCK_INSTALLED_JAVA, MOCK_INSTALLED_MODS, MOCK_INSTANCES,
   MOCK_JAVA_RELEASES, MOCK_DATA_ROOT, MOCK_GAME_ROOT, MOCK_CONTENT, MOCK_CONTENT_META, MOCK_MAPS, MOCK_MEDIA,
-  MOCK_MOD_DEPENDENCIES,
-  MOCK_MOD_UPDATES, MOCK_ROOT, MOCK_SAVES, MOCK_SOURCES, MOCK_STARTUP_SOUND, MOCK_VERSIONS,
+  MOCK_INSTALLED_PACKS, MOCK_MOD_DEPENDENCIES, MOCK_MOD_UPDATES, MOCK_PACK_DEPENDENCIES, MOCK_PACK_UPDATES,
+  MOCK_ROOT, MOCK_SAVES, MOCK_SOURCES, MOCK_STARTUP_SOUND, MOCK_VERSIONS,
   mockDependencyFile, mockDetailFor, mockFiles, mockFindProject, mockIconUrl, mockLoaderVersions,
 } from "./data";
 import { emitDone, emitProgress, mockBus } from "./emitter";
@@ -188,6 +189,41 @@ const DIR_BY_KIND: Record<ModContentKind, string> = {
   map: "saves",
 };
 
+/** 报错文案里的类型名，与界面分区标题一致。 */
+const KIND_LABEL: Record<ModContentKind, string> = {
+  mod: "模组",
+  shader: "光影包",
+  resourcepack: "资源包",
+  modpack: "整合包",
+  map: "存档",
+};
+
+/** 各类型目录的内存态键：实例 + 类型，避免光影/资源包读到模组列表。 */
+function packKey(instanceId: string, kind: ModContentKind): string {
+  return `${instanceId}:${kind}`;
+}
+
+/** 某内容类型的预置文件；未收录的类型返回空列表。 */
+function seedInstalled(instanceId: string, kind: ModContentKind): InstalledModInfo[] {
+  if (kind === "mod") return MOCK_INSTALLED_MODS[instanceId] ?? [];
+  if (kind === "shader" || kind === "resourcepack") return MOCK_INSTALLED_PACKS[kind][instanceId] ?? [];
+  return [];
+}
+
+/** 某内容类型的前置样例：模组按项目查表，光影/资源包按类型给（含内置规则）。 */
+function seedDependencies(
+  provider: ModProviderId, projectId: string, kind: ModContentKind,
+): Array<Omit<ModDependency, "installed" | "installedFileName">> {
+  if (kind === "mod") return MOCK_MOD_DEPENDENCIES[`${provider}:${projectId}`] ?? [];
+  if (kind === "shader" || kind === "resourcepack") return MOCK_PACK_DEPENDENCIES[kind];
+  return [];
+}
+
+/** 前置自己落在哪个目录：内置光影前置是模组，其余跟随自身类型。 */
+function depKind(dep: Pick<ModDependency, "kind">, fallback: ModContentKind): ModContentKind {
+  return dep.kind ?? fallback;
+}
+
 /** 联机页演示用的局域网地址（预览态没有真实网卡信息）。 */
 const MOCK_LAN_ADDRESSES: LanAddress[] = [
   { name: "WLAN", address: "192.168.1.23", family: "IPv4" },
@@ -297,7 +333,7 @@ export function createMockApi(): NaiwaApi {
   const profileState = new Map<string, SkinProfile[]>();
   let instances: InstanceMeta[] = MOCK_INSTANCES.map((item) => ({ ...item }));
   const installedJava: InstalledJava[] = MOCK_INSTALLED_JAVA.map((item) => ({ ...item }));
-  // 实例 mods 目录的内存态：首次访问时用种子数据填充。
+  // 实例各内容目录（mods/shaderpacks/resourcepacks）的内存态：按 实例+类型 分开存，首次访问时填种子。
   const installedMods = new Map<string, InstalledModInfo[]>();
   let taskSeq = 0;
   /** 樱花穿透内存态：账号、隧道列表、节点、frpc 运行状态。 */
@@ -400,12 +436,13 @@ export function createMockApi(): NaiwaApi {
     return found;
   }
 
-  function modsOf(instanceId: string): InstalledModInfo[] {
+  function modsOf(instanceId: string, kind: ModContentKind = "mod"): InstalledModInfo[] {
     findInstance(instanceId);
-    const existing = installedMods.get(instanceId);
+    const key = packKey(instanceId, kind);
+    const existing = installedMods.get(key);
     if (existing) return existing;
-    const seeded = (MOCK_INSTALLED_MODS[instanceId] ?? []).map((item) => ({ ...item }));
-    installedMods.set(instanceId, seeded);
+    const seeded = seedInstalled(instanceId, kind).map((item) => ({ ...item }));
+    installedMods.set(key, seeded);
     return seeded;
   }
 
@@ -1213,18 +1250,19 @@ export function createMockApi(): NaiwaApi {
         await sleep(420);
         return mockFiles(project, req.gameVersion ?? "", req.loader === "vanilla" ? "" : (req.loader ?? ""), kind);
       },
-      dependencies: async (provider: ModProviderId, projectId: string, instanceId: string, fileId?: string) => {
-        trace("mods.dependencies", { provider, projectId, instanceId, fileId: fileId ?? null });
+      dependencies: async (
+        provider: ModProviderId, projectId: string, instanceId: string, fileId?: string, kind: ModContentKind = "mod",
+      ) => {
+        trace("mods.dependencies", { provider, projectId, instanceId, fileId: fileId ?? null, kind });
         const instance = findInstance(instanceId);
         if (mockDepsFailing()) {
           await sleep(180);
           throw new Error("前置查询失败：模拟网络错误");
         }
         await sleep(280);
-        const deps = MOCK_MOD_DEPENDENCIES[`${provider}:${projectId}`] ?? [];
-        const installed = modsOf(instance.id);
-        return deps.map((dep) => {
-          const hit = installed.find((item) => item.projectId === dep.projectId);
+        return seedDependencies(provider, projectId, kind).map((dep) => {
+          // 前置按自己的类型查目录：光影的内置前置是模组，已装与否要看 mods。
+          const hit = modsOf(instance.id, depKind(dep, kind)).find((item) => item.projectId === dep.projectId);
           return { ...dep, installed: Boolean(hit), installedFileName: hit?.fileName };
         });
       },
@@ -1281,7 +1319,7 @@ export function createMockApi(): NaiwaApi {
         const project = mockFindProject(req.projectId);
         if (!project) throw new Error(`未找到项目：${req.projectId}`);
         const kind = readKind(req);
-        const withDeps = kind === "mod" && req.installDependencies === true;
+        const withDeps = req.installDependencies === true;
         trace("mods.install", {
           projectId: req.projectId,
           fileId: req.fileId ?? null,
@@ -1294,15 +1332,16 @@ export function createMockApi(): NaiwaApi {
         const instance = findInstance(req.instanceId);
         await simulateTask("mod", `安装 ${project.title}`, "下载模组文件", 12_000_000, 1200, 1);
         const path = `${MOCK_GAME_ROOT}\\instances\\${instance.id}\\${DIR_BY_KIND[kind]}\\${target.fileName}`;
-        /** 连带安装的前置：按当前 mods 目录判断缺失，只补必需的。 */
+        /** 连带安装的前置：按前置自己的目录判断缺失，只补必需的。 */
         const installedDependencies: string[] = [];
-        let list = modsOf(instance.id);
         if (withDeps) {
-          for (const dep of MOCK_MOD_DEPENDENCIES[`${project.provider}:${project.projectId}`] ?? []) {
+          for (const dep of seedDependencies(project.provider, project.projectId, kind)) {
             if (!dep.required) continue;
-            if (list.some((item) => item.projectId === dep.projectId)) continue;
+            const depTarget = depKind(dep, kind);
+            const depList = modsOf(instance.id, depTarget);
+            if (depList.some((item) => item.projectId === dep.projectId)) continue;
             const fileName = mockDependencyFile(dep.slug ?? dep.projectId);
-            list = [...list, {
+            installedMods.set(packKey(instance.id, depTarget), [...depList, {
               fileName,
               sizeBytes: 1_200_000,
               sha1: mockSha1(fileName),
@@ -1311,7 +1350,7 @@ export function createMockApi(): NaiwaApi {
               provider: dep.provider,
               projectId: dep.projectId,
               update: null,
-            }];
+            }]);
             installedDependencies.push(dep.nameZh ?? dep.name ?? dep.projectId);
           }
         }
@@ -1325,34 +1364,70 @@ export function createMockApi(): NaiwaApi {
           projectId: project.projectId,
           update: null,
         };
-        // 光影/资源包/整合包落在各自目录，不算进实例的 mods 列表。
-        if (kind === "mod") {
-          installedMods.set(instance.id, [...list.filter((item) => item.fileName !== target.fileName), installed]);
+        // 模组/光影/资源包各落各的目录；整合包与存档不算进这三类列表。
+        if (kind === "mod" || kind === "shader" || kind === "resourcepack") {
+          // 目录可能刚被前置写过，重读一次拿到最新状态。
+          const current = modsOf(instance.id, kind);
+          installedMods.set(packKey(instance.id, kind), [
+            ...current.filter((item) => item.fileName !== target.fileName),
+            installed,
+          ]);
         }
         return { fileName: target.fileName, path, installedDependencies };
       },
-      installed: async (instanceId: string) => {
-        await sleep(260);
-        return modsOf(instanceId).map((item) => ({ ...item }));
+      /**
+       * 已装内容索引：直接从三个内容目录的内存态派生，install/remove/update 改完状态即生效，
+       * 浏览器预览里点安装后角标马上跟着变。
+       */
+      installedContent: async (instanceId: string) => {
+        trace("mods.installedContent", { instanceId });
+        await sleep(160);
+        const kinds: ModContentKind[] = ["mod", "shader", "resourcepack"];
+        const refs: InstalledContentRef[] = [];
+        for (const contentKind of kinds) {
+          for (const item of modsOf(instanceId, contentKind)) {
+            if (!item.provider || !item.projectId) continue;
+            refs.push({
+              provider: item.provider,
+              projectId: item.projectId,
+              kind: contentKind,
+              fileName: item.fileName,
+              // mock 只记了版本标签，真实实现给的是站点那边的 versionId。
+              versionId: item.version,
+            });
+          }
+        }
+        return refs;
       },
-      checkUpdates: async (instanceId: string) => {
+      installed: async (instanceId: string, kind: ModContentKind = "mod") => {
+        trace("mods.installed", { instanceId, kind });
+        await sleep(260);
+        return modsOf(instanceId, kind).map((item) => ({ ...item }));
+      },
+      checkUpdates: async (instanceId: string, kind: ModContentKind = "mod") => {
+        trace("mods.checkUpdates", { instanceId, kind });
         await sleep(900);
         // 真实实现按 sha1 逐个反查远端；mock 用预置目录模拟，命中项才带 update。
-        const checked = modsOf(instanceId).map((item) => ({ ...item, update: MOCK_MOD_UPDATES[item.fileName] ?? null }));
-        installedMods.set(instanceId, checked);
+        const known = kind === "mod" ? MOCK_MOD_UPDATES : MOCK_PACK_UPDATES;
+        const checked = modsOf(instanceId, kind).map((item) => ({ ...item, update: known[item.fileName] ?? null }));
+        installedMods.set(packKey(instanceId, kind), checked);
         return checked.map((item) => ({ ...item }));
       },
-      remove: async (instanceId: string, fileName: string) => {
+      remove: async (instanceId: string, fileName: string, kind: ModContentKind = "mod") => {
+        trace("mods.remove", { instanceId, fileName, kind });
         await sleep(240);
-        const list = modsOf(instanceId);
-        if (!list.some((item) => item.fileName === fileName)) throw new Error(`模组不存在：${fileName}`);
-        installedMods.set(instanceId, list.filter((item) => item.fileName !== fileName));
+        const list = modsOf(instanceId, kind);
+        if (!list.some((item) => item.fileName === fileName)) {
+          throw new Error(`${KIND_LABEL[kind]}不存在：${fileName}`);
+        }
+        installedMods.set(packKey(instanceId, kind), list.filter((item) => item.fileName !== fileName));
       },
-      update: async (instanceId: string, fileName: string) => {
+      update: async (instanceId: string, fileName: string, kind: ModContentKind = "mod") => {
+        trace("mods.update", { instanceId, fileName, kind });
         const instance = findInstance(instanceId);
-        const list = modsOf(instanceId);
+        const list = modsOf(instanceId, kind);
         const target = list.find((item) => item.fileName === fileName);
-        if (!target) throw new Error(`模组不存在：${fileName}`);
+        if (!target) throw new Error(`${KIND_LABEL[kind]}不存在：${fileName}`);
         if (!target.update) throw new Error(`${fileName} 没有可用更新`);
         await simulateTask("mod", `更新 ${target.name ?? fileName}`, "下载新版本", 12_000_000, 1200, 1);
         const next: InstalledModInfo = {
@@ -1362,8 +1437,11 @@ export function createMockApi(): NaiwaApi {
           sizeBytes: target.sizeBytes + 65_536,
           update: null,
         };
-        installedMods.set(instanceId, list.map((item) => (item.fileName === fileName ? next : item)));
-        return { fileName: next.fileName, path: `${MOCK_GAME_ROOT}\\instances\\${instance.id}\\mods\\${next.fileName}` };
+        installedMods.set(packKey(instanceId, kind), list.map((item) => (item.fileName === fileName ? next : item)));
+        return {
+          fileName: next.fileName,
+          path: `${MOCK_GAME_ROOT}\\instances\\${instance.id}\\${DIR_BY_KIND[kind]}\\${next.fileName}`,
+        };
       },
     },
 

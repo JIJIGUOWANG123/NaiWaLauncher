@@ -126,13 +126,9 @@ export interface Settings {
   translateMods: boolean;
   /** 中文搜索：查询含中文时先译为英文再检索。 */
   translateSearch: boolean;
-  /** 侧边栏品牌主标题（空串 = 默认「NaiWa」）。 */
-  brandTitle: string;
-  /** 侧边栏品牌副标题（空串 = 默认「奶娃启动器」）。 */
-  brandSubtitle: string;
   /** 自定义界面图标："" = 内置 logo；其它为 NaiWa/icons 下的文件名。 */
   appIcon: string;
-  /** 启动音效："" = 内置默认；"off" = 关闭；其它为 NaiWa/music 下的文件名。 */
+  /** 启动音效：默认 "off"（关闭）；"" = 内置默认；其它为 NaiWa/music 下的文件名。 */
   startupSound: string;
   /** 启动音效音量 0–1。 */
   startupVolume: number;
@@ -400,6 +396,10 @@ export interface ModDependency {
   installed: boolean;
   /** 已安装时的文件名，便于界面提示。 */
   installedFileName?: string;
+  /** 这个前置本身的内容类型：由来源的项目类型决定（模组前置落 mods，资源包前置落 resourcepacks）。 */
+  kind?: ModContentKind;
+  /** 前置出处：来源站点的必需依赖，或启动器内置规则（光影未声明前置时按加载器推断 Iris / Oculus）。 */
+  origin?: "source" | "builtin";
 }
 
 /** 模组详情（点击模组后展示）。 */
@@ -537,6 +537,8 @@ export interface InstalledModInfo {
   modId?: string;
   name?: string;
   version?: string;
+  /** 资源包/光影在 pack.mcmeta 里写的说明（模组的 jar 里没有这个东西）。 */
+  description?: string;
   provider?: ModProviderId;
   projectId?: string;
   /** 有可用更新时的目标文件（仅 checkUpdates 填充）。 */
@@ -547,6 +549,20 @@ export interface InstalledModInfo {
     fileName: string;
     versionLabel: string;
   } | null;
+}
+
+/**
+ * 实例里已装内容的一条索引记录：资源页据此判断「这个项目/这个文件已经装过了」。
+ * 只包含磁盘上确实存在该文件的记录——索引里留着但用户已手动删除的不返回。
+ */
+export interface InstalledContentRef {
+  provider: ModProviderId;
+  /** Modrinth project_id / CurseForge modId（与搜索结果的项目 id 同一把钥匙）。 */
+  projectId: string;
+  versionId?: string;
+  kind: ModContentKind;
+  /** 磁盘上的真实文件名。 */
+  fileName: string;
 }
 
 export type TaskKind = "game" | "libraries" | "assets" | "loader" | "java" | "mod" | "generic";

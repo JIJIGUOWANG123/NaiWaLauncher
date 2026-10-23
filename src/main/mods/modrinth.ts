@@ -144,6 +144,20 @@ async function getProject(projectId: string): Promise<ModProjectInfo | undefined
   });
 }
 
+/** 项目类型 → 内容类型：Modrinth 的 project_type 与启动器的 kind 同名，直接映射即可。 */
+const PROJECT_TYPE_KIND: Record<string, ModContentKind> = {
+  mod: "mod",
+  modpack: "modpack",
+  resourcepack: "resourcepack",
+  shader: "shader",
+};
+
+/** 依赖行要按项目类型落目录：查不到类型（项目不存在/接口失败）就返回 undefined，由调用方按模组兜底。 */
+async function getProjectType(projectId: string): Promise<ModContentKind | undefined> {
+  const body = await apiJson<unknown>(`${BASE}/project/${encodeURIComponent(projectId)}`);
+  return PROJECT_TYPE_KIND[jsonString(jsonObject(body).project_type)];
+}
+
 async function getFile(projectId: string, fileId: string): Promise<ResolvedFile> {
   const body = await apiJson<unknown>(`${BASE}/version/${encodeURIComponent(fileId)}`);
   const info = toFileInfo(body);
@@ -217,6 +231,7 @@ export const modrinthProvider: ModProvider = {
   getFile,
   getDependencies,
   getProject,
+  getProjectType,
   normalize,
 };
 

@@ -1,7 +1,7 @@
 {
   "name": "naiwa-launcher",
   "productName": "NaiWa Launcher",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "NaiWa Launcher (奶娃启动器) - a modern Minecraft launcher",
   "author": {
     "name": "奶龙"
@@ -13,10 +13,10 @@
     "build": "tsc -p tsconfig.main.json && vite build",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "start": "electron .",
-    "dist:portable": "pnpm build && electron-builder --win portable --x64",
+    "dist:portable": "node scripts/build-app.mjs --win portable --x64",
     "dist:installer": "node scripts/build-installer.mjs",
-    "dist": "pnpm build && electron-builder --win --dir && node scripts/build-installer.mjs && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-zip.ps1",
-    "dist:app": "pnpm build && electron-builder --win --dir",
+    "dist": "node scripts/build-app.mjs && node scripts/build-installer.mjs && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-zip.ps1 && node scripts/build-app.mjs --win portable --x64 && node scripts/copy-single-exe.mjs",
+    "dist:app": "node scripts/build-app.mjs",
     "dist:zip": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-zip.ps1"
   },
   "dependencies": {
@@ -79,7 +79,7 @@
       "artifactName": "NaiWaLauncher-${version}-${arch}-${target}.exe"
     },
     "portable": {
-      "artifactName": "NaiWaLauncher-${version}-portable.exe"
+      "artifactName": "NaiWaLauncher-${version}-single-exe.exe"
     },
     "asar": false
   }

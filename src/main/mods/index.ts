@@ -15,13 +15,13 @@ import {
   getModDependencies as resolveDependencies, installDependency, rememberInstalled,
 } from "./dependencies";
 import {
-  downloadModFile, listInstalledMods as listModsOnDisk, MAP_DOWNLOAD_HINT, removeModFile, safeFileName,
+  downloadModFile, KIND_NOUN, listInstalledMods as listModsOnDisk, MAP_DOWNLOAD_HINT, removeContentFile, safeFileName,
 } from "./install";
-import { scanInstalledMods, type ScannedMod } from "./installed";
+import { scanInstalledContent, type ScannedMod } from "./installed";
 import { listMinekuaiCategories, minekuaiProvider, minekuaiVersionTags } from "./minekuai";
 import { listModrinthCategories, modrinthBacklook, modrinthProvider } from "./modrinth";
 import {
-  bestFile, loaderAppliesTo, matchTier, mapLimit, messageOf, rankFiles,
+  bestFile, loaderAppliesTo, matchTier, mapLimit, messageOf, rankFiles, versionOnlyTier,
   type ModBacklook, type ModProvider, type ResolvedFile,
 } from "./provider";
 import { installModpackFrom, type ModpackInstallResult } from "./modpack";
@@ -33,6 +33,8 @@ const log = logger("mods");
 export { clearDetailCache, getModDetail } from "./detail";
 /** 内容类型搜索（光影/资源包/整合包）与社区地图列表：IPC mods:search / mods:maps 的入口。 */
 export { listMapEntries, searchMinekuaiByKind } from "./minekuai";
+/** 实例里已装内容的索引记录（磁盘核对过）：IPC mods:installedContent 的入口。 */
+export { listInstalledContent } from "./dependencies";
 
 const PROVIDERS: Record<ModProviderId, ModProvider> = {
   modrinth: modrinthProvider,
@@ -343,15 +345,16 @@ export async function listModFiles(req: ModFilesRequest): Promise<ModFileInfo[]>
   return rankFiles(files, req.gameVersion, loader);
 }
 
-/** 查某个模组（或指定文件）的必需前置，并标注实例里是否已装。 */
+/** 查某个项目（或指定文件）的必需前置，并标注实例里是否已装；kind 是本体自己的内容类型。 */
 export async function getModDependencies(
   provider: ModProviderId,
   projectId: string,
   instanceId: string,
   fileId?: string,
+  kind: ModContentKind = "mod",
 ): Promise<ModDependency[]> {
   const instance = await requireInstance(instanceId);
-  return resolveDependencies(resolveProvider(nativeProviderOf(provider)), projectId, instance, fileId);
+  return resolveDependencies(resolveProvider(nativeProviderOf(provider)), projectId, instance, fileId, kind);
 }
 
 /**
@@ -359,7 +362,6 @@ export async function getModDependencies(
  * 任何一个前置失败就整体中止并说明已装上哪些：宁可让用户看到半成品清单，也不装出一个缺前置的实例。
  */
 async function installMissingDependencies(
-  provider: ModProvider,
   instance: InstanceMeta,
   missing: ModDependency[],
   signal?: AbortSignal,
@@ -367,6 +369,8 @@ async function installMissingDependencies(
   const installed: string[] = [];
   for (const dep of missing) {
     const label = dep.name || dep.slug || dep.projectId;
+    // 每个前置按它自己声明的来源装：光影的内置前置（Iris/Oculus）来自 Modrinth，本体可能来自 CurseForge
+    const provider = resolveProvider(nativeProviderOf(dep.provider));
     try {
       const result = await installDependency(provider, instance, dep, signal);
       installed.push(label);
@@ -393,6 +397,9 @@ async function copyMapWebUrl(): Promise<void> {
     log.warn(`复制地图网页地址失败：${messageOf(err)}`);
   }
 }
+
+/** 会去解析前置的内容类型：整合包/地图装的是成品，它们的「依赖」在包里自带了。 */
+const DEPENDENCY_KINDS: ModContentKind[] = ["mod", "shader", "resourcepack"];
 
 export async function installMod(req: ModInstallRequest, signal?: AbortSignal): Promise<ModInstallResult> {
   const kind = req.kind ?? "mod";
@@ -426,12 +433,11 @@ export async function installMod(req: ModInstallRequest, signal?: AbortSignal): 
 
   // 先把前置补齐再动本体：本体装到一半才发现缺前置是最难收拾的状态
   let installedDependencies: string[] = [];
-  // 只有模组有前置概念：整合包/光影/资源包装的是成品文件，不该去拉它们的依赖
-  if (kind === "mod" && req.installDependencies) {
+  // 模组/光影/资源包都可能缺前置（光影要靠 Iris/Oculus 才加载得起来）；整合包是成品，装它不拉依赖
+  if (DEPENDENCY_KINDS.includes(kind) && req.installDependencies) {
     // required 已由来源侧过滤过，这里再守一次；已装的直接跳过（幂等，不重复下载也不产生 .bak）
-    const deps = await resolveDependencies(provider, req.projectId, instance, targetFileId);
+    const deps = await resolveDependencies(provider, req.projectId, instance, targetFileId, kind);
     installedDependencies = await installMissingDependencies(
-      provider,
       instance,
       deps.filter((dep) => dep.required && !dep.installed),
       signal,
@@ -538,10 +544,18 @@ async function resolveSources(mods: ScannedMod[]): Promise<Map<string, BacklookH
 
 /**
  * 候选文件只接受 loader 匹配且同版本/同系列：档位 2 以后意味着换 MC 版本，宁可报错也不降级安装。
+ * 光影/资源包没有加载器概念（它们的 files.loaders 是 minecraft/iris 之类），只按版本档位 ≤1 筛。
  */
-function pickCandidate(files: ModFileInfo[], instance: InstanceMeta): ModFileInfo | undefined {
-  const usable = files.filter((file) => matchTier(file, instance.mcVersion, instance.loader) <= 1);
-  return rankFiles(usable, instance.mcVersion, instance.loader)[0];
+function pickCandidate(files: ModFileInfo[], instance: InstanceMeta, kind: ModContentKind): ModFileInfo | undefined {
+  if (loaderAppliesTo(kind)) {
+    const usable = files.filter((file) => matchTier(file, instance.mcVersion, instance.loader) <= 1);
+    return rankFiles(usable, instance.mcVersion, instance.loader)[0];
+  }
+  const usable = files
+    .map((file) => ({ file, tier: versionOnlyTier(file, instance.mcVersion) }))
+    .filter((entry) => entry.tier <= 1)
+    .sort((a, b) => (a.tier !== b.tier ? a.tier - b.tier : publishedMs(b.file) - publishedMs(a.file)));
+  return usable[0]?.file;
 }
 
 function publishedMs(file: ModFileInfo): number {
@@ -549,8 +563,12 @@ function publishedMs(file: ModFileInfo): number {
   return Number.isFinite(time) ? time : 0;
 }
 
-/** 对每个源命中项取「当前实例版本 + 加载器」下的最优文件，判断是否更新。 */
-async function probeUpdates(instance: InstanceMeta, mods: ScannedMod[]): Promise<Map<string, UpdateProbe>> {
+/** 对每个源命中项取「当前实例版本（+ 加载器）」下的最优文件，判断是否更新。 */
+async function probeUpdates(
+  instance: InstanceMeta,
+  mods: ScannedMod[],
+  kind: ModContentKind,
+): Promise<Map<string, UpdateProbe>> {
   const probes = new Map<string, UpdateProbe>();
   if (mods.length === 0) return probes;
   const hits = await resolveSources(mods);
@@ -564,18 +582,21 @@ async function probeUpdates(instance: InstanceMeta, mods: ScannedMod[]): Promise
     const source = { provider: hit.provider, projectId: hit.projectId };
     try {
       const provider = resolveProvider(nativeProviderOf(hit.provider));
+      const byLoader = loaderAppliesTo(kind);
       const files = await provider.listFiles({
         provider: provider.id,
         projectId: hit.projectId,
         gameVersion: instance.mcVersion,
-        loader: instance.loader,
+        loader: byLoader ? instance.loader : undefined,
       });
-      const candidate = pickCandidate(files, instance);
+      const candidate = pickCandidate(files, instance, kind);
       if (!candidate) {
         probes.set(mod.fileName, {
           status: "no-match",
           source,
-          detail: `项目 ${hit.projectId} 没有适用于 ${instance.mcVersion} / ${instance.loader} 的文件`,
+          detail: byLoader
+            ? `项目 ${hit.projectId} 没有适用于 ${instance.mcVersion} / ${instance.loader} 的文件`
+            : `项目 ${hit.projectId} 没有适用于 ${instance.mcVersion} 的文件`,
         });
         return;
       }
@@ -597,16 +618,16 @@ async function probeUpdates(instance: InstanceMeta, mods: ScannedMod[]): Promise
   return probes;
 }
 
-export async function installed(instanceId: string): Promise<InstalledModInfo[]> {
+export async function installed(instanceId: string, kind: ModContentKind = "mod"): Promise<InstalledModInfo[]> {
   await requireInstance(instanceId);
-  const mods = await scanInstalledMods(instanceId);
+  const mods = await scanInstalledContent(instanceId, kind);
   return mods.map(toPublic);
 }
 
-export async function checkUpdates(instanceId: string): Promise<InstalledModInfo[]> {
+export async function checkUpdates(instanceId: string, kind: ModContentKind = "mod"): Promise<InstalledModInfo[]> {
   const instance = await requireInstance(instanceId);
-  const mods = await scanInstalledMods(instanceId);
-  const probes = await probeUpdates(instance, mods);
+  const mods = await scanInstalledContent(instanceId, kind);
+  const probes = await probeUpdates(instance, mods, kind);
 
   return mods.map((mod) => {
     const info = toPublic(mod);
@@ -628,23 +649,28 @@ export async function checkUpdates(instanceId: string): Promise<InstalledModInfo
   });
 }
 
-export async function remove(instanceId: string, fileName: string): Promise<void> {
+export async function remove(instanceId: string, fileName: string, kind: ModContentKind = "mod"): Promise<void> {
   await requireInstance(instanceId);
-  await removeModFile(instanceId, safeFileName(fileName));
+  // 后缀与目录都由 kind 决定：模组只认 .jar，光影/资源包只认 .zip
+  await removeContentFile(instanceId, safeFileName(fileName), kind);
 }
 
 /**
  * 下载目标文件 → 校验 sha1 → 成功后才删旧 jar 与旧 .bak。
  * 任何一步失败都不动旧文件，实例里不会出现「装了半截」的状态。
  */
-export async function update(instanceId: string, fileName: string): Promise<{ fileName: string; path: string }> {
+export async function update(
+  instanceId: string,
+  fileName: string,
+  kind: ModContentKind = "mod",
+): Promise<{ fileName: string; path: string }> {
   const instance = await requireInstance(instanceId);
   const target = safeFileName(fileName);
-  const mods = await scanInstalledMods(instanceId);
+  const mods = await scanInstalledContent(instanceId, kind);
   const mod = mods.find((item) => item.fileName === target);
-  if (!mod) throw new Error(`模组文件不存在：${target}`);
+  if (!mod) throw new Error(`${KIND_NOUN[kind]}文件不存在：${target}`);
 
-  const probes = await probeUpdates(instance, [mod]);
+  const probes = await probeUpdates(instance, [mod], kind);
   const probe = probes.get(target);
   if (!probe || probe.status === "unknown") {
     throw new Error(`无法反查 ${target} 的来源（Modrinth / CurseForge 都未收录），请手动更新`);
@@ -655,19 +681,19 @@ export async function update(instanceId: string, fileName: string): Promise<{ fi
   const plan = probe.plan;
   // 走提供方详情接口拿下载地址与 sha1，装完再清旧文件
   const resolved = await resolveProvider(nativeProviderOf(plan.provider)).getFile(plan.projectId, plan.file.fileId);
-  const result = await downloadModFile(instance, resolved);
+  const result = await downloadModFile(instance, resolved, undefined, kind);
 
-  // 索引跟着换成新文件：否则依赖判重还指着已经删掉的旧 jar
+  // 索引跟着换成新文件：否则依赖判重还指着已经删掉的旧文件
   await rememberInstalled(instance.id, result.fileName, {
     provider: plan.provider,
     projectId: resolved.projectId ?? plan.projectId,
     versionId: resolved.info.fileId,
-    kind: "mod",
+    kind,
   });
 
   if (result.fileName !== target) await unlink(mod.path);
   await unlink(`${mod.path}.bak`).catch(() => undefined);
-  log.info(`模组已更新：${target} → ${result.fileName}`);
+  log.info(`已更新：${target} → ${result.fileName}`);
   return result;
 }
 

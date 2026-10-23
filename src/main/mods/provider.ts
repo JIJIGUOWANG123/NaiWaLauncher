@@ -40,6 +40,11 @@ export interface ModProvider {
   getDependencies?(projectId: string, fileId: string): Promise<RawDependency[]>;
   /** 项目标题与 slug（带进程内缓存）；来源不支持或查询失败时返回 undefined。 */
   getProject?(projectId: string): Promise<ModProjectInfo | undefined>;
+  /**
+   * 项目的内容类型：依赖行要靠它决定落 mods 还是 resourcepacks/shaderpacks。
+   * 来源不支持或查询失败时返回 undefined，调用方按 "mod" 兜底。
+   */
+  getProjectType?(projectId: string): Promise<ModContentKind | undefined>;
   /** 提供方原始条目 → 统一模型，kind 决定目标类型。 */
   normalize(kind: "search", raw: unknown): ModSearchResult;
   normalize(kind: "file", raw: unknown): ModFileInfo;
@@ -237,13 +242,21 @@ export function sameSeries(a: string, b: string): boolean {
   return left[1] === right[1] && left[2] === right[2];
 }
 
-function versionStrength(file: ModFileInfo, gameVersion?: string): VersionStrength {
-  // 调用方不限定版本时不做版本约束，强度视为满足
-  if (!gameVersion) return 2;
+/**
+ * 只看版本的档位：0 同版本、1 同系列、2 不匹配。光影/资源包没有加载器概念，
+ * 它们的匹配与更新候选只能按这个口径判定。
+ */
+export function versionOnlyTier(file: ModFileInfo, gameVersion?: string): MatchTier {
+  // 调用方不限定版本时不做版本约束
+  if (!gameVersion) return 0;
   const target = gameVersion.trim();
-  if (file.gameVersions.some((v) => v.trim() === target)) return 2;
+  if (file.gameVersions.some((v) => v.trim() === target)) return 0;
   if (file.gameVersions.some((v) => sameSeries(v, target))) return 1;
-  return 0;
+  return 2;
+}
+
+function versionStrength(file: ModFileInfo, gameVersion?: string): VersionStrength {
+  return (2 - versionOnlyTier(file, gameVersion)) as VersionStrength;
 }
 
 function loaderMatched(file: ModFileInfo, loader?: LoaderKind): boolean {

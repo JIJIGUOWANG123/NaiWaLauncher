@@ -26,7 +26,7 @@ export interface AppContextValue {
   /** 传 null（或空串）表示「不选择实例」，可以只浏览不装东西。 */
   setCurrentInstanceId(id: string | null): void;
   currentInstance: InstanceMeta | null;
-  /** 自定义界面图标 URL（null 表示用内置 logo），标题栏/侧边栏/启动屏共用。 */
+  /** 自定义界面图标 URL（null 表示用内置 logo），标题栏/侧边栏/启动屏/实例头像共用。 */
   iconUrl: string | null;
   /** 对应图标文件绝对路径（null 表示未选择或文件不存在）。 */
   iconPath: string | null;

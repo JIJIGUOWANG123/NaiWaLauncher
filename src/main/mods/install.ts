@@ -5,9 +5,8 @@ import { createTask } from "../core/events";
 import { downloadFile } from "../core/http";
 import { logger } from "../core/logger";
 import { invalidateInstanceDiskUsage } from "../minecraft/instances";
-import { getPaths, instanceDir } from "../core/paths";
 import { getSettings } from "../core/settings";
-import { modsDirForInstance, sha1OfFile } from "./installed";
+import { contentDirOf, modsDirForInstance, sha1OfFile } from "./installed";
 import type { ResolvedFile } from "./provider";
 
 const log = logger("mods");
@@ -36,14 +35,11 @@ export const MAP_DOWNLOAD_HINT = "该地图需要登录麦块社区后下载（�
 export function contentDirForInstance(instance: { id: string }, kind: ModContentKind): string {
   if (kind === "mod") return modsDirForInstance(instance);
   if (kind === "map") throw new Error(MAP_DOWNLOAD_HINT);
-  const sub = CONTENT_SUBDIRS[kind];
-  return getSettings().versionIsolation === "none"
-    ? join(getPaths().gameRoot, sub)
-    : join(instanceDir(instance.id), sub);
+  return contentDirOf(instance, CONTENT_SUBDIRS[kind]);
 }
 
 /** 任务标题与日志里的名词。 */
-const KIND_NOUN: Record<ModContentKind, string> = {
+export const KIND_NOUN: Record<ModContentKind, string> = {
   mod: "模组",
   shader: "光影",
   resourcepack: "资源包",
@@ -298,15 +294,37 @@ export async function downloadModFile(
   }
 }
 
-/** 删除实例 mods 目录里的 jar 与其 .bak；文件名先掐掉路径成分，防穿越。 */
-export async function removeModFile(instanceId: string, fileName: string): Promise<void> {
+/** 各类型可删除的后缀：模组只认 .jar，光影/资源包只认 .zip；其余类型没有可管理的目录。 */
+const REMOVABLE: Partial<Record<ModContentKind, { pattern: RegExp; suffix: string }>> = {
+  mod: { pattern: /\.jar$/i, suffix: ".jar" },
+  shader: { pattern: /\.zip$/i, suffix: ".zip" },
+  resourcepack: { pattern: /\.zip$/i, suffix: ".zip" },
+};
+
+/**
+ * 删除实例里某类内容的一个文件及其 .bak。后缀与目录都按类型校验：
+ * 模组传 .zip、资源包传 .jar 这类错配一律拒绝，避免删掉别的目录里的同名文件。
+ */
+export async function removeContentFile(
+  instanceId: string,
+  fileName: string,
+  kind: ModContentKind = "mod",
+): Promise<void> {
+  const noun = KIND_NOUN[kind];
+  const rule = REMOVABLE[kind];
+  if (!rule) throw new Error(`不支持删除${noun}文件：${noun}没有可管理的内容目录`);
   const name = safeFileName(fileName);
-  if (!/\.jar$/i.test(name)) throw new Error(`只能删除 .jar 模组文件：${name}`);
-  const target = join(modsDirForInstance({ id: instanceId }), name);
-  if (!(await exists(target))) throw new Error(`模组文件不存在：${name}`);
+  if (!rule.pattern.test(name)) throw new Error(`只能删除 ${rule.suffix} ${noun}文件：${name}`);
+  const target = join(contentDirForInstance({ id: instanceId }, kind), name);
+  if (!(await exists(target))) throw new Error(`${noun}文件不存在：${name}`);
   await unlink(target);
   await unlink(`${target}.bak`).catch(() => undefined);
-  log.info(`已删除模组 ${name}`);
+  log.info(`已删除${noun} ${name}`);
+}
+
+/** 模组版删除（历史入口）：等价于 removeContentFile(..., "mod")。 */
+export function removeModFile(instanceId: string, fileName: string): Promise<void> {
+  return removeContentFile(instanceId, fileName, "mod");
 }
 
 /** 目录随隔离设置（instances/<id>/mods 或 <gameRoot>/mods），不存在即视为没有模组。 */

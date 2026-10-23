@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import logo from "../assets/logo.png";
 import type { InstanceMeta } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatRelative, instanceDiskUsage, instanceMemory, loaderLabel } from "../lib/format";
+import { iconSrc } from "../lib/appIcon";
 import { useApp } from "../lib/store";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
@@ -17,7 +17,7 @@ import {
 } from "../components/icons";
 
 export function InstancesPage() {
-  const { info, instances, instancesLoading, instancesError, reloadInstances } = useApp();
+  const { info, instances, instancesLoading, instancesError, reloadInstances, iconUrl } = useApp();
   const { push } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<InstanceMeta | null>(null);
@@ -185,7 +185,16 @@ export function InstancesPage() {
           {instances.map((instance) => (
             <article key={instance.id} className="instance-card">
               <div className="instance-top">
-                <img className="instance-avatar" src={logo} alt="" width={44} height={44} />
+                {/* 实例图标跟随「界面图标」：选了自定义 logo 后卡片头像同步换图 */}
+                <img
+                  className="instance-avatar"
+                  src={iconSrc(iconUrl)}
+                  alt=""
+                  width={44}
+                  height={44}
+                  data-instance-avatar
+                  data-app-icon={iconUrl ? "custom" : "default"}
+                />
                 <div className="instance-titles">
                   <h2 className="instance-name" title={instance.name}>{instance.name}</h2>
                   {/* 运存 / 本地占用分两段：窄卡片放不下时整段换行，不挤压标题。 */}

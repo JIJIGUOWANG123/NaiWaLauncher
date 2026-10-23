@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { LoaderKind, ModFileInfo, ModSearchResult } from "../../shared/types";
+import type { LoaderKind, ModContentKind, ModFileInfo, ModSearchResult } from "../../shared/types";
 import type { ModFilesRequest, ModSearchRequest } from "../../shared/ipc";
 import { logger } from "../core/logger";
 import { getSettings } from "../core/settings";
@@ -211,6 +211,30 @@ async function getProject(projectId: string): Promise<ModProjectInfo | undefined
     if (!title) return undefined;
     return { title, slug: jsonString(mod.slug) || projectId };
   });
+}
+
+/** CurseForge 的 classId → 内容类型（6 模组 / 12 资源包 / 4471 整合包 / 6552 光影）。 */
+const CLASS_ID_KIND: Record<number, ModContentKind> = {
+  6: "mod",
+  12: "resourcepack",
+  4471: "modpack",
+  6552: "shader",
+};
+
+/**
+ * 依赖行要按项目类型落目录。无 Key（cfwidget 不公布 classId）或请求失败时返回 undefined：
+ * 调用方按模组兜底，绝不为了一个类型字段让安装失败。
+ */
+async function getProjectType(projectId: string): Promise<ModContentKind | undefined> {
+  if (!hasApiKey()) return undefined;
+  try {
+    const headers = requireHeaders();
+    const body = await requestJson<Record<string, unknown>>(`${BASE}/mods/${encodeURIComponent(projectId)}`, headers);
+    return CLASS_ID_KIND[jsonNumber(jsonObject(body.data).classId)];
+  } catch (err) {
+    log.warn(`CurseForge 项目类型查询失败，按模组处理：${projectId} · ${messageOf(err)}`);
+    return undefined;
+  }
 }
 
 async function getFile(projectId: string, fileId: string): Promise<ResolvedFile> {
@@ -426,5 +450,6 @@ export const curseforgeProvider: ModProvider = {
   getFile,
   getDependencies,
   getProject,
+  getProjectType,
   normalize,
 };

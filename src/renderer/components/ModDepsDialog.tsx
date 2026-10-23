@@ -24,8 +24,8 @@ export function ModDepsDialog({
   return (
     <Modal
       open={open}
-      title="需要前置模组"
-      subtitle={`为「${projectTitle}」补齐必需前置后才能正常工作`}
+      title="需要前置"
+      subtitle={`为「${projectTitle}」补齐必需前置后才能正常工作；前置会按各自类型装进 mods / resourcepacks / shaderpacks`}
       width={480}
       onClose={() => onChoose("cancel")}
       footer={
@@ -51,7 +51,14 @@ export function ModDepsDialog({
             data-dep-state={dep.installed ? "installed" : "missing"}
           >
             <div className="dep-main">
-              <span className="dep-name" data-dep-name>{dependencyName(dep)}</span>
+              <span className="dep-title">
+                <span className="dep-name" data-dep-name>{dependencyName(dep)}</span>
+                {dep.origin === "builtin" ? (
+                  <span className="badge dep-badge-builtin" data-dep-builtin title="启动器按加载器推断出来的前置">
+                    内置规则
+                  </span>
+                ) : null}
+              </span>
               {dep.installed && dep.installedFileName ? (
                 <span className="dep-file" data-dep-file>{dep.installedFileName}</span>
               ) : null}

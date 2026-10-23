@@ -8,13 +8,16 @@ import { join, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const version = pkg.version;
-const unpacked = process.env.NAIWA_UNPACKED || join(root, "release", "win-unpacked");
+// electron-builder 在改名失败/中断时会把解包目录留成 win-unpacked.tmp，两个都认一下
+const candidates = [process.env.NAIWA_UNPACKED, join(root, "release", "win-unpacked"), join(root, "release", "win-unpacked.tmp")]
+  .filter(Boolean);
+const unpacked = candidates.find((dir) => existsSync(join(dir, "NaiWa Launcher.exe"))) ?? candidates.find(Boolean);
 // 有人直接跑过 win-unpacked 里的 exe 时，游戏数据会落在包目录里，必须在打包前剔除
 for (const junk of [".minecraft", "NaiWa", "logs", "config", "meta", "downloads", "libraries", "versions", "assets", "instances", "java"]) {
   rmSync(join(unpacked, junk), { recursive: true, force: true });
 }
 if (!existsSync(join(unpacked, "NaiWa Launcher.exe"))) {
-  console.error("缺少 release/win-unpacked，请先执行: pnpm exec electron-builder --win --dir");
+  console.error("缺少 release/win-unpacked（或 win-unpacked.tmp），请先执行: node scripts/build-app.mjs");
   process.exit(1);
 }
 

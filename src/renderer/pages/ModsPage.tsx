@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  InstanceMeta, LoaderKind, MapEntry, ModCategory, ModContentKind, ModDependency, ModFileInfo, ModFilterOptions,
-  ModSearchResult,
+  InstanceMeta, InstalledContentRef, LoaderKind, MapEntry, ModCategory, ModContentKind, ModDependency, ModFileInfo,
+  ModFilterOptions, ModSearchResult,
 } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatAgo, formatCount, formatDate, loaderLabel } from "../lib/format";
@@ -19,7 +19,7 @@ import { AnchoredMenu } from "../components/AnchoredMenu";
 import { ModDetailPanel } from "../components/ModDetailPanel";
 import { ModDepsDialog, type DepsChoice } from "../components/ModDepsDialog";
 import { MapCards } from "../components/MapCards";
-import { ConfirmDialog } from "../components/Modal";
+import { ConfirmDialog, Modal } from "../components/Modal";
 import { MatchTag, ReleaseTypeTag } from "../components/Badges";
 import { Select } from "../components/Form";
 import { EmptyState, ErrorState, SkeletonRows } from "../components/State";
@@ -100,6 +100,22 @@ function sortTime(mod: ModSearchResult): number {
   return Number.isNaN(time) ? 0 : time;
 }
 
+/**
+ * 已装判定口径（与主进程 normalizeSlug 同口径）：小写 + 去掉所有非字母数字。
+ * 键里拼上内容类型：同一个项目在 mods 与 shaderpacks 里是两回事。
+ */
+function normalizeKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function projectKey(kind: ModContentKind, projectId: string): string {
+  return `${kind}:${normalizeKey(projectId)}`;
+}
+
+function installedFileKey(kind: ModContentKind, fileName: string): string {
+  return `${kind}:${fileName.trim().toLowerCase()}`;
+}
+
 /** 收藏图标：只在资源卡片上用，画在页内免得给通用 icons 添语义。 */
 function IconStar({ filled, size = 16 }: { filled: boolean; size?: number }) {
   return (
@@ -143,6 +159,11 @@ export function ModsPage() {
   const [favorites, setFavorites] = useState<string[]>(() => readFavorites());
   const [depsPrompt, setDepsPrompt] = useState<{ deps: ModDependency[]; title: string } | null>(null);
   const depsResolver = useRef<((choice: DepsChoice) => void) | null>(null);
+  /** 「这个项目已经装过」确认框：待装的项目 + 已装的记录，等用户选覆盖还是取消。 */
+  const [dupPrompt, setDupPrompt] = useState<{
+    mod: ModSearchResult; hits: InstalledContentRef[]; incoming: string;
+  } | null>(null);
+  const dupResolver = useRef<((overwrite: boolean) => void) | null>(null);
 
   /** 实时翻译总开关：关掉后即使结果里带译名也回退原文。 */
   const translateMods = settings?.translateMods ?? true;
@@ -269,6 +290,40 @@ export function ModsPage() {
     [isMap, submitted, currentInstance?.id, tick],
   );
 
+  /**
+   * 实例里已装的内容：只查当前实例（没选实例就是空，界面自然不显示任何标记）。
+   * tick 让顶部「刷新」能手动校正；instances 跟着实例列表重载走——在实例抽屉里删掉
+   * 光影/资源包后列表会重载，角标要跟着消失。
+   */
+  const installedRefs = useAsync(
+    () => (currentInstance
+      ? api.mods.installedContent(currentInstance.id)
+      : Promise.resolve([] as InstalledContentRef[])),
+    [currentInstance?.id, tick, instances],
+  );
+
+  /** 同一份数据建两套索引：项目键 → 已装记录（可能多条），文件键集合 → 「这个文件已装」。 */
+  const installedIndex = useMemo(() => {
+    const byProject = new Map<string, InstalledContentRef[]>();
+    const files = new Set<string>();
+    for (const ref of installedRefs.data ?? []) {
+      const key = projectKey(ref.kind, ref.projectId);
+      const list = byProject.get(key);
+      if (list) list.push(ref);
+      else byProject.set(key, [ref]);
+      files.add(installedFileKey(ref.kind, ref.fileName));
+    }
+    return { byProject, files };
+  }, [installedRefs.data]);
+
+  /** 当前实例里该项目已装的记录；没选实例一律当作没装。 */
+  const installedOf = (contentKind: ModContentKind, projectId: string): InstalledContentRef[] => (
+    currentInstance ? installedIndex.byProject.get(projectKey(contentKind, projectId)) ?? [] : []
+  );
+  const isInstalledFile = (contentKind: ModContentKind, fileName: string): boolean => (
+    currentInstance ? installedIndex.files.has(installedFileKey(contentKind, fileName)) : false
+  );
+
   /** 卡片列表：后端排序之外再兜一层本地排序，切换排序立即见效。 */
   const results = useMemo(() => {
     const list = search.data ?? [];
@@ -304,6 +359,42 @@ export function ModsPage() {
     resolve?.(choice);
   };
 
+  /** 打开「已装过」确认框并等用户选择（按钮点击走 resolveDuplicate）。 */
+  const askDuplicate = (
+    mod: ModSearchResult, hits: InstalledContentRef[], incoming: string,
+  ) => new Promise<boolean>((resolve) => {
+    dupResolver.current = resolve;
+    setDupPrompt({ mod, hits, incoming });
+  });
+
+  const resolveDuplicate = (overwrite: boolean) => {
+    const resolve = dupResolver.current;
+    dupResolver.current = null;
+    setDupPrompt(null);
+    resolve?.(overwrite);
+  };
+
+  /**
+   * 目标实例里同项目的已装记录。当前实例直接用索引；卡片浮层刚切过去的实例
+   * （索引还没跟上）临时查一次；查不到就按「没装过」放行，不能让检查失败挡住安装。
+   */
+  const duplicatesIn = async (
+    instanceId: string, mod: ModSearchResult, contentKind: ModContentKind,
+  ): Promise<InstalledContentRef[]> => {
+    let refs: InstalledContentRef[];
+    if (currentInstance?.id === instanceId) {
+      refs = installedRefs.data ?? [];
+    } else {
+      try {
+        refs = await api.mods.installedContent(instanceId);
+      } catch {
+        return [];
+      }
+    }
+    const wanted = projectKey(contentKind, mod.projectId);
+    return refs.filter((ref) => projectKey(ref.kind, ref.projectId) === wanted);
+  };
+
   /**
    * 安装前的必需前置检查：有必需前置才弹框。
    * 返回 true = 连带安装前置，false = 只装本体，null = 用户取消（不安装）。
@@ -313,10 +404,12 @@ export function ModsPage() {
     mod: ModSearchResult,
     instance: InstanceMeta,
     file: ModFileInfo | null,
+    kind: ModContentKind,
   ): Promise<boolean | null> => {
     let deps: ModDependency[];
     try {
-      deps = await api.mods.dependencies(mod.provider, mod.projectId, instance.id, file?.fileId);
+      // 带上 kind：光影的必需前置由主进程按内置规则补充，资源包也可能声明前置。
+      deps = await api.mods.dependencies(mod.provider, mod.projectId, instance.id, file?.fileId, kind);
     } catch {
       push("前置检查失败，将只安装本体", "info");
       return false;
@@ -332,10 +425,17 @@ export function ModsPage() {
   /** 安装单个内容；file 为空时交给主进程挑该实例的最佳版本（卡片下拉走这条）。 */
   const installContent = async (mod: ModSearchResult, instance: InstanceMeta, file: ModFileInfo | null) => {
     if (!isBackendKind(kind)) return;
+    // 同一项目装过任意版本就先问：取消即整单中止（一个 install 请求都不发），覆盖才继续原流程。
+    const dupes = await duplicatesIn(instance.id, mod, kind);
+    if (dupes.length > 0) {
+      const overwrite = await askDuplicate(mod, dupes, file?.fileName ?? "启动器挑选的最佳版本");
+      if (!overwrite) return;
+    }
     setInstalling({ projectId: mod.projectId, fileId: file?.fileId ?? null });
     try {
-      // 前置只有模组需要确认；光影/资源包/整合包由主进程按各自目录处理。
-      const installDependencies = kind === "mod" ? await confirmDependencies(mod, instance, file) : false;
+      // 模组/光影/资源包都可能带必需前置；整合包与存档不查，由主进程按各自目录处理。
+      const needsDeps = kind === "mod" || kind === "shader" || kind === "resourcepack";
+      const installDependencies = needsDeps ? await confirmDependencies(mod, instance, file, kind) : false;
       if (installDependencies === null) return;
       const request: KindInstallRequest = {
         provider: mod.provider,
@@ -350,6 +450,8 @@ export function ModsPage() {
         ? `，并安装了前置：${result.installedDependencies.join("、")}`
         : "";
       push(`${result.fileName} 已安装到「${instance.name}」的 ${KIND_DIR[kind]} 目录${extra}`, "success");
+      // 立刻重查一次，让卡片角标与文件行标记跟着变。
+      installedRefs.reload();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     } finally {
@@ -358,6 +460,10 @@ export function ModsPage() {
   };
 
   const panelInstalling = installing !== null && installing.projectId === (selected?.projectId ?? "");
+  /** 详情面板当前项目在该实例的已装记录：整合包走「新建实例」，不参与判定。 */
+  const selectedInstalled = selected && detailKind !== "modpack"
+    ? installedOf(detailKind, selected.projectId)
+    : [];
 
   /** 卡片/浮层共用的 key，与 data-res-card 一致。 */
   const keyOf = (mod: ModSearchResult) => `${mod.provider}:${mod.projectId}`;
@@ -736,6 +842,8 @@ export function ModsPage() {
                 const creating = packBusy?.key === key;
                 const updatedAt = updatedAtOf(mod);
                 const badge = isBackendKind(kind) ? KIND_BADGE[kind] : null;
+                // 项目级判定：装过任意版本就算已装，具体是哪个文件在详情里的文件行标。
+                const installedHits = isBackendKind(kind) ? installedOf(kind, mod.projectId) : [];
                 return (
                   <article key={key} className="res-card" data-res-card={key}>
                     <button
@@ -753,6 +861,15 @@ export function ModsPage() {
                           <span className={`badge res-source res-source-${mod.provider}`} data-res-source={mod.provider}>
                             {SOURCE_BADGE[mod.provider]}
                           </span>
+                          {installedHits.length > 0 ? (
+                            <span
+                              className="badge res-installed"
+                              data-res-installed={key}
+                              title={`已安装：${installedHits.map((hit) => hit.fileName).join(" / ")}`}
+                            >
+                              已安装
+                            </span>
+                          ) : null}
                         </div>
                         {titleZh ? <p className="res-card-orig" title={mod.title}>{mod.title}</p> : null}
                         <p className="res-card-desc">{summaryZh ?? mod.description}</p>
@@ -891,7 +1008,7 @@ export function ModsPage() {
           fallbackTitle={selected.title}
           titleZh={translateMods ? selected.titleZh : undefined}
           summaryZh={translateMods ? selected.summaryZh : undefined}
-          installLabel={KIND_INSTALL_LABEL[detailKind]}
+          installLabel={selectedInstalled.length > 0 ? "重新安装" : KIND_INSTALL_LABEL[detailKind]}
           onClose={() => setSelected(null)}
           onInstall={() => {
             // 整合包：新建实例，不需要选实例。
@@ -941,6 +1058,11 @@ export function ModsPage() {
                           <div className="file-title">
                             <span className="file-name" title={file.fileName}>{file.fileName}</span>
                             <MatchTag exact={file.exactMatch} />
+                            {isInstalledFile(detailKind, file.fileName) ? (
+                              <span className="badge res-installed" data-file-installed="same">已装此版本</span>
+                            ) : selectedInstalled.length > 0 ? (
+                              <span className="badge res-installed" data-file-installed="other">已装其它版本</span>
+                            ) : null}
                           </div>
                           <div className="file-meta">
                             <ReleaseTypeTag type={file.releaseType} />
@@ -983,6 +1105,42 @@ export function ModsPage() {
       {/* 必须排在抽屉之后：.overlay 同为 z-index 60，后渲染的才压在抽屉上面。 */}
       {depsPrompt ? (
         <ModDepsDialog open deps={depsPrompt.deps} projectTitle={depsPrompt.title} onChoose={resolveDeps} />
+      ) : null}
+
+      {/* 已装过同一项目：默认不静默拦，交给用户决定是否覆盖。 */}
+      {dupPrompt ? (
+        <Modal
+          open
+          title="该实例已安装这个资源"
+          subtitle={`实例「${currentInstance?.name ?? ""}」里已经有「${titleOf(dupPrompt.mod)}」，继续会再装一份`}
+          width={460}
+          onClose={() => resolveDuplicate(false)}
+          footer={
+            <>
+              <button type="button" className="btn btn-ghost" onClick={() => resolveDuplicate(false)} data-action="dup-cancel">
+                取消
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => resolveDuplicate(true)} data-action="dup-overwrite">
+                覆盖安装
+              </button>
+            </>
+          }
+        >
+          <p className="confirm-text">已装的记录：</p>
+          <ul className="dep-list" data-dup-list>
+            {dupPrompt.hits.map((hit) => (
+              <li key={`${hit.kind}:${hit.fileName}`} className="dep-row" data-dup-row data-dup-file={hit.fileName}>
+                <div className="dep-main">
+                  <span className="dep-name">{hit.fileName}</span>
+                </div>
+                <span className="badge dep-badge-ok">已安装</span>
+              </li>
+            ))}
+          </ul>
+          <p className="dep-hint">
+            覆盖安装会写入 {dupPrompt.incoming}；同名文件直接覆盖，旧版本文件不会自动删除。
+          </p>
+        </Modal>
       ) : null}
 
       <ConfirmDialog
