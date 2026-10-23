@@ -9,14 +9,20 @@ import { useToast } from "../components/Toast";
 import { ConfirmDialog } from "../components/Modal";
 import { Select } from "../components/Form";
 import { EmptyState, ErrorState, SkeletonCards } from "../components/State";
-import { SkinDoll, skinImageUrl } from "../components/SkinDoll";
+import { SkinDoll, skinImageUrl, type SkinTexture } from "../components/SkinDoll";
 import { IconChevronDown, IconLink, IconPlus, IconRefresh, IconTrash } from "../components/icons";
 
 const LITTLESKIN_URL = "https://littleskin.cn/";
+/** 第三方账号是只读预览：皮肤由皮肤站托管，启动器里不选中、不上传、不本地应用。 */
+const READONLY_HINT = "第三方账号的皮肤由皮肤站管理，启动器只做预览";
+const READONLY_NOTE = "第三方账号：只预览皮肤站上的皮肤，上传与本地应用请到皮肤站网页操作。";
 const TYPE_LABEL: Record<Account["type"], string> = { offline: "离线", microsoft: "微软正版", yggdrasil: "第三方" };
 const TAB_LABEL: Record<SkinTab, string> = { saved: "已保存皮肤", official: "内置皮肤" };
 
 type SkinTab = "saved" | "official";
+
+/** 小人当前贴图：带来源标记，页面用 data-skin-preview-source 暴露出去。 */
+type PreviewTexture = SkinTexture & { source: "account" | "local" };
 
 /** 只收 PNG：主进程按 PNG 头解析尺寸，别的格式必然打不开。 */
 function isPng(file: File): boolean {
@@ -103,14 +109,45 @@ export function SkinPage() {
   const userSkins = useMemo(() => (skins ?? []).filter((item) => item.source === "user"), [skins]);
   const officialSkins = useMemo(() => (skins ?? []).filter((item) => item.source === "official"), [skins]);
   const listSkins = tab === "saved" ? userSkins : officialSkins;
-  // 预览优先用「使用中」的那张，其次当前 tab 的第一张，保证小人永远有贴图。
-  const preview = useMemo(() => {
-    const all = skins ?? [];
-    return all.find((item) => item.active) ?? userSkins[0] ?? officialSkins[0] ?? all[0] ?? null;
-  }, [officialSkins, skins, userSkins]);
+
+  // 第三方账号只读：整页退化成「预览皮肤站上的那张皮肤」。
+  const readonly = account?.type === "yggdrasil";
+  // 账号当前皮肤（微软走 profile.skins、第三方走皮肤站 profile 接口、离线一般没有）。
+  const accountSkin = useAsync(
+    () => (account ? api.accounts.skin(account.id) : Promise.resolve(null)),
+    [account?.id],
+  );
+  const accountTexture = useMemo<PreviewTexture | null>(() => {
+    const info = accountSkin.data;
+    if (!info?.skinUrl) return null;
+    return { url: info.skinUrl, model: info.model ?? "classic", height: 64, label: "account", source: "account" };
+  }, [accountSkin.data]);
+
+  /**
+   * 小人贴图来源：
+   * - 第三方账号：只认皮肤站上的那张（没有就空态，不回退本地皮肤）
+   * - 离线 / 微软：优先选中的本地皮肤 → 账号当前皮肤 → 库里的第一张，别留空白
+   */
+  const previewTexture = useMemo<PreviewTexture | null>(() => {
+    if (readonly) return accountTexture;
+    const list = skins ?? [];
+    const chosen = list.find((item) => item.active) ?? null;
+    if (chosen) {
+      return { url: skinImageUrl(chosen.path), model: chosen.model, height: chosen.height, label: chosen.fileName, source: "local" };
+    }
+    if (accountTexture) return accountTexture;
+    const fallback = list[0] ?? null;
+    return fallback
+      ? { url: skinImageUrl(fallback.path), model: fallback.model, height: fallback.height, label: fallback.fileName, source: "local" }
+      : null;
+  }, [accountTexture, readonly, skins]);
 
   /** 拖放与「添加皮肤」卡片共用这一条导入链路（都走 skinsLocal.import）。 */
   const importFiles = async (files: File[]) => {
+    if (readonly) {
+      push(READONLY_HINT, "info");
+      return;
+    }
     if (files.length === 0) return;
     const pngs = files.filter(isPng);
     if (pngs.length === 0) {
@@ -156,6 +193,11 @@ export function SkinPage() {
       push("先在右上角选一个账号，再挑皮肤", "info");
       return;
     }
+    // 第三方账号的皮肤只能由皮肤站决定，这里不调 select，只给一句可读提示。
+    if (readonly) {
+      push(READONLY_HINT, "info");
+      return;
+    }
     setBusyFile(fileName);
     try {
       setSkins(await api.skinsLocal.select(accountId, fileName));
@@ -183,6 +225,10 @@ export function SkinPage() {
   };
 
   const applyToInstance = async () => {
+    if (readonly) {
+      push("第三方账号不需要本地应用：进游戏时会自动从皮肤站加载", "info");
+      return;
+    }
     if (!accountId) {
       push("先在右上角选一个账号，再应用到实例", "info");
       return;
@@ -231,17 +277,29 @@ export function SkinPage() {
   const renderCard = (skin: LocalSkin) => (
     <div
       key={skin.fileName}
-      className={`skin-card ${skin.active ? "is-active" : ""}`}
+      className={`skin-card ${skin.active ? "is-active" : ""} ${readonly ? "is-locked" : ""}`.trim()}
       data-skin-card={skin.fileName}
       data-skin-source={skin.source}
+      data-skin-locked={readonly ? "true" : undefined}
     >
       <button
         type="button"
         className="skin-card-main"
         data-action="select-skin"
-        onClick={() => void selectSkin(skin.fileName)}
+        // 第三方账号只读：点击只提示原因，绝不再调 select（见下方 onClick 的 early return）。
+        onClick={() => {
+          if (readonly) {
+            push(READONLY_HINT, "info");
+            return;
+          }
+          void selectSkin(skin.fileName);
+        }}
+        // 只读模式用 aria-disabled（而不是原生 disabled）：「点一下给一句原因」比死按钮更好用。
         disabled={busyFile === skin.fileName}
-        title={`${skin.fileName} · ${skin.width}×${skin.height} · ${skin.model === "slim" ? "细臂" : "标准臂"}`}
+        aria-disabled={readonly || undefined}
+        title={readonly
+          ? READONLY_HINT
+          : `${skin.fileName} · ${skin.width}×${skin.height} · ${skin.model === "slim" ? "细臂" : "标准臂"}`}
       >
         <img className="skin-thumb" src={skinImageUrl(skin.path)} alt="" width={56} height={56} />
         <span className="skin-card-name">{skin.name}</span>
@@ -268,8 +326,9 @@ export function SkinPage() {
     <section
       className={`page skin-page ${dragging ? "is-dragging" : ""}`}
       data-skin-page
-      // 整页都能接住拖进来的 PNG：拖到卡片、网格或空白处都一样。
+      // 整页都能接住拖进来的 PNG：拖到卡片、网格或空白处都一样；第三方账号只读模式下不收拖放。
       onDragOver={(event) => {
+        if (readonly) return;
         event.preventDefault();
         setDragging(true);
       }}
@@ -299,6 +358,21 @@ export function SkinPage() {
         </div>
       </header>
 
+      {readonly ? (
+        <div className="skin-readonly" data-skin-readonly={account?.type} role="status">
+          <span>{READONLY_NOTE}</span>
+          <button
+            type="button"
+            className="account-link"
+            data-action="open-littleskin"
+            onClick={() => void openLittleSkin()}
+          >
+            <IconLink size={14} />
+            去皮肤站网页
+          </button>
+        </div>
+      ) : null}
+
       <div className="skin-toolbar">
         <Select
           value={applyInstanceId}
@@ -312,12 +386,15 @@ export function SkinPage() {
           className="btn btn-primary"
           data-action="apply-skin"
           onClick={() => void applyToInstance()}
-          disabled={applying || !applyInstanceId || !accountId}
+          disabled={readonly || applying || !applyInstanceId || !accountId}
+          title={readonly ? "第三方账号不需要本地应用：进游戏时会自动从皮肤站加载" : undefined}
         >
           {applying ? "应用中…" : "应用到实例"}
         </button>
         <p className="skin-toolbar-hint">
-          把选中的皮肤写进实例的 CustomSkinLoader 本地皮肤目录，游戏里只看得到自己。
+          {readonly
+            ? "第三方账号的皮肤由皮肤站下发，不需要写进实例。"
+            : "把选中的皮肤写进实例的 CustomSkinLoader 本地皮肤目录，游戏里只看得到自己。"}
         </p>
       </div>
 
@@ -339,10 +416,19 @@ export function SkinPage() {
       ) : null}
 
       <div className="skin-layout">
-        <section className="panel skin-stage">
+        <section className="panel skin-stage" data-skin-preview-source={previewTexture?.source ?? "none"}>
           <span className="skin-name" data-skin-name>{account?.name ?? "未选择账号"}</span>
-          <SkinDoll skin={preview} />
+          <SkinDoll texture={previewTexture} emptyHint="该账号还没有可预览的皮肤" />
           <p className="skin-rotate-hint" data-skin-hint>拖动以旋转</p>
+          {readonly ? (
+            <p className="skin-account-hint" data-skin-account-hint>
+              {accountSkin.loading
+                ? "正在读取皮肤站上的皮肤…"
+                : previewTexture
+                  ? "贴图来自皮肤站，换皮肤请到皮肤站网页操作。"
+                  : `该账号在皮肤站还没有设置皮肤（${accountSkin.error ?? "接口没有返回皮肤"}），可到皮肤站网页上传。`}
+            </p>
+          ) : null}
         </section>
 
         <section className={`panel skin-library ${dragging ? "is-dragging" : ""}`} data-skin-library>
@@ -389,17 +475,19 @@ export function SkinPage() {
               ) : null}
               <div className="skin-grid" data-skin-grid>
                 {listSkins.map(renderCard)}
-                <button
-                  type="button"
-                  className="skin-add"
-                  data-skin-add
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={importing}
-                >
-                  <IconPlus size={18} />
-                  <span>{importing ? "导入中…" : "添加皮肤"}</span>
-                  <span className="skin-add-hint">点击选择或把 PNG 拖到这里</span>
-                </button>
+                {readonly ? null : (
+                  <button
+                    type="button"
+                    className="skin-add"
+                    data-skin-add
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={importing}
+                  >
+                    <IconPlus size={18} />
+                    <span>{importing ? "导入中…" : "添加皮肤"}</span>
+                    <span className="skin-add-hint">点击选择或把 PNG 拖到这里</span>
+                  </button>
+                )}
               </div>
             </>
           ) : null}

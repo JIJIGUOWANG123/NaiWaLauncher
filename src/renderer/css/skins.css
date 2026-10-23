@@ -127,6 +127,26 @@
   color: var(--text-faint);
 }
 
+/* 第三方账号的只读提示条 */
+.skin-readonly {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--accent-2) 40%, transparent);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--accent-2) 12%, transparent), var(--surface-glass));
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.skin-account-hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
 /* ---- 右栏：分段 + 折叠 + 网格 ---- */
 
 .skin-library {
@@ -188,6 +208,21 @@
 .skin-card:hover {
   border-color: color-mix(in srgb, var(--text) 24%, transparent);
   background: var(--surface-hover);
+}
+
+/* 第三方账号只读：整张卡片明显变灰，点不动 */
+.skin-card.is-locked {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
+.skin-card.is-locked .skin-card-main {
+  cursor: not-allowed;
+}
+
+.skin-card.is-locked:hover {
+  border-color: var(--line);
+  background: var(--surface-recess);
 }
 
 .skin-card.is-active {

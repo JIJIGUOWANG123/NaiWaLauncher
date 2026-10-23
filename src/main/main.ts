@@ -1,5 +1,5 @@
 import { perfMark } from "./core/perf";
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, net, shell } from "electron";
 import { basename, join } from "node:path";
 import { existsSync } from "node:fs";
 import { getPaths } from "./core/paths";
@@ -9,6 +9,7 @@ import { setEventSink } from "./core/events";
 import { load as loadDownloadJobs, setChangedSink as setDownloadsChangedSink, trackProgress, trackResult } from "./downloads/index";
 import { setLogSink, logger } from "./core/logger";
 import { setActiveSource } from "./core/sources";
+import { setSystemFetcher } from "./core/netfetch";
 import { registerIpc } from "./ipc/register";
 import type { Settings } from "../shared/types";
 import { createSplash, fadeInWindow, fadeOutSplash, logoPathFor, splashHoldRemaining } from "./splash";
@@ -90,6 +91,8 @@ async function bootstrap(): Promise<void> {
 
 app.whenReady().then(async () => {
   perfMark("app-ready");
+  // 登录请求改走 Chromium 网络栈：系统代理与 Windows 证书库都生效（Node 自带 fetch 两者都不吃）
+  setSystemFetcher((input, init) => net.fetch(input, init as never) as unknown as Promise<Response>);
   const root = rootDir();
   // 路径必须先就位：loadSettings 要读 <dataRoot>/config/settings.json。
   // 之前 initPaths 在 bootstrap 里，whenReady 的第一次 loadSettings 撞上「paths not initialised」

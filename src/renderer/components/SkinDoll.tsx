@@ -1,5 +1,4 @@
 import { useRef, useState, type CSSProperties } from "react";
-import type { LocalSkin } from "../../shared/types";
 
 /** 每个皮肤像素渲染成多少 CSS 像素（8px 的头 = 40px）。 */
 const SCALE = 5;
@@ -115,25 +114,41 @@ function facesOf(part: DollPart, url: string, texH: number): Array<{ key: string
   ];
 }
 
+/** 小人贴图：本地皮肤库的皮肤与「账号在皮肤站上的皮肤」都归一成这个形状。 */
+export interface SkinTexture {
+  /** 可直接用作 background-image 的地址（data: / file: / http(s)）。 */
+  url: string;
+  model: "classic" | "slim";
+  /** 贴图高度：32 = 旧格式（没有左臂/左腿贴图区），64 = 现代格式。 */
+  height?: number;
+  /** 写进 data-skin-doll 的标识，自检时能看出贴图来自哪张皮肤。 */
+  label: string;
+}
+
 /**
- * CSS 3D 小人：零依赖，贴图来自本地皮肤 PNG。
+ * CSS 3D 小人：零依赖，贴图来自一张 PNG（本地皮肤库或皮肤站直链）。
  * 拖拽绕 Y 轴旋转，松手保持角度；换皮肤只换背景图，不重建结构。
  */
-export function SkinDoll({ skin }: { skin: LocalSkin | null }) {
+export function SkinDoll({
+  texture, emptyHint = "选一张皮肤就能预览",
+}: {
+  texture: SkinTexture | null;
+  emptyHint?: string;
+}) {
   const [rotate, setRotate] = useState(-24);
   const drag = useRef<{ startX: number; base: number } | null>(null);
 
-  if (!skin) {
+  if (!texture) {
     return (
       <div className="skin-doll skin-doll-empty" data-skin-doll="empty">
-        选一张皮肤就能预览
+        {emptyHint}
       </div>
     );
   }
 
-  const url = skinImageUrl(skin.path);
-  const legacy = skin.height === 32;
-  const slim = skin.model === "slim";
+  const url = skinImageUrl(texture.url);
+  const legacy = (texture.height ?? 64) === 32;
+  const slim = texture.model === "slim";
   const parts = partsFor(legacy, slim);
   // 舞台固定 16 皮肤像素宽（8 宽的身体 + 两侧手臂）：slim 的手臂窄 1 像素，
   // 于是两边各留 1 像素空白，站位公式不必跟着模型变。
@@ -143,8 +158,8 @@ export function SkinDoll({ skin }: { skin: LocalSkin | null }) {
   return (
     <div
       className="skin-doll"
-      data-skin-doll={skin.fileName}
-      data-skin-model={skin.model}
+      data-skin-doll={texture.label}
+      data-skin-model={texture.model}
       data-skin-legacy={legacy ? "true" : "false"}
       onPointerDown={(event) => {
         drag.current = { startX: event.clientX, base: rotate };

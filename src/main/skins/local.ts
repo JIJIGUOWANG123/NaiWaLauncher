@@ -66,11 +66,13 @@ function sha1Of(buf: Buffer): string {
 }
 
 /**
- * 内置皮肤：<root>/skins（随启动器一起分发的那批，例如 D:\minecraft\skins），只读。
- * 注意不是 <gameRoot>/skins：那是游戏目录（.minecraft），用户不会往那里放内置皮肤。
+ * 内置皮肤：随程序一起分发（与 logo 同级），只读、不可增删。
+ * 打包后是 <安装目录>/resources/skins（electron-builder 的 extraResources），开发态是 <仓库>/resources/skins。
+ * 不读用户目录：内置皮肤必须「装进程序里」，否则分发出去的客户端里永远是 0 张。
  */
 function officialDir(): string {
-  return join(getPaths().root, "skins");
+  const res = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  return res ? join(res, "skins") : join(getPaths().root, "resources", "skins");
 }
 
 /** 旧版本的错误口径（<gameRoot>/skins）：只用来在日志里提示一句，绝不读取、迁移或删除。 */
@@ -418,20 +420,26 @@ async function mergeLoadlist(configPath: string, model: "classic" | "slim"): Pro
   const list = Array.isArray(config.loadlist) ? config.loadlist : [];
   config.loadlist = list;
   const wanted = model === "slim" ? "slim" : "default";
-  const existing = list.find((item) => String(asObject(item).name ?? "").toLowerCase() === "localskin");
-  if (existing) {
-    const entry = asObject(existing) as Record<string, unknown>;
-    if (entry.model === wanted) return undefined;
-    entry.model = wanted;
+  const index = list.findIndex((item) => String(asObject(item).name ?? "").toLowerCase() === "localskin");
+  // CSL 按 loadlist 顺序取第一个命中的来源：同名玩家在 TLauncher / LittleSkin 等站点上有皮肤时，
+  // 排在后面的 LocalSkin 根本轮不到（实测日志里 TLauncher 先返回了 skin_<name>.png）。
+  // 所以这里不只补条目，还要把它挪到**第一位**，本地皮肤优先。
+  if (index < 0) {
+    list.unshift({ name: "LocalSkin", type: "Legacy", model: wanted });
     await writeFileAtomic(configPath, Buffer.from(JSON.stringify(config, null, 2) + "\n", "utf8"));
-    log.info("已把 " + configPath + " 里 LocalSkin 的 model 改为 " + wanted);
+    log.info("已在 " + configPath + " 的 loadlist 最前面补上 LocalSkin 条目");
     return undefined;
   }
-  // 缺 LocalSkin：插到最前面，本地皮肤优先于在线来源（与 CSL 默认配置里的顺序一致）
-  list.unshift({ name: "LocalSkin", type: "Legacy", model: wanted });
+  const entry = asObject(list[index]) as Record<string, unknown>;
+  const modelChanged = entry.model !== wanted;
+  if (modelChanged) entry.model = wanted;
+  if (index === 0 && !modelChanged) return undefined;
+  if (index > 0) list.splice(0, 0, list.splice(index, 1)[0]);
   await writeFileAtomic(configPath, Buffer.from(JSON.stringify(config, null, 2) + "\n", "utf8"));
-  log.info("已在 " + configPath + " 的 loadlist 补上 LocalSkin 条目");
-  return undefined;
+  log.info(
+    "已调整 " + configPath + " 的 loadlist：LocalSkin 置顶" + (modelChanged ? "，model 改为 " + wanted : ""),
+  );
+  return "已把本地皮肤来源提到第一位，避免被 TLauncher/LittleSkin 等在线来源抢先";
 }
 
 /**

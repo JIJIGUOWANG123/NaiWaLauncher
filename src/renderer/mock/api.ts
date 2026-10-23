@@ -89,6 +89,8 @@ function mockYggInvalidReason(): string | null {
 const MOCK_SKIN_TEXTURE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAnklEQVR42u3WwQnCQBRF0SlEXGUl4tKtHdiKYAHahxWkDnf2YC9fEAa+oAExgmbOgbeIYEguA1oKAMALsygxNAGm7nLax9CaCLBezO+rL52vnQABGgmw668PcwJaCQC0ZbU9RN67398cz1FXfzHyZ58+X77XGPcTQIA/C/D1/yECCDBegGcTQIAfD9B1y8gTQIDGAgAAAAAAAAAAk3MDAfN1yzvK5/UAAAAASUVORK5CYII=";
 /** 应用皮肤后换成的另一张纹理：用来断言「上传成功后预览真的刷新了」。 */
 const MOCK_SKIN_TEXTURE_UPLOADED = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAnklEQVR42u3WsQnCUBSG0axi+xpttHMBwQ2cKE0GcAnHsHQEN7mC8OAJGhAjaO458BcRDMnHA+06AIAX+m2JsQkwd9dTH2NLEWBZNvfVl26vnQABkgS4DOeHOQFZAgC57NaHaPfu94/7IerqL0b72afP195rivsJIMCfBfj6/xABBJguwLMJIMCPByiLVbQTQIBkAQAAAAAAAACA2bkBs6yDw2fy90sAAAAASUVORK5CYII=";
+/** 第三方账号在皮肤站上的那张皮肤（slim）：只读预览用，和本地皮肤的贴图区分开。 */
+const MOCK_SKIN_YGG_TEXTURE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAfUlEQVR42u3aMQ3AIBCGUZQhgblSOiEHER0qpkZAAyGU4d6X/AbeeLn0va2fXDodAAAAAAAAAAAAAAAAAAAAEBCg5LuvrF7P1m0HBgAAAAAAAAAAAAAAAAAAAAICSJIkSZIkzbZ6UAn/YAEAAAAAAAAAAAAAAAAAAAD8DzAAXBbxrdaQtaIAAAAASUVORK5CYII=";
 const MOCK_SKIN_PICKED = "C:\\Users\\Public\\Pictures\\NAIWA-skin.png";
 const SKIN_NO_UPLOAD_ERROR = "该微软应用尚未获得 Minecraft 服务授权，暂时无法编辑皮肤";
 
@@ -938,6 +940,16 @@ export function createMockApi(): NaiwaApi {
           return { source: "none", canUpload: false, error: "离线账号没有皮肤服务：先用正版或第三方账号登录。" };
         }
         const source = account.type === "microsoft" ? ("mojang" as const) : ("yggdrasil" as const);
+        // 第三方账号：皮肤由皮肤站托管，这里只读返回皮肤站上的那张（slim），渲染层据此走只读预览。
+        if (account.type === "yggdrasil") {
+          return {
+            source,
+            skinUrl: MOCK_SKIN_YGG_TEXTURE,
+            model: "slim",
+            canUpload: false,
+            error: "第三方账号的皮肤由皮肤站管理，请在皮肤站网页修改。",
+          };
+        }
         // 微软应用没拿到 Minecraft 服务授权时只读：预览照常给，但 canUpload=false 并说明原因。
         if (mockSkinNoUpload()) {
           return { source, skinUrl: MOCK_SKIN_TEXTURE, model: "classic", canUpload: false, error: SKIN_NO_UPLOAD_ERROR };

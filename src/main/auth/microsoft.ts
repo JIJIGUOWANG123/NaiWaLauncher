@@ -1,5 +1,6 @@
 import type { Account, DeviceCodeChallenge, MicrosoftLoginState } from "../../shared/types";
 import { logger, registerSecret } from "../core/logger";
+import { systemFetch } from "../core/netfetch";
 import { getSettings, loadSettings } from "../core/settings";
 import { updateMicrosoftTokens, upsertMicrosoftAccount } from "./accounts";
 
@@ -32,15 +33,41 @@ function messageOf(err: unknown): string {
 }
 
 /**
+ * fetch 在 Node/Electron 里失败时只给一句 "fetch failed"，真正的原因（证书链、DNS、连接被重置）
+ * 藏在 err.cause 上。这里把它挖出来并把常见原因翻成人话，否则用户只能看到一个没法排查的字符串。
+ */
+function networkReason(err: unknown): string {
+  const cause = (err as { cause?: { code?: string; message?: string } } | undefined)?.cause;
+  const code = cause?.code ?? "";
+  const detail = cause?.message ?? "";
+  if (/CERT|SELF_SIGNED|UNABLE_TO_VERIFY|ERR_TLS/i.test(code + " " + detail)) {
+    return "TLS 证书校验失败（code=" + code + "）——常见于公司/校园网的 HTTPS 拦截或杀毒软件的证书替换；请关闭拦截或把其根证书加入系统信任";
+  }
+  if (/ENOTFOUND|EAI_AGAIN/.test(code)) return "域名解析失败（code=" + code + "）——请检查 DNS 或稍后重试";
+  if (/ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|UND_ERR_CONNECT_TIMEOUT|UND_ERR_HEADERS_TIMEOUT/.test(code)) {
+    return "连接被中断或超时（code=" + code + "）——网络抖动或代理不稳定，可直接重试";
+  }
+  return code ? "网络错误（code=" + code + "）" : "";
+}
+
+/** 只对「可重试的网络错误」重试一次：用户手动点登录时不该被一次抖动打败。 */
+function retryable(err: unknown): boolean {
+  const cause = (err as { cause?: { code?: string; message?: string } } | undefined)?.cause;
+  const code = (cause?.code ?? "") + " " + (cause?.message ?? "");
+  return /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ENOTFOUND|EAI_AGAIN|UND_ERR/.test(code);
+}
+
+/**
  * 这里直接用 fetch 而不是 core/http 的 fetchJson：设备码轮询的“用户还没授权”是一次
  * HTTP 400 + error 字段的正常状态，而 fetchJson 在非 2xx 时会丢掉响应体，无法区分
  * authorization_pending / expired_token / AADSTS 错误码。
  */
-async function request(url: string, init: RequestInit): Promise<Reply> {
+async function request(url: string, init: RequestInit, attempt = 0): Promise<Reply> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    // 走系统网络栈（系统代理 + Windows 证书库）：Node 自带 fetch 在企业网/HTTPS 拦截下会直接失败
+    const res = await systemFetch(url, {
       ...init,
       redirect: "follow",
       signal: controller.signal,
@@ -55,8 +82,16 @@ async function request(url: string, init: RequestInit): Promise<Reply> {
     }
     return { status: res.status, json, text };
   } catch (err) {
-    const reason =
-      err instanceof Error && err.name === "AbortError" ? "请求超时（" + TIMEOUT_MS + "ms）" : messageOf(err);
+    const aborted = err instanceof Error && err.name === "AbortError";
+    // 只在「拿到响应之前就断了」的情况重试一次；AbortError（我们自己超时）重试也大概率没用
+    if (!aborted && attempt === 0 && retryable(err)) {
+      clearTimeout(timer);
+      log.warn(`[microsoft] 网络错误，重试一次：${networkReason(err) || messageOf(err)} · ${url}`);
+      await new Promise((r) => setTimeout(r, 400));
+      return request(url, init, attempt + 1);
+    }
+    const reason = aborted ? "请求超时（" + TIMEOUT_MS + "ms）" : [messageOf(err), networkReason(err)].filter(Boolean).join("；");
+    log.warn(`[microsoft] 请求失败：${reason} · ${url}`);
     throw new Error(reason + " · " + url);
   } finally {
     clearTimeout(timer);
