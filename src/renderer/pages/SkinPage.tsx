@@ -10,12 +10,11 @@ import { ConfirmDialog } from "../components/Modal";
 import { Select } from "../components/Form";
 import { EmptyState, ErrorState, SkeletonCards } from "../components/State";
 import { SkinDoll, skinImageUrl } from "../components/SkinDoll";
-import { SkinDialog } from "./SkinDialog";
-import { IconChevronDown, IconImage, IconLink, IconPlus, IconRefresh, IconTrash } from "../components/icons";
+import { IconChevronDown, IconLink, IconPlus, IconRefresh, IconTrash } from "../components/icons";
 
 const LITTLESKIN_URL = "https://littleskin.cn/";
 const TYPE_LABEL: Record<Account["type"], string> = { offline: "离线", microsoft: "微软正版", yggdrasil: "第三方" };
-const TAB_LABEL: Record<SkinTab, string> = { saved: "已保存皮肤", official: "官方皮肤" };
+const TAB_LABEL: Record<SkinTab, string> = { saved: "已保存皮肤", official: "内置皮肤" };
 
 type SkinTab = "saved" | "official";
 
@@ -25,8 +24,9 @@ function isPng(file: File): boolean {
 }
 
 /**
- * 皮肤页：本地皮肤库（官方内置 + 自己导入）+ CSS 3D 预览。
- * 皮肤与账号解耦，账号只决定「预览上显示谁的名字」和「选中的是谁的皮肤」。
+ * 皮肤页：本地皮肤库（内置 <root>/skins 与用户导入）+ CSS 3D 预览。
+ * 皮肤与账号解耦，账号只决定「预览上显示谁的名字」和「选中的是谁的皮肤」；
+ * 三种账号（离线 / 微软 / 第三方）都能在这里选皮肤并应用到实例，上传入口已从界面移除。
  */
 export function SkinPage() {
   const { settings, instances, currentInstanceId } = useApp();
@@ -44,7 +44,6 @@ export function SkinPage() {
   const [importing, setImporting] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [busyFile, setBusyFile] = useState<string | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [applyInstanceId, setApplyInstanceId] = useState("");
   const [applying, setApplying] = useState(false);
   const [ensuring, setEnsuring] = useState(false);
@@ -153,7 +152,10 @@ export function SkinPage() {
   };
 
   const selectSkin = async (fileName: string) => {
-    if (!accountId) return;
+    if (!accountId) {
+      push("先在右上角选一个账号，再挑皮肤", "info");
+      return;
+    }
     setBusyFile(fileName);
     try {
       setSkins(await api.skinsLocal.select(accountId, fileName));
@@ -165,7 +167,7 @@ export function SkinPage() {
     }
   };
 
-  // 删除是破坏性操作：先弹确认，避免手滑把导入的皮肤删掉（官方皮肤本来就不给删）。
+  // 删除是破坏性操作：先弹确认，避免手滑把导入的皮肤删掉（内置皮肤本来就不给删）。
   const [toDelete, setToDelete] = useState<string | null>(null);
   const removeSkin = async (fileName: string) => {
     setToDelete(null);
@@ -181,7 +183,14 @@ export function SkinPage() {
   };
 
   const applyToInstance = async () => {
-    if (!applyInstanceId || !accountId) return;
+    if (!accountId) {
+      push("先在右上角选一个账号，再应用到实例", "info");
+      return;
+    }
+    if (!applyInstanceId) {
+      push("先在上面选一个目标实例", "info");
+      return;
+    }
     setApplying(true);
     try {
       const result = await api.skinsLocal.applyToInstance(applyInstanceId, accountId);
@@ -272,7 +281,7 @@ export function SkinPage() {
       <header className="page-head">
         <div>
           <h1 className="page-title">皮肤</h1>
-          <p className="page-sub">本地皮肤库：官方内置 + 自己导入的 PNG，离线、第三方与微软账号都能直接用。</p>
+          <p className="page-sub">本地皮肤库：内置皮肤（启动器根目录的 skins）+ 自己导入的 PNG，离线、微软与第三方账号都能选。</p>
         </div>
         <div className="page-actions">
           <Select
@@ -334,17 +343,6 @@ export function SkinPage() {
           <span className="skin-name" data-skin-name>{account?.name ?? "未选择账号"}</span>
           <SkinDoll skin={preview} />
           <p className="skin-rotate-hint" data-skin-hint>拖动以旋转</p>
-          <button
-            type="button"
-            className="btn btn-ghost skin-edit"
-            data-action="edit-skin"
-            onClick={() => setUploadOpen(true)}
-            disabled={!account}
-            title={account ? `编辑 ${account.name} 的账号皮肤` : "先添加账号"}
-          >
-            <IconImage size={16} />
-            编辑皮肤 / 盔甲与纹饰
-          </button>
         </section>
 
         <section className={`panel skin-library ${dragging ? "is-dragging" : ""}`} data-skin-library>
@@ -383,10 +381,10 @@ export function SkinPage() {
             <>
               {skins !== null && listSkins.length === 0 ? (
                 <EmptyState
-                  title={tab === "saved" ? "还没有保存的皮肤" : "没有官方内置皮肤"}
+                  title={tab === "saved" ? "还没有保存的皮肤" : "没有内置皮肤"}
                   hint={tab === "saved"
                     ? "把 64×64（或 64×32）的 PNG 拖进这里，或点下面的「添加皮肤」。"
-                    : "官方内置皮肤随程序一起分发，缺失时可以重装启动器。"}
+                    : "内置皮肤随程序一起分发：把 PNG 放进启动器根目录的 skins 文件夹后点刷新即可看到；缺失时可以重装启动器。"}
                 />
               ) : null}
               <div className="skin-grid" data-skin-grid>
@@ -417,7 +415,6 @@ export function SkinPage() {
       </footer>
 
       <input ref={fileInputRef} type="file" accept="image/png" multiple hidden onChange={(event) => void onPickFiles(event)} />
-      <SkinDialog account={uploadOpen ? account : null} onClose={() => setUploadOpen(false)} />
       <ConfirmDialog
         open={toDelete !== null}
         title="删除本地皮肤"

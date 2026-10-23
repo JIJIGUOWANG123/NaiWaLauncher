@@ -65,9 +65,32 @@ function sha1Of(buf: Buffer): string {
   return createHash("sha1").update(buf).digest("hex");
 }
 
-/** 官方内置皮肤：<gameRoot>/skins，只读。 */
+/**
+ * 内置皮肤：<root>/skins（随启动器一起分发的那批，例如 D:\minecraft\skins），只读。
+ * 注意不是 <gameRoot>/skins：那是游戏目录（.minecraft），用户不会往那里放内置皮肤。
+ */
 function officialDir(): string {
+  return join(getPaths().root, "skins");
+}
+
+/** 旧版本的错误口径（<gameRoot>/skins）：只用来在日志里提示一句，绝不读取、迁移或删除。 */
+function legacyOfficialDir(): string {
   return join(getPaths().gameRoot, "skins");
+}
+
+/** 「旧目录有皮肤但新目录没有」只提示一次，避免每次 list 刷屏。 */
+let legacyHinted = false;
+
+/** 新目录里没有内置皮肤、旧目录里却有：说明文件放错位置了，提示一句（不迁不删）。 */
+async function hintLegacyOfficialDir(names: string[]): Promise<void> {
+  if (legacyHinted || names.some((name) => /\.png$/i.test(name))) return;
+  legacyHinted = true;
+  const legacy = await readdir(legacyOfficialDir()).catch(() => [] as string[]);
+  if (!legacy.some((name) => /\.png$/i.test(name))) return;
+  log.info(
+    "检测到旧目录 " + legacyOfficialDir() + " 里有皮肤，内置皮肤现在读 <启动器根目录>/skins（" +
+      officialDir() + "）；旧文件没有迁移也没有删除，需要的话请手动移动",
+  );
 }
 
 /** 用户导入皮肤：<dataRoot>/skins。 */
@@ -223,6 +246,7 @@ export async function listLocalSkins(accountId?: string): Promise<LocalSkin[]> {
   for (const source of ["official", "user"] as const) {
     const dir = source === "official" ? officialDir() : userDir();
     const names = (await readdir(dir).catch(() => [] as string[])).sort();
+    if (source === "official") await hintLegacyOfficialDir(names);
     for (const fileName of names) {
       if (!/\.png$/i.test(fileName)) continue; // 非 png 与目录都不算皮肤
       const path = join(dir, fileName);

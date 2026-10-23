@@ -66,23 +66,50 @@ async function downloadToStaging(url: string): Promise<string> {
 }
 
 
-/** 生成替换脚本：等主进程退出后覆盖 exe，再启动新版。 */
-async function writeSwapScript(staged: string, target: string): Promise<string> {
-  const script = join(tmpdir(), `naiwa-update-${Date.now()}.cmd`);
-  const body = [
+/**
+ * 替换脚本正文（纯函数，便于自检断言）：等主进程退出后覆盖 exe，再拉起新版，最后自删。
+ * 这里用 start "" 直接拉起，不用 start /min —— /min 需要一个可见的控制台窗口来承载。
+ */
+export function swapScriptBody(staged: string, target: string, scriptPath: string): string {
+  return [
     "@echo off",
-    "timeout /t 2 /nobreak >nul",
+    // 用 ping 当 sleep：脚本以无控制台方式（stdio: ignore）启动，timeout 会因「输入重定向」直接失败
+    "ping -n 3 127.0.0.1 >nul",
     ":retry",
     `move /y "${staged}" "${target}" >nul 2>&1`,
     "if errorlevel 1 (",
-    "  timeout /t 1 /nobreak >nul",
+    "  ping -n 2 127.0.0.1 >nul",
     "  goto retry",
     ")",
     `start "" "${target}"`,
-    `del "${script.replace(/\\/g, "\\\\")}" >nul 2>&1`,
+    `del "${scriptPath}" >nul 2>&1`,
   ].join("\r\n");
-  await writeFile(script, body, "utf8");
+}
+
+/** 生成替换脚本（正文见 swapScriptBody）。 */
+async function writeSwapScript(staged: string, target: string): Promise<string> {
+  const script = join(tmpdir(), `naiwa-update-${Date.now()}.cmd`);
+  await writeFile(script, swapScriptBody(staged, target, script), "utf8");
   return script;
+}
+
+/** 启动参数记录：抽成纯函数，自检可以断言「命令行里没有任何 /min、windowsHide 已开」。 */
+export interface UpdateLaunch {
+  command: string;
+  args: string[];
+  options: { detached: boolean; stdio: "ignore"; windowsHide: boolean };
+}
+
+/**
+ * 如何启动替换脚本：cmd /c <script>（不是 start /min <script>）。
+ * detached + stdio:ignore + windowsHide 让 cmd 以无窗口方式运行，脚本内部再 start "" 拉起新版。
+ */
+export function updateLaunch(script: string): UpdateLaunch {
+  return {
+    command: process.env.ComSpec ?? "cmd.exe",
+    args: ["/c", script],
+    options: { detached: true, stdio: "ignore", windowsHide: true },
+  };
 }
 
 /** 下载并应用更新：成功后启动脚本替换自身并退出，进程由新版接管。 */
@@ -100,7 +127,8 @@ export async function installUpdate(url: string): Promise<void> {
   }
   log.info(`[updater] 下载完成，准备替换`);
   const script = await writeSwapScript(staged, target);
-  spawn("cmd.exe", ["/c", "start", "/min", script], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  const launch = updateLaunch(script);
+  spawn(launch.command, launch.args, launch.options).unref();
   log.info(`[updater] 已启动替换脚本，退出当前进程`);
   setTimeout(() => app.quit(), 300);
 }

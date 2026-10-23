@@ -331,7 +331,7 @@ export function createMockApi(): NaiwaApi {
     ...item,
     updatedAt: Date.UTC(2024, 10, 1 + index, 9, 12),
   }));
-  /** 本地皮肤库内存态：官方内置只读，用户导入可增删。 */
+  /** 本地皮肤库内存态：内置皮肤只读，用户导入可增删。 */
   let localSkins: LocalSkin[] = MOCK_LOCAL_SKINS.map((item) => ({ ...item }));
   /** 账号 id → 选中的皮肤文件名；没有记录表示跟随账号原皮肤。 */
   const skinSelection = new Map<string, string>(MOCK_ACCOUNTS.map((item) => [item.id, "steve.png"]));
@@ -1639,7 +1639,7 @@ export function createMockApi(): NaiwaApi {
         await sleep(220);
         const target = localSkins.find((item) => item.fileName === fileName);
         if (!target) throw new Error(`皮肤库里没有这个文件：${fileName}`);
-        if (target.source === "official") throw new Error("官方内置皮肤不能删除");
+        if (target.source === "official") throw new Error("内置皮肤不能删除");
         localSkins = localSkins.filter((item) => item.fileName !== fileName);
         for (const [accountId, picked] of skinSelection) {
           if (picked === fileName) skinSelection.delete(accountId);

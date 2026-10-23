@@ -127,10 +127,6 @@
   color: var(--text-faint);
 }
 
-.skin-edit {
-  margin-top: 2px;
-}
-
 /* ---- 右栏：分段 + 折叠 + 网格 ---- */
 
 .skin-library {

@@ -820,7 +820,7 @@ export function mockFiles(
   });
 }
 
-/** 账号种子：3 个（2 离线 + 1 微软），覆盖两种徽标与微软令牌字段。 */
+/** 账号种子：4 个（2 离线 + 1 微软 + 1 第三方），覆盖四种徽标、微软令牌与 Yggdrasil 字段。 */
 export const MOCK_ACCOUNTS: Account[] = [
   {
     id: "acc-offline-1",
@@ -845,6 +845,22 @@ export const MOCK_ACCOUNTS: Account[] = [
     },
   },
   {
+    id: "acc-ygg-1",
+    type: "yggdrasil",
+    name: "LittleSkinUser",
+    uuid: "a71f3c58d29b4061e8a5c7b3d1f90426",
+    createdAt: Date.UTC(2024, 10, 6, 13, 20),
+    lastUsedAt: Date.UTC(2024, 10, 12, 21, 30),
+    yggdrasil: {
+      apiUrl: "https://littleskin.cn/api/yggdrasil",
+      accessToken: "mock-yggdrasil-access-token",
+      clientToken: "mock-yggdrasil-client-token",
+      expiresAt: 0,
+      siteName: "littleskin.cn",
+      profiles: [{ id: "prof-ygg-1", name: "LittleSkinUser" }],
+    },
+  },
+  {
     id: "acc-offline-2",
     type: "offline",
     name: "LittleDragon",
@@ -856,7 +872,7 @@ export const MOCK_ACCOUNTS: Account[] = [
 
 
 /**
- * 本地皮肤库假数据：官方内置 2 张（classic + slim）+ 用户导入 2 张（含一张 64×32 旧格式）。
+ * 本地皮肤库假数据：内置 2 张（classic + slim）+ 用户导入 2 张（含一张 64×32 旧格式）。
  * 浏览器预览没有真实文件系统，path 直接用内联 PNG —— 渲染层和真实链路一样把它当图片地址使用。
  */
 const MOCK_SKIN_OFFICIAL_CLASSIC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAfElEQVR42u3aQQ3AIBBFQRRhAAeVVCwgomJ6qSrQQAjlsPOSb2COm03fc/eTS6cDAAAAAAAAAAAAAAAAAAAAAgKUq/WV5fpu3XZgAAAAAAAAAAAAAAAAAAAAICCAJEmSJEnSbKsHlfAPFgAAAAAAAAAAAAAAAAAAAMD/AAM4bEse8v1gBQAAAABJRU5ErkJggg==";

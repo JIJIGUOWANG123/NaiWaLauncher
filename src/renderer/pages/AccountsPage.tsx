@@ -8,10 +8,9 @@ import { ConfirmDialog } from "../components/Modal";
 import { Field, Select, TextInput } from "../components/Form";
 import { EmptyState, ErrorState, SkeletonCards } from "../components/State";
 import { useToast } from "../components/Toast";
-import { IconLink, IconPlus, IconRefresh, IconSkin, IconTrash } from "../components/icons";
+import { IconLink, IconPlus, IconRefresh, IconTrash } from "../components/icons";
 import { accountSiteName } from "../lib/account";
 import { MicrosoftAccountCard } from "./MicrosoftAccountCard";
-import { SkinDialog } from "./SkinDialog";
 import { YggdrasilLoginDialog } from "./YggdrasilLoginDialog";
 
 const NAME_RULE = /^[A-Za-z0-9_]{3,16}$/;
@@ -33,11 +32,6 @@ function siteOf(account: Account): string {
   return accountSiteName(account) || "未知站点";
 }
 
-/** 皮肤服务只覆盖正版与第三方账号，离线账号没有可编辑的皮肤。 */
-function hasSkinService(account: Account): boolean {
-  return account.type !== "offline";
-}
-
 function AccountAvatar({ account }: { account: Account }) {
   return (
     <span className="account-avatar" style={{ backgroundColor: avatarColor(account.name) }} aria-hidden="true">
@@ -47,7 +41,7 @@ function AccountAvatar({ account }: { account: Account }) {
 }
 
 function CurrentAccountCard({
-  account, accounts, switching, onSwitch, onDelete, onCopy, onSkin,
+  account, accounts, switching, onSwitch, onDelete, onCopy,
 }: {
   account: Account;
   accounts: Account[];
@@ -55,7 +49,6 @@ function CurrentAccountCard({
   onSwitch: (id: string) => void;
   onDelete: () => void;
   onCopy: () => void;
-  onSkin: () => void;
 }) {
   return (
     <section className="panel account-current" aria-label="当前账号">
@@ -70,18 +63,6 @@ function CurrentAccountCard({
           </div>
         </div>
         <div className="account-actions">
-          {hasSkinService(account) ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={onSkin}
-              title="打开皮肤选择器"
-              data-open-skin={account.id}
-            >
-              <IconSkin size={15} />
-              <span>皮肤</span>
-            </button>
-          ) : null}
           <button type="button" className="btn btn-ghost btn-danger-ghost btn-icon" onClick={onDelete} title="删除当前账号">
             <IconTrash size={16} />
             <span>删除</span>
@@ -127,8 +108,6 @@ export function AccountsPage() {
   const [deleting, setDeleting] = useState<Account | null>(null);
   const [busyDelete, setBusyDelete] = useState(false);
   const [yggOpen, setYggOpen] = useState(false);
-  /** 皮肤选择器的目标账号：null 表示弹窗关闭。 */
-  const [skinTarget, setSkinTarget] = useState<Account | null>(null);
   /** 登录时没勾「在此设备上保存」的账号：只在本会话内打「临时」标记。 */
   const [tempIds, setTempIds] = useState<string[]>([]);
   const [checking, setChecking] = useState<Record<string, boolean>>({});
@@ -279,7 +258,6 @@ export function AccountsPage() {
           onSwitch={(id) => void switchTo(id)}
           onDelete={() => setDeleting(active)}
           onCopy={() => void copyUuid(active.uuid)}
-          onSkin={() => setSkinTarget(active)}
         />
       ) : null}
 
@@ -320,17 +298,6 @@ export function AccountsPage() {
                     ) : null}
                   </div>
                   <div className="account-row">
-                    {hasSkinService(item) ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => setSkinTarget(item)}
-                        data-open-skin={item.id}
-                      >
-                        <IconSkin size={14} />
-                        皮肤
-                      </button>
-                    ) : null}
                     {ygg ? (
                       <button
                         type="button"
@@ -401,7 +368,6 @@ export function AccountsPage() {
         onLoggedIn={(account, temporary) => void handleYggdrasilLoggedIn(account, temporary)}
       />
 
-      <SkinDialog account={skinTarget} onClose={() => setSkinTarget(null)} />
     </section>
   );
 }
