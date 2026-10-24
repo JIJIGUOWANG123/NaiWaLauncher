@@ -5,6 +5,7 @@ import { formatCount, formatDate } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { Drawer } from "./Drawer";
+import { IconSearch } from "./icons";
 import { ImageLightbox } from "./ImageLightbox";
 import { ErrorState, SkeletonRows } from "./State";
 import { useToast } from "./Toast";
@@ -13,6 +14,15 @@ import { useToast } from "./Toast";
 function providerName(id: ModProviderId, tr: (key: string, vars?: Record<string, string | number>) => string): string {
   if (id === "minekuai") return tr("pages.modDetail.providerMinekuai");
   return id === "modrinth" ? "Modrinth" : "CurseForge";
+}
+
+/**
+ * MCMOD 站内搜索地址。关键词一律 encodeURIComponent：中文标题（如「物品管理器」）
+ * 直接拼进 URL 会被浏览器/主进程截断或转义成乱码，搜索结果页就打不开了。
+ * 导出是为了让桩测能单独断言这个拼接。
+ */
+export function mcmodSearchUrl(keyword: string): string {
+  return "https://search.mcmod.cn/s?key=" + encodeURIComponent(keyword);
 }
 
 /** 版本标签最多展开 10 个，其余折叠成「+N」。 */
@@ -165,6 +175,37 @@ export function ModDetailPanel({
     }
   };
 
+  /**
+   * 搜索词：中文名优先（详情自带译名 → 搜索结果译名 → 原文标题）。
+   * 详情还没回来、或回来但没有标题时为空，此时头部不出现 MCMOD 按钮。
+   */
+  const mcmodKey = (data?.titleZh || titleZh || data?.title || "").trim();
+
+  const openMcmod = async () => {
+    if (!mcmodKey) return;
+    try {
+      await api.app.openExternal(mcmodSearchUrl(mcmodKey));
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    }
+  };
+
+  /** 头部动作：只给内容类详情（模组/插件/整合包/资源包/光影）用；本面板不承载地图。 */
+  const headActions = data && mcmodKey ? (
+    <button
+      type="button"
+      className="btn btn-ghost btn-sm mod-detail-mcmod"
+      onClick={() => void openMcmod()}
+      title={tr("pages.modDetail.mcmodSearchHint", { name: mcmodKey })}
+      aria-label={tr("pages.modDetail.mcmodSearchHint", { name: mcmodKey })}
+      data-action="mcmod-search"
+      data-mcmod-key={mcmodKey}
+    >
+      <IconSearch size={14} />
+      <span className="mod-detail-mcmod-label">{tr("pages.modDetail.mcmodSearch")}</span>
+    </button>
+  ) : null;
+
   const footer = data ? (
     <>
       <p className="mod-detail-foot-hint" data-install-hint>
@@ -202,6 +243,7 @@ export function ModDetailPanel({
       width={720}
       title={zhTitle ?? data?.title ?? fallbackTitle}
       subtitle={data ? `${providerName(data.provider, tr)} · ${data.author} · ${data.slug}` : undefined}
+      headActions={headActions}
       onClose={onClose}
       footer={footer}
     >

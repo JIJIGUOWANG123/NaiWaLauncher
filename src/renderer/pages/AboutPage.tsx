@@ -7,6 +7,8 @@ import avatarSakura from "../assets/team/sakura.png";
 import brandBmclapi from "../assets/brand/bmclapi.png";
 import brandDogfight from "../assets/brand/dogfight.png";
 import brandMinekuai from "../assets/brand/minekuai.png";
+import brandMcmod from "../assets/brand/mcmod.png";
+import brandMcbbs from "../assets/brand/mcbbs.png";
 import brandQq from "../assets/brand/qq.png";
 import brandModrinth from "../assets/brand/modrinth.png";
 import brandCurseforge from "../assets/brand/curseforge.png";
@@ -83,6 +85,9 @@ const CURSEFORGE_URL = "https://www.curseforge.com/minecraft";
 const MIRROR_URL = "https://bmclapi2.bangbang93.com/";
 /** 麦块社区（模组/插件的中文搜索源之一）。 */
 const MINEKUAI_URL = "https://bbs.minekuai.com/";
+/** MC 百科（MCMOD）与 MCBBS 社区。 */
+const MCMOD_URL = "https://www.mcmod.cn/";
+const MCBBS_URL = "https://www.mcbbs.co/";
 /** 游戏官网（关于页「最新新闻」也从这个站抓）。 */
 const MINECRAFT_URL = "https://www.minecraft.net/zh-hans";
 
@@ -111,6 +116,8 @@ const THANKS: ThanksEntry[] = [
   { key: "curseforge", titleKey: "about.link.curseforge", hintKey: "pages.about.thanks.curseforgeHint", image: brandCurseforge, url: CURSEFORGE_URL },
   { key: "mirror", titleKey: "about.link.mirror", hintKey: "about.link.mirrorHint", image: brandBmclapi, url: MIRROR_URL },
   { key: "minekuai", titleKey: "pages.about.thanks.minekuai", hintKey: "pages.about.thanks.minekuaiHint", image: brandMinekuai, url: MINEKUAI_URL },
+  { key: "mcmod", titleKey: "pages.about.thanks.mcmod", hintKey: "pages.about.thanks.mcmodHint", image: brandMcmod, url: MCMOD_URL },
+  { key: "mcbbs", titleKey: "pages.about.thanks.mcbbs", hintKey: "pages.about.thanks.mcbbsHint", image: brandMcbbs, url: MCBBS_URL },
   { key: "steam302", titleKey: "about.link.steam302", hintKey: "about.link.steam302Hint", image: brandDogfight, url: RECOMMEND_URL },
   { key: "sakura", titleKey: "pages.about.team.sakura", hintKey: "pages.about.role.net", image: avatarSakura, url: SAKURA_FRP_URL },
   { key: "terracotta", titleKey: "pages.about.team.terracotta", hintKey: "pages.about.thanks.terracottaHint", Icon: IconGithub, url: TERRACOTTA_URL },

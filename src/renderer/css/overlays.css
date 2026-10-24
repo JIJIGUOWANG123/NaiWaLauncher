@@ -598,3 +598,17 @@
   opacity: 1;
 }
 
+
+/* 头部动作区（0.4.3）：auto 外边距吃掉多余空间，动作贴着关闭按钮，标题再长也挤不走它 */
+.drawer-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-left: auto;
+}
+
+/* 有动作区时标题先让位（不传 headActions 的抽屉结构完全不变） */
+.drawer-head > .drawer-titles {
+  min-width: 0;
+}

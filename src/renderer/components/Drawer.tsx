@@ -3,11 +3,13 @@ import { useT } from "../lib/i18n";
 import { IconClose } from "./icons";
 
 export function Drawer({
-  open, title, subtitle, onClose, children, footer, width,
+  open, title, subtitle, headActions, onClose, children, footer, width,
 }: {
   open: boolean;
   title: string;
   subtitle?: string;
+  /** 头部动作区：渲染在标题右侧、关闭按钮左侧（详情页的「MCMOD 搜索」等）。 */
+  headActions?: ReactNode;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
@@ -46,6 +48,7 @@ export function Drawer({
             <h2 className="modal-title">{title}</h2>
             {subtitle ? <p className="modal-sub">{subtitle}</p> : null}
           </div>
+          {headActions ? <div className="drawer-head-actions">{headActions}</div> : null}
           <button type="button" className="icon-btn" onClick={onClose} aria-label={t("pages.common.close")}>
             <IconClose size={18} />
           </button>

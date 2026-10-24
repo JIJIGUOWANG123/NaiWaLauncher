@@ -1279,3 +1279,27 @@
   line-height: 1.5;
   color: var(--warning-ink, var(--text-faint));
 }
+
+/* ---------- MCMOD 搜索按钮（0.4.3）：详情抽屉头部，标题右侧 ---------- */
+
+.mod-detail-mcmod {
+  /* 头部不换行，按钮自己永远不压缩，标题让位 */
+  flex: none;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.mod-detail-mcmod svg {
+  flex: none;
+}
+
+/* 窄窗口只留图标：文字 span 收起（aria-label 仍带完整说明，按钮照样可点可聚焦） */
+@media (max-width: 900px) {
+  .mod-detail-mcmod {
+    padding: 5px 8px;
+  }
+
+  .mod-detail-mcmod-label {
+    display: none;
+  }
+}

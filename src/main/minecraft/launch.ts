@@ -230,6 +230,17 @@ async function resolveIdentity(instance: InstanceMeta): Promise<LaunchIdentity> 
 }
 
 /**
+ * 纯函数：这次启动的身份是不是「微软正版」（0.4.3）。
+ * 依据 LaunchIdentity：resolveIdentity 里只有微软分支返回 userType "msa"，其 accessToken 是从
+ * Minecraft services 换来的真令牌；离线账号 / 未登录回退一律是 OFFLINE_TOKEN（"0"），
+ * 第三方账号是 userType "mojang" + 自有令牌。所以 msa + 非占位令牌 == 正版。
+ * 正版的皮肤/披风由 Mojang 官方下发，本地注入（本地皮肤 API / CustomSkinLoader 目录）会把它盖掉。
+ */
+export function isOfficialSkinIdentity(identity: Pick<LaunchIdentity, "userType" | "accessToken">): boolean {
+  return identity.userType === "msa" && identity.accessToken.length > 0 && identity.accessToken !== OFFLINE_TOKEN;
+}
+
+/**
  * 纯函数：本地皮肤 API 的注入参数（自检直接断言，避免为了它去跑完整启动流程）。
  * -javaagent 必须在主类之前进入 JVM，调用方把它放到 jvm 参数最前面。
  */
@@ -240,8 +251,14 @@ export function offlineSkinArgs(jarPath: string, apiBaseUrl: string): string[] {
 /**
  * 离线账号 + 选了本地皮肤/披风：起本地皮肤 API 并返回注入参数。
  * 任何一步失败都只 warn 并返回空数组 —— 降级到「装 CustomSkinLoader」的老路，绝不阻断启动。
+ * 0.4.3：正版账号一律先返回空（官方皮肤优先），离线 / 未登录行为不变。导出仅为自检直接调用。
  */
-async function offlineLocalSkinInjection(instance: InstanceMeta, identity: LaunchIdentity): Promise<string[]> {
+export async function offlineLocalSkinInjection(instance: InstanceMeta, identity: LaunchIdentity): Promise<string[]> {
+  // 官方皮肤优先：正版账号的皮肤/披风由 Mojang 下发，本地注入会盖掉它
+  if (isOfficialSkinIdentity(identity)) {
+    log.info("正版账号：优先使用官方皮肤，已跳过本地皮肤注入");
+    return [];
+  }
   const accountId = identity.offlineAccountId;
   if (!accountId) return [];
   // 注入 javaagent 是杀毒软件重点盯的行为：默认关闭，只有用户显式打开才走这条路

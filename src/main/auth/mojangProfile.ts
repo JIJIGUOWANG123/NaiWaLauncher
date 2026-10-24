@@ -299,6 +299,7 @@ async function readUploadBytes(req: MojangSkinUploadRequest): Promise<{ multipar
 /**
  * IPC skin:mojangUpload：把本地 PNG（multipart）或图片直链（JSON）设成官方皮肤。
  * 失败一律落成 ok=false + 可读原因，界面只 toast。
+ * 0.4.3 起界面已不提供（正版皮肤只读，只能去微软官网改），这里仅保留接口不动 IPC 契约。
  */
 export async function uploadMojangSkin(req: MojangSkinUploadRequest): Promise<MojangActionResult> {
   let account: Account | null;
@@ -336,7 +337,7 @@ export async function uploadMojangSkin(req: MojangSkinUploadRequest): Promise<Mo
 }
 
 /**
- * IPC skin:mojangSetCape：切换/移除当前披风。
+ * IPC skin:mojangSetCape：切换/移除当前披风。（0.4.3 界面仍保留「应用 / 移除披风」按钮，接口照常使用。）
  * 官方接口是 PUT /minecraft/profile/capes/active，body {"capeId": "<id>"}；
  * 移除当前披风用同一个接口传 {"capeId": null}（详见回报里的说明与未验证项）。
  */

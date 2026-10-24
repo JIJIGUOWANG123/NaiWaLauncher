@@ -2,7 +2,7 @@
 
 <img src="logo.png" width="120" align="right" alt="NaiWa Launcher" />
 
-现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，界面内显示「奶娃启动器 / NaiWa Launcher」。当前版本 **0.4.2**。
+现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，界面内显示「奶娃启动器 / NaiWa Launcher」。当前版本 **0.4.3**。
 
 主开发者 **奶龙** ｜ 协助开发者 **小七** ｜ 工具提供 **DeepSeek**
 
@@ -53,7 +53,9 @@
 ### 皮肤与披风
 - **本地皮肤/披风**：`NaiWa/skins`、`NaiWa/capes` 下放图片即可给离线账号使用（不必上传到皮肤站）；实例内可不装模组生效（可选本地皮肤 API）
 - **内置皮肤/披风**：随程序分发的只读资源（`resources/skins`、`resources/capes`），界面里只能应用不能修改
-- 第三方账号：只预览皮肤站上已装好的皮肤；微软账号：只预览官方皮肤与披风；自定义仅对离线账号开放
+- **微软正版**：只**显示**当前在用的官方皮肤与披风，**不提供修改**——要改请去 [微软官网的皮肤与披风页面](https://www.minecraft.net/zh-hans/msaprofile/mygames/editskin)（启动器里点「去微软官网修改皮肤/披风」会按界面语言打开对应语言版本）；披风列表只显示你拥有的名字，仍可一键切换/移除
+- **官方皮肤优先**：用正版账号启动时启动器不会再注入本地皮肤/披风，避免 CustomSkinLoader 那套把官方皮肤盖掉（离线账号不受影响）
+- 第三方账号：只预览皮肤站上已装好的皮肤；自定义皮肤仅对离线账号开放
 - 推荐素材站：皮肤 <https://littleskin.cn/> ｜ 披风 <https://mcstat.org/zh-Hans/skins/capes>
 
 ### 开服
@@ -129,7 +131,7 @@
 - **游戏语言跟随启动器**：切换语言后启动游戏，会按当前语言写 `options.txt`（中文→`zh_cn`、English→`en_us`、日本語→`ja_jp`），只改 `lang:` 一行、其余设置与换行风格原样保留；设置里的「强制游戏用中文」默认关闭，打开后一律简体中文
 - **本地目录**（设置页）：一键打开启动器目录 / 游戏目录
 
-> 关于页分两块卡片网格：**核心团队**（奶龙 / 小七 / DeepSeek，奶龙与小七指向源码仓库）与**链接与致谢**（项目主页、问题反馈、QQ 群、Modrinth、CurseForge、MCIM/BMCLAPI、麦块社区、Steamcommunity 302、樱花穿透、陶瓦联机，共 10 项），全部可点击、可键盘聚焦，各用对应官方标志。
+> 关于页分两块卡片网格：**核心团队**（奶龙 / 小七 / DeepSeek，奶龙与小七指向源码仓库）与**链接与致谢**（项目主页、问题反馈、QQ 群、Modrinth、CurseForge、MCIM/BMCLAPI、麦块社区、MC 百科（MCMOD）、MCBBS、Steamcommunity 302、樱花穿透、陶瓦联机、Minecraft 官网，共 13 项），全部可点击、可键盘聚焦，各用对应官方标志。
 
 ## 截图
 

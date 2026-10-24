@@ -491,11 +491,6 @@
   min-width: 150px;
 }
 
-.skin-mojang-url {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
 .skin-mojang-capes {
   display: flex;
   flex-direction: column;
@@ -509,6 +504,37 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* 正版皮肤只读说明块：没有上传入口，只有一句说明 + 「去微软官网修改」 */
+.skin-mojang-readonly {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in srgb, var(--accent-2) 30%, transparent);
+  background: var(--surface-recess-strong);
+}
+
+/* 披风卡只显示名字（不再画贴图）：卡片骨架改成一行名字 + 小号按钮 */
+.skin-cape-card {
+  gap: 6px;
+  padding: 8px;
+}
+
+.skin-cape-card-main {
+  align-items: flex-start;
+  gap: 4px;
+  padding: 4px 6px;
+  cursor: default;
+}
+
+/* 「使用中」内联在名字下面，不用绝对定位压住名字 */
+.skin-cape-inuse {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
 }
 
 /* 披风卡里「应用 / 使用中」按钮：卡片底部一条，保持和皮肤卡同样的骨架 */
@@ -538,11 +564,13 @@
   opacity: 0.75;
 }
 
-.skin-card-apply.is-active {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
-  background: color-mix(in srgb, var(--ok) 10%, transparent);
-  opacity: 1;
+/* 应用按钮做小：披风卡只有一行名字，按钮不该再占满高度/宽度 */
+.skin-card-apply-sm {
+  width: auto;
+  align-self: flex-start;
+  margin: 0 6px 6px;
+  padding: 2px 8px;
+  font-size: 11px;
 }
 
 @media (max-width: 780px) {

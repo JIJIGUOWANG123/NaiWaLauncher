@@ -1296,6 +1296,10 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
 
   // ---- 关于页 · 链接与致谢卡片（0.4.0） ----
   "pages.about.thanks.projectHint": D("GitHub · 源码与发布", "GitHub · source and releases", "GitHub · ソースとリリース"),
+  "pages.about.thanks.mcmod": D("MC 百科", "MCMOD", "MCMOD"),
+  "pages.about.thanks.mcmodHint": D("中文模组百科与教程", "Chinese mod wiki & guides", "中国語の MOD 百科・ガイド"),
+  "pages.about.thanks.mcbbs": D("MCBBS 社区", "MCBBS community", "MCBBS コミュニティ"),
+  "pages.about.thanks.mcbbsHint": D("中文讨论社区", "Chinese discussion forum", "中国語の掲示板コミュニティ"),
   "pages.about.thanks.minekuai": D("麦块社区", "Minekuai", "Minekuai"),
   "pages.about.thanks.minekuaiHint": D("中文模组与插件索引", "Chinese mod & plugin index", "中国語の Mod・プラグイン索引"),
   "pages.about.thanks.modrinthHint": D("开源模组社区", "Open mod community", "オープンな Mod コミュニティ"),
@@ -1499,6 +1503,8 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
   "pages.modDetail.translating": D("正在翻译…", "Translating…", "翻訳中…"),
   "pages.modDetail.showSource": D("原文", "Original", "原文"),
   "pages.modDetail.showTranslated": D("译文", "Translated", "訳文"),
+  "pages.modDetail.mcmodSearch": D("MCMOD 搜索", "Search on MCMOD", "MCMOD で検索"),
+  "pages.modDetail.mcmodSearchHint": D("在 MCMOD 搜索「{name}」", "Search MCMOD for “{name}”", "MCMOD で「{name}」を検索"),
   // ---- 关于页改版（0.4.2）：能力卡文案调整 + 三张新卡 + 最新新闻 ----
   // 覆盖 i18n.ts 里的旧文案：加载器从「三种」改为「五种」（LoaderKind 的全部取值）
   "about.capability.fabric": D("支持五种主流加载器", "Five mainstream loaders", "主要5種のローダーに対応"),
@@ -1588,6 +1594,23 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
   ),
   "pages.skins.inUse": D("使用中", "In use", "使用中"),
   "pages.skins.capeCount": D("{count} 件", "{count} capes", "{count} 件"),
+  // 缩略图已不再渲染（披风只显示名字）；键保留给旧数据与回归脚本
   "pages.skins.capeImageFailed": D("缩略图加载失败", "Thumbnail failed to load", "サムネイルの読み込みに失敗"),
+  // ---- 皮肤页：正版皮肤只读 + 官方皮肤优先（0.4.3） ----
+  "pages.skins.skinReadonly": D(
+    "正版皮肤只能在微软官网修改，这里只显示当前使用中的皮肤。",
+    "A premium skin can only be changed on the Microsoft website — this page just shows the skin currently in use.",
+    "正規スキンは Microsoft の公式サイトでのみ変更できます。ここでは現在使用中のスキンを表示するだけです。",
+  ),
+  "pages.skins.editSkinOnWeb": D(
+    "去微软官网修改皮肤/披风",
+    "Change skin or cape on the Microsoft website",
+    "Microsoft 公式サイトでスキン／マントを変更",
+  ),
+  "pages.skins.officialPriority": D(
+    "正版账号登录时官方皮肤优先显示：启动器不会用本地皮肤盖掉它（本地皮肤库仍可用于离线账号，或手动应用到实例）。",
+    "With a premium account the official skin always wins: the launcher never overlays it with a local skin (the local skin library still works for offline accounts or a manual per-instance apply).",
+    "正規アカウントでログインすると公式スキンが優先されます：ランチャーがローカルスキンで上書きすることはありません（ローカルスキンはオフラインアカウントや手動のインスタンス適用で引き続き使えます）。",
+  ),
 };
 
