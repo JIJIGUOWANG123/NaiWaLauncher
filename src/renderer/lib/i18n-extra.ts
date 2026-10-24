@@ -809,4 +809,40 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
   "pages.netTera.logSubtitle": D("陶瓦自己的 application.log 与启动器记录，排查联机问题时用它", "Terracotta's own application.log plus the launcher's log lines", "陶瓦の application.log とランチャーの記録です"),
   "pages.netTera.logLoading": D("读取日志中…", "Reading the log…", "ログを読み込み中…"),
   "pages.netTera.logEmpty": D("日志为空。", "The log is empty.", "ログは空です。"),
+
+  // ---- 启动设置：信任 Windows 证书库 ----
+  "pages.launchSettings.javaTrustLabel": D("Java 证书库", "Java certificates", "Java 証明書"),
+  "pages.launchSettings.javaTrustToggle": D("信任 Windows 证书库", "Trust the Windows certificate store", "Windows の証明書ストアを信頼する"),
+  "pages.launchSettings.javaTrustHint": D(
+    "只在用 Steamcommunity302 这类 HTTPS 代理、日志里出现 PKIX path building failed 时才需要开启：开启后启动器会加 -Djavax.net.ssl.trustStoreType=WINDOWS-ROOT，让 Java 信任系统里的根证书（你自己设过 trustStore 参数时不会覆盖）",
+    "Only needed when an HTTPS proxy such as Steamcommunity302 is in use and the log shows PKIX path building failed. When on, the launcher adds -Djavax.net.ssl.trustStoreType=WINDOWS-ROOT so Java trusts the system root certificates (your own trustStore arguments are never overridden).",
+    "Steamcommunity302 のような HTTPS プロキシを使っていて、ログに PKIX path building failed が出るときだけ必要です。オンにすると -Djavax.net.ssl.trustStoreType=WINDOWS-ROOT が付き、Java がシステムのルート証明書を信頼します（自分で設定した trustStore 引数は上書きしません）。",
+  ),
+  "pages.launchSettings.persistJavaTrust": D("已保存 Java 证书库设置", "Java certificate setting saved", "Java 証明書の設定を保存しました"),
+
+  // ---- 启动失败弹窗 ----
+  "pages.launchFail.title": D("启动失败", "Launch failed", "起動に失敗しました"),
+  "pages.launchFail.subtitle": D("实例「{name}」异常退出（exit={code}）", "Instance {name} exited unexpectedly (exit={code})", "インスタンス「{name}」が異常終了しました（exit={code}）"),
+  "pages.launchFail.kindGpu": D("显卡驱动崩溃", "Graphics driver crash", "グラフィックドライバーのクラッシュ"),
+  "pages.launchFail.kindCert": D("证书不被信任", "Certificate not trusted", "証明書が信頼されていない"),
+  "pages.launchFail.kindJava": D("Java 版本不对", "Wrong Java version", "Java のバージョン不一致"),
+  "pages.launchFail.kindMemory": D("内存不足", "Out of memory", "メモリ不足"),
+  "pages.launchFail.kindJvm": D("JVM 参数错误", "Bad JVM arguments", "JVM 引数の誤り"),
+  "pages.launchFail.kindMods": D("模组问题", "Mod problem", "Mod の問題"),
+  "pages.launchFail.kindUnknown": D("原因未确定", "Cause unclear", "原因は特定できず"),
+  "pages.launchFail.adviceTitle": D("建议步骤", "What to do", "対処"),
+  "pages.launchFail.modsTitle": D("可能相关的模组（{count}）", "Possibly related mods ({count})", "関連していそうな Mod（{count}）"),
+  "pages.launchFail.modsNote": D(
+    "这些名字是从日志里抽出来的，供你对照排查；不一定是坏掉的那个",
+    "These names were extracted from the log to help you narrow it down — they are not necessarily the broken one",
+    "ログから抽出した名前です。原因の候補として照合してください（壊れているとは限りません）",
+  ),
+  "pages.launchFail.logPath": D("本次启动日志：{path}", "Launch log: {path}", "今回の起動ログ：{path}"),
+  "pages.launchFail.openLog": D("打开日志", "Open log", "ログを開く"),
+  "pages.launchFail.openDir": D("打开实例目录", "Open instance folder", "インスタンスフォルダーを開く"),
+  "pages.launchFail.exportDiagnosis": D("导出诊断包", "Export diagnosis package", "診断パッケージを書き出す"),
+  "pages.launchFail.exporting": D("正在导出…", "Exporting…", "書き出し中…"),
+  "pages.launchFail.exportDone": D("诊断包已保存：{path}", "Diagnosis package saved: {path}", "診断パッケージを保存しました：{path}"),
+  "pages.launchFail.exportFailed": D("导出诊断包失败：{error}", "Failed to export the diagnosis package: {error}", "診断パッケージの書き出しに失敗しました：{error}"),
+  "pages.launchFail.reveal": D("定位文件", "Show in folder", "フォルダーで表示"),
 };

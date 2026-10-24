@@ -27,11 +27,11 @@ import { SOURCES, probeSources, setActiveSource } from "../core/sources";
 import { listVersions } from "../minecraft/manifest";
 import { createInstance, deleteInstance, instanceDiskUsage, listInstances, listSaves, setLoader, updateInstance } from "../minecraft/instances";
 import { exportInstance, importInstance } from "../minecraft/share";
-import { launchInstance } from "../minecraft/launch";
+import { exportLaunchDiagnosis, launchInstance } from "../minecraft/launch";
 import { installLoader, listLoaderVersions } from "../loaders/index";
 import { installJava, listInstalledJava, listJavaReleases, listJavaSources } from "../java/index";
 import { githubDownloadDir, probeAccelerators, startGithubDownload } from "../net/github";
-import type { GithubDownloadRequest } from "../../shared/ipc";
+import type { GithubDownloadRequest, LaunchDiagnosisExport } from "../../shared/ipc";
 import { contentDirForInstance } from "../mods/install";
 import { listMapEntries } from "../mods/minekuai";
 import { checkUpdates, getModDependencies, getModDetail, installMod, installed, listInstalledContent, listInstalledMods, installModpack, listCategories, listFilterOptions, listModFiles, remove as removeMod, searchMods, update as updateMod } from "../mods/index";
@@ -296,6 +296,8 @@ export function registerIpc(): void {
     if (visibility === "minimize") win.minimize();
     else if (visibility === "close") win.close();
   });
+  // 启动失败诊断包：zip 里带本次启动日志、hs_err、最新崩溃报告、最新启动器日志与 diagnosis.txt
+  handle<LaunchDiagnosisExport>(IPC.gameExportDiagnosis, (id: string, logPath: string) => exportLaunchDiagnosis(id, logPath));
   handle<InstanceMeta>(IPC.instancesSetLoader, async (id: string, loader: LoaderKind, loaderVersion?: string) => {
     const instance = (await listInstances()).find((item) => item.id === id);
     if (instance) {

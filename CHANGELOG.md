@@ -1,5 +1,26 @@
 # 更新日志
 
+## 0.3.5
+
+### 启动失败现在会自己说清原因
+- 游戏异常退出后，启动器会读这次启动日志的尾部并**自动诊断**，把结论写进日志（`# 诊断：` / `# 建议：`），同时弹窗告诉你。
+- 能识别六类原因：**显卡驱动崩溃**（帧里出现 `atio6axx.dll` / `nvoglv64.dll` / `ig*icd64.dll` 之类）、**Java 不信任证书**（`PKIX path building failed`，常见于 Steamcommunity302 这类 HTTPS 代理）、**Java 版本不对**（`UnsupportedClassVersionError`）、**内存不足**、**JVM 参数导致起不来**、**模组冲突/缺前置**。
+- 日志按 UTF-8 / GBK 双解码，中文日志不会因为编码变成乱码而漏判。
+
+### 弹窗里能直接看到是哪个模组
+- 弹窗内容：诊断结论 + 2–3 条可操作建议 + **「可能相关的模组」列表**（去重，最多 8 个）。
+- 模组抽取覆盖真实报错形态：Fabric 的 `Mod resolution failed` / `Missing or unsupported mandatory dependencies` / `Incompatible mods found` / `Mod 'xxx' requires …`，Forge/NeoForge 的 `Mod file … is missing` / `Failed to load mod` / `Duplicate mods found` / `Mod ID:`，以及从 `NoSuchMethodError` 的包名反推模组；重复安装的两个 jar 会分别列出。
+- 弹窗按钮：**打开日志** / **打开实例目录** / **导出诊断包** / 关闭；多个实例同时失败按实例排队逐个弹，不会叠窗。
+- **导出诊断包**：默认文件名 `<实例名>-诊断-<时间>.zip`，内含本次启动日志、`hs_err_pid*.log`、最新 crash-report、最近一份启动器日志，以及 `diagnosis.txt`（启动器版本、实例与加载器、使用的 Java 路径与版本、退出码、诊断结论与建议、相关模组、导出时间），方便直接发给别人排查。
+
+### Java 信任 Windows 证书库（解决代理导致的 TLS 失败）
+- 启动设置新增开关「信任 Windows 证书库」：开启后给游戏 JVM 追加 `-Djavax.net.ssl.trustStoreType=WINDOWS-ROOT`，让 Java 读系统根证书。
+- 适用场景：装了 Steamcommunity302 之类的 HTTPS 中间人代理、日志里出现 `PKIX path building failed`，导致正版验证 / 皮肤 / 下载全失败时。默认关闭。
+- 不会覆盖你已有的证书设置：如果实例或模板里已经写了 `-Djavax.net.ssl.trustStore` / `trustStoreType`，启动器不会追加并在日志说明原因。
+
+### 修复：启动参数里的假版本号
+- 以前 `-Dminecraft.launcher.version` 恒为 `0.1.5`（硬编码），现在跟随实际版本（打包后取应用版本，开发态读 `package.json`）。实例导出里同样的兜底常量也一并修正。
+
 ## 0.3.4
 
 ### 联机新增第三种方式：陶瓦联机（Terracotta）

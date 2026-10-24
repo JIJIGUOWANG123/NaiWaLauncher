@@ -3,6 +3,7 @@ import { AppProvider, useApp } from "./lib/store";
 import { TaskProvider } from "./lib/tasks";
 import { ToastProvider } from "./components/Toast";
 import { Sidebar } from "./components/Sidebar";
+import { LaunchFailureDialog } from "./components/LaunchFailureDialog";
 import { TitleBar } from "./components/TitleBar";
 import { InstancesPage } from "./pages/InstancesPage";
 import { AccountsPage } from "./pages/AccountsPage";
@@ -23,6 +24,7 @@ import { iconSrc } from "./lib/appIcon";
 import { backgroundUrl, isVideoFile, mediaUrl, musicUrl } from "./lib/media";
 import { clampInterval, useBackgroundPlayback } from "./lib/background";
 import type { BackgroundMode } from "../shared/types";
+import type { LaunchDiagnosisEvent } from "../shared/ipc";
 import { attachAudio, pauseMusic, playMusic, setMusicVolume } from "./lib/music";
 import { playStartupSound, stopStartupSound } from "./lib/startupSound";
 import { afterFirstFrame, perfMark, perfTime } from "./lib/perf";
@@ -173,6 +175,14 @@ function Shell() {
     ? apiBg?.kind === "video"
     : (isVideoFile(playback.name) || isVideoFile(bgUrl));
 
+  // 启动失败诊断弹窗：按实例 id 去重排队，一次只弹一条，多个实例同时崩溃时不会连弹
+  const [launchFailures, setLaunchFailures] = useState<LaunchDiagnosisEvent[]>([]);
+  useEffect(() => {
+    return api.events.onGameDiagnosis((event) => {
+      setLaunchFailures((prev) => (prev.some((item) => item.instanceId === event.instanceId) ? prev : [...prev, event]));
+    });
+  }, []);
+
   // 首屏：booted 之后这一次 commit 就是用户看到的第一帧主界面
   useEffect(() => {
     if (!booted) return;
@@ -294,6 +304,8 @@ function Shell() {
       </div>
 
       <audio ref={audioRef} className="bg-audio" src={musicSource || undefined} loop preload="auto" />
+
+      <LaunchFailureDialog event={launchFailures[0] ?? null} onClose={() => setLaunchFailures((prev) => prev.slice(1))} />
     </div>
   );
 }

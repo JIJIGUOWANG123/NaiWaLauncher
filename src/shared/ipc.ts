@@ -93,6 +93,8 @@ export const IPC = {
   instancesUpdate: "instances:update",
   instancesDelete: "instances:delete",
   instancesLaunch: "instances:launch",
+  gameDiagnosis: "game:diagnosis",
+  gameExportDiagnosis: "game:exportDiagnosis",
   instancesSaves: "instances:saves",
   instancesExport: "instances:export",
   instancesImport: "instances:import",
@@ -270,6 +272,35 @@ export interface TeraStatus {
   problem?: string;
 }
 
+/** 启动失败诊断的原因分类：决定弹窗标题与建议文案。 */
+export type LaunchDiagnosisKind = "gpu-driver" | "cert" | "java-version" | "memory" | "jvm-startup" | "mods" | "unknown";
+
+/** 游戏进程异常退出后主进程给出的诊断（reason/advice 已按界面语言翻译好，渲染层直接显示）。 */
+export interface LaunchDiagnosisEvent {
+  instanceId: string;
+  instanceName: string;
+  /** 本次启动的日志文件（「打开日志」与导出诊断包都用它）。 */
+  logPath: string;
+  /** 实例游戏目录（「打开实例目录」用）。 */
+  gameDir: string;
+  /** 进程退出码，null 表示被信号结束或未知。 */
+  code: number | null;
+  kind: LaunchDiagnosisKind;
+  /** 一句话原因。 */
+  reason: string;
+  /** 可操作建议（2–3 条）。 */
+  advice: string[];
+  /** 从日志里抽出的可疑模组（id 或 jar 文件名），去重后最多 8 个。 */
+  mods: string[];
+}
+
+/** 导出诊断包的结果：path 为 null 表示用户取消了保存框。 */
+export interface LaunchDiagnosisExport {
+  path: string | null;
+  /** 打进 zip 的文件名（取消时为空数组）。 */
+  files: string[];
+}
+
 /** The surface exposed on window.naiwa by the preload script. */
 export interface NaiwaApi {
   app: {
@@ -298,6 +329,8 @@ export interface NaiwaApi {
     openInstanceMods(instanceId: string): Promise<void>;
     /** 打开指定实例的某一类内容目录：mod → mods、shader → shaderpacks、resourcepack → resourcepacks（跟随版本隔离设置）。 */
     openInstanceContent(instanceId: string, kind: ModContentKind): Promise<void>;
+    /** 把启动失败现场（启动日志、hs_err、最新崩溃报告、启动器日志、diagnosis.txt）打包成 zip，返回保存路径。 */
+    exportLaunchDiagnosis(instanceId: string, logPath: string): Promise<LaunchDiagnosisExport>;
     openExternal(url: string): Promise<void>;
   };
   settings: {
@@ -529,5 +562,7 @@ export interface NaiwaApi {
     onProgress(cb: (p: TaskProgress) => void): () => void;
     onTaskDone(cb: (r: TaskResult) => void): () => void;
     onLog(cb: (l: LogLine) => void): () => void;
+    /** 游戏启动失败诊断推送（进程非 0 退出或启动后 30s 内退出）。 */
+    onGameDiagnosis(cb: (d: LaunchDiagnosisEvent) => void): () => void;
   };
 }

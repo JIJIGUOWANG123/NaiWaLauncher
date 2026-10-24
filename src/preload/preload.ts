@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC } from "../shared/ipc";
-import type { NaiwaApi } from "../shared/ipc";
+import type { LaunchDiagnosisEvent, NaiwaApi } from "../shared/ipc";
 import type { DownloadJob, LogLine, MediaList, ServerConsoleLine, ServerEntry, TaskProgress, TaskResult } from "../shared/types";
 
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> => ipcRenderer.invoke(channel, ...args);
@@ -20,6 +20,7 @@ const api: NaiwaApi = {
     changelog: (limit) => invoke(IPC.appChangelog, limit),
     openInstanceMods: (instanceId) => invoke(IPC.openInstanceMods, instanceId),
     openInstanceContent: (instanceId, kind) => invoke(IPC.openInstanceContent, instanceId, kind),
+    exportLaunchDiagnosis: (instanceId, logPath) => invoke(IPC.gameExportDiagnosis, instanceId, logPath),
     openExternal: (url) => invoke(IPC.openExternal, url),
   },
   settings: {
@@ -173,6 +174,7 @@ const api: NaiwaApi = {
     onProgress: (cb) => { const h = (_: unknown, p: TaskProgress) => cb(p); ipcRenderer.on("task:progress", h); return () => ipcRenderer.off("task:progress", h); },
     onTaskDone: (cb) => { const h = (_: unknown, r: TaskResult) => cb(r); ipcRenderer.on("task:done", h); return () => ipcRenderer.off("task:done", h); },
     onLog: (cb) => { const h = (_: unknown, l: LogLine) => cb(l); ipcRenderer.on("app:log", h); return () => ipcRenderer.off("app:log", h); },
+    onGameDiagnosis: (cb) => { const h = (_: unknown, d: LaunchDiagnosisEvent) => cb(d); ipcRenderer.on(IPC.gameDiagnosis, h); return () => ipcRenderer.off(IPC.gameDiagnosis, h); },
   },
 };
 

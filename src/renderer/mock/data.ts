@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
   closeAction: "ask",
   wallpaperEngineDir: "",
   memoryOptimize: true,
+  javaTrustWindowsCerts: false,
   advancedProcessTweaks: false,
   localSkinApi: false,
   showRelease: true,

@@ -12,6 +12,7 @@ import { logger } from "../core/logger";
 import { getPaths, instanceDir } from "../core/paths";
 import { assertLoaderKind, createInstance, createInstanceRecord, getInstance, listInstances } from "./instances";
 import { isVersionInstalled } from "./install";
+import { launcherVersion } from "./launch";
 import { mt } from "../core/i18n";
 
 const log = logger("share");
@@ -23,8 +24,6 @@ const FORMAT_VERSION = 1;
 const SKIP_TOP_DIRS = new Set(["logs", "crash-reports", "screenshots"]);
 /** 实例名上限，与整合包安装保持同一尺度。 */
 const MAX_NAME_LEN = 32;
-/** 兜底版本号（与 package.json 同步维护）。 */
-const LAUNCHER_VERSION_FALLBACK = "0.1.3";
 
 /** 压缩包根部的清单：包内其余内容都是实例目录的镜像。 */
 interface InstanceManifest {
@@ -40,17 +39,6 @@ interface InstanceManifest {
 
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-function launcherVersion(): string {
-  try {
-    const version = app?.getVersion?.();
-    // 开发态（node 直跑脚本）拿到的是 Electron 版本，不是启动器版本
-    if (version && version !== process.versions.electron) return version;
-  } catch {
-    /* 忽略：没有 electron app 时用兜底版本 */
-  }
-  return LAUNCHER_VERSION_FALLBACK;
 }
 
 /** 默认保存文件名：<实例名>-<mcVersion>.zip，去掉 Windows 不接受的字符。 */

@@ -174,6 +174,18 @@ function LaunchOptionsCard({ settings }: { settings: Settings }) {
           />
         </Field>
 
+        <Field label={tr("pages.launchSettings.javaTrustLabel")}>
+          {/* data-java-trust-windows 带上当前值，便于自检脚本断言 */}
+          <div data-java-trust-windows={settings.javaTrustWindowsCerts ? "on" : "off"}>
+            <Toggle
+              label={tr("pages.launchSettings.javaTrustToggle")}
+              hint={tr("pages.launchSettings.javaTrustHint")}
+              checked={settings.javaTrustWindowsCerts}
+              onChange={(value) => void persist({ javaTrustWindowsCerts: value }, tr("pages.launchSettings.persistJavaTrust"))}
+            />
+          </div>
+        </Field>
+
         <Field
           label={tr("pages.launchSettings.advProcLabel")}
           hint={tr("pages.launchSettings.advProcHint")}

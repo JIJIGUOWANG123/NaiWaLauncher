@@ -162,6 +162,12 @@ export interface Settings {
   /** 游戏内存优化：启动时追加经过验证的 G1GC 参数（减少 GC 停顿），实例自定义参数仍然优先。 */
   memoryOptimize: boolean;
   /**
+   * 让游戏使用的 Java 信任 **Windows 证书库**（追加 -Djavax.net.ssl.trustStoreType=WINDOWS-ROOT）。
+   * Java 默认只读自带 cacerts，遇到 Steamcommunity302 这类 HTTPS 中间人代理会报
+   * PKIX path building failed，导致正版验证/皮肤/Modrinth 下载失败。默认关闭。
+   */
+  javaTrustWindowsCerts: boolean;
+  /**
    * 同时能运行几个游戏实例：one = 只允许一个（默认），unlimited = 不限。
    * 默认只开一个，避免用户连点启动把内存吃满。
    */

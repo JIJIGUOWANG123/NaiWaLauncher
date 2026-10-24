@@ -21,10 +21,13 @@ import {
   MOCK_ROOT, MOCK_SAVES, MOCK_SCANNED_CONTENT, MOCK_SOURCES, MOCK_STARTUP_SOUND, MOCK_VERSIONS,
   mockDependencyFile, mockDetailFor, mockFiles, mockFindProject, mockIconUrl, mockLoaderVersions,
 } from "./data";
-import type { TeraStatus } from "../../shared/ipc";
+import type { LaunchDiagnosisEvent, TeraStatus } from "../../shared/ipc";
 import { emitDone, emitProgress, mockBus } from "./emitter";
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** 预览模式下没有主进程：启动失败诊断的订阅者放这里（等价于 Electron 的 game:diagnosis）。 */
+const mockDiagnosis = new Set<(event: LaunchDiagnosisEvent) => void>();
 
 /**
  * 浏览器预览下的调用日志：自检脚本据此断言某个 IPC 方法真的被调用过
@@ -682,6 +685,13 @@ export function createMockApi(): NaiwaApi {
         if (normalized !== root && !normalized.startsWith(`${root}/`)) {
           throw new Error(`路径不在启动器根目录内，已拒绝：${target}`);
         }
+      },
+      exportLaunchDiagnosis: async (instanceId: string, logPath: string) => {
+        // 浏览器预览下没有保存框：直接当作「用户取消」，界面不该弹出假成功
+        trace("app.exportLaunchDiagnosis", { instanceId, logPath });
+        console.info("[mock] 导出诊断包", instanceId, logPath);
+        await sleep(120);
+        return { path: null, files: [] };
       },
       revealInFolder: async (target: string) => {
         // 与主进程一致：showItemInFolder 不受根目录守卫限制，导出到「下载」目录也能定位。
@@ -2096,6 +2106,10 @@ export function createMockApi(): NaiwaApi {
       onLog: (cb) => {
         mockBus.log.add(cb);
         return () => { mockBus.log.delete(cb); };
+      },
+      onGameDiagnosis: (cb) => {
+        mockDiagnosis.add(cb);
+        return () => { mockDiagnosis.delete(cb); };
       },
     },
   };

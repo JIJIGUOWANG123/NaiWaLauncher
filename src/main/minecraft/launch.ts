@@ -1,9 +1,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync } from "node:fs";
+import { createWriteStream, existsSync, readFileSync } from "node:fs";
 import { promises as fs } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Account, InstanceMeta, ProcessPriority, WindowMode } from "../../shared/types";
+import AdmZip from "adm-zip";
+import { IPC, type LaunchDiagnosisEvent, type LaunchDiagnosisExport, type LaunchDiagnosisKind } from "../../shared/ipc";
 import { getActiveAccount } from "../auth/accounts";
 import { ensureFreshToken, resolveMinecraftSession } from "../auth/microsoft";
 import {
@@ -55,7 +57,46 @@ function messageOfLaunch(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-const LAUNCHER_VERSION = "0.1.5";
+/** 版本号在进程里不会变，读一次就够。 */
+let launcherVersionCache: string | null = null;
+
+/** 打包后 app.getVersion() 就是 package.json 的 version；node 直跑（自检脚本）时没有 electron。 */
+function readAppVersion(): string | null {
+  try {
+    // 延迟 require：launch.ts 也会被自检脚本直接 require，那里没有 electron 模块
+    const electron = require("electron") as { app?: { getVersion?: () => string } } | undefined;
+    const version = electron?.app?.getVersion?.();
+    // 开发态拿到的是 Electron 版本，不是启动器版本
+    if (typeof version === "string" && version.length > 0 && version !== process.versions.electron) return version;
+  } catch {
+    /* 没有 electron */
+  }
+  return null;
+}
+
+/** 退路：读 package.json 的 version（dist-electron/main/minecraft → 项目根，打包后 → app 根）。 */
+function readPackageVersion(): string | null {
+  const candidates = [join(__dirname, "..", "..", "..", "package.json"), join(process.cwd(), "package.json")];
+  for (const file of candidates) {
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as { version?: unknown };
+      if (typeof parsed.version === "string" && parsed.version.length > 0) return parsed.version;
+    } catch {
+      /* 试下一个 */
+    }
+  }
+  return null;
+}
+
+/**
+ * 真实启动器版本，写进 -Dminecraft.launcher.version 与 ${launcher_version} 变量。
+ * 这里以前写死 "0.1.5"：游戏日志里的版本号一直是假的，出问题时对不上是哪个启动器版本。
+ */
+export function launcherVersion(): string {
+  if (launcherVersionCache) return launcherVersionCache;
+  launcherVersionCache = readAppVersion() ?? readPackageVersion() ?? "0.0.0";
+  return launcherVersionCache;
+}
 // 离线模式：服务端只校验令牌前缀，给个占位值即可
 const OFFLINE_TOKEN = "0";
 const USER_TYPE = "legacy";
@@ -421,7 +462,7 @@ export async function buildLaunchArgs(instance: InstanceMeta): Promise<{ exe: st
     assets_index_name: assetIndexName,
     natives_directory: nativesDir,
     launcher_name: brand,
-    launcher_version: LAUNCHER_VERSION,
+    launcher_version: launcherVersion(),
     classpath: classpath.join(";"),
     classpath_separator: ";",
     library_directory: paths.libraries,
@@ -493,17 +534,32 @@ export async function buildLaunchArgs(instance: InstanceMeta): Promise<{ exe: st
   }
 
   const extraJvmArgs = splitArgs(instance.extraJvmArgs ?? "");
+  // 「信任 Windows 证书库」：Java 默认不读 Windows 根证书，用 Steamcommunity302 这类 HTTPS 代理时
+  // 会因为代理的自签证书报 PKIX path building failed。开启后补一个 WINDOWS-ROOT；
+  // 用户/版本模板已经显式设过 trustStore 或 trustStoreType 时不碰，免得覆盖别人的证书配置。
+  const trustStoreArgs: string[] = [];
+  const explicitTrustStore = [...extraJvmArgs, ...jvmArgs].filter(
+    (arg) => arg.startsWith("-Djavax.net.ssl.trustStore=") || arg.startsWith("-Djavax.net.ssl.trustStoreType="),
+  );
+  if (settings.javaTrustWindowsCerts === true) {
+    if (explicitTrustStore.length > 0) {
+      log.info("已跳过 -Djavax.net.ssl.trustStoreType=WINDOWS-ROOT：已有显式 trustStore 参数 " + explicitTrustStore.join(" "));
+    } else {
+      trustStoreArgs.push("-Djavax.net.ssl.trustStoreType=WINDOWS-ROOT");
+    }
+  }
   // 原版 JVM 模板本身就带 -Dminecraft.launcher.brand/version（值来自 launcher_name/launcher_version），
   // 只有模板缺这两个属性时才补，避免重复 -D；玩家自定义 JVM 参数放在后面，仍可覆盖
   const identityArgs = [
     ...(jvmArgs.some((arg) => arg.startsWith("-Dminecraft.launcher.brand=")) ? [] : ["-Dminecraft.launcher.brand=" + brand]),
-    ...(jvmArgs.some((arg) => arg.startsWith("-Dminecraft.launcher.version=")) ? [] : ["-Dminecraft.launcher.version=" + LAUNCHER_VERSION]),
+    ...(jvmArgs.some((arg) => arg.startsWith("-Dminecraft.launcher.version=")) ? [] : ["-Dminecraft.launcher.version=" + launcherVersion()]),
   ];
   // -javaagent 放在最前面：必须在主类之前进入 JVM，也不必和内存参数抢位置
   const jvm = [
     ...injectorArgs,
     ...jvmTuningArgs(instance.memoryMb ?? 2048, getSettings().memoryOptimize !== false),
     ...identityArgs,
+    ...trustStoreArgs,
     ...extraJvmArgs,
     ...jvmArgs,
   ];
@@ -739,6 +795,444 @@ async function applyProcessSettings(pid: number, priority: ProcessPriority, titl
   return shown;
 }
 
+// ---------------------------------------------------------------------------
+// 启动失败自动诊断：游戏非 0 退出（或 30s 内退出）时读本次启动日志尾部，认出常见原因，
+// 结论写回日志 + 推给渲染层弹窗。用户把显卡驱动崩溃、证书不被信任都当成「Java 坏了」，
+// 所以诊断必须说人话，并且给出下一步能做什么。
+// ---------------------------------------------------------------------------
+
+/** 只看日志尾部：hs_err 头、异常栈总在最后几十行里，读整份日志没有额外信息。 */
+const DIAG_TAIL_LINES = 200;
+/** 启动后这段时间内退出，即使退出码是 0 也按「异常退出」诊断一次。 */
+const EARLY_EXIT_MS = 30_000;
+/** 可疑模组最多列这么多个：再多用户也不会逐个去看。 */
+const MAX_RELATED_MODS = 8;
+
+/** 崩溃帧落在这些模块里就是显卡驱动在 OpenGL/Vulkan 里崩的（NVIDIA / AMD / Intel）。 */
+const GPU_DRIVER_FRAME = /atio6axx\.dll|nvoglv64\.dll|nvoglv32\.dll|\big[0-9a-z]*icd64\.dll|amdvlk|vulkan-1\.dll/i;
+
+/** 这些名字会出现在依赖信息里，但不是玩家能装/能删的模组，抽出来只会干扰排查。 */
+const MOD_NOISE = new Set([
+  "minecraft", "java", "javax", "jdk", "forge", "neoforge", "fabric", "fabricloader", "fabric-loader",
+  "fabric_loader", "quilt", "quiltloader", "liteloader", "mojang", "net.minecraft", "net.minecraftforge",
+  "net.neoforged", "org.quiltmc",
+]);
+
+/** 从堆栈里的全限定类名反推模组包名时要丢掉的通用包段。 */
+const PACKAGE_NOISE = new Set(["mixin", "mixins", "impl", "internal", "api", "util", "core", "client", "common", "main"]);
+
+/** 日志里出现这些特征就说明加载器在启动阶段拒绝了这组模组。 */
+const MOD_FAILURE_SIGNATURES: RegExp[] = [
+  /Mod resolution failed/i,
+  /Missing or unsupported mandatory dependencies/i,
+  /Incompatible mods found/i,
+  /Duplicate mods?\s*(?:found|:)/i,
+  /Mod file [^\r\n]{0,120}is missing/i,
+  /Failed to load mod/i,
+  /Exception loading mod/i,
+  /which is missing!/i,
+];
+
+/** 模组名/文件名的抽取规则（[源码, flags]）：Fabric 与 Forge/NeoForge 的报文形态各不相同。 */
+const MOD_PATTERN_SOURCES: Array<[string, string]> = [
+  ["Mod ID:\\s*'?([A-Za-z0-9_.\\-]{2,64})", "gi"],
+  ["Mod ['\"]([A-Za-z0-9_.\\-]{2,64})['\"]", "gi"],
+  ["Requested by:\\s*'?([A-Za-z0-9_.\\-]{2,64})", "gi"],
+  ["([A-Za-z0-9_.\\-]{2,64})\\s+requires\\s+", "gi"],
+  ["requires[^'\"\\n]{0,60}?of\\s+mod\\s+([A-Za-z0-9_.\\-]{2,64})", "gi"],
+  ["modId=([A-Za-z0-9_.\\-]{2,64})", "gi"],
+  ["Mod file\\s+([^\\s]+\\.jar)", "gi"],
+  ["Failed to load mod(?:\\s+file)?\\s*[: ]\\s*([A-Za-z0-9_.\\-]{2,64})", "gi"],
+  ["Exception loading mod\\s*[: ]\\s*([A-Za-z0-9_.\\-]{2,64})", "gi"],
+  ["([A-Za-z0-9_.\\-]+\\.jar)", "g"],
+];
+
+/** 从日志里抽「可能相关」的模组（id 或 jar 文件名），去重保序，最多 8 个。 */
+export function extractRelatedMods(text: string): string[] {
+  const found: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: string): void => {
+    const token = raw.trim().replace(/^['"]|['"]$/g, "").replace(/[.,;:]+$/, "");
+    const key = token.toLowerCase();
+    if (token.length < 2 || token.length > 64 || /^\d+$/.test(token)) return;
+    if (seen.has(key) || MOD_NOISE.has(key)) return;
+    seen.add(key);
+    found.push(token);
+  };
+  // NoSuchMethodError / NoClassDefFoundError 这类只在类名里带模组信息：从堆栈里的包名反推。
+  // Java 9+ 的报文形如 "...NoSuchMethodError: 'void net.foo.bar.Baz.method()'"，所以整行抓再挑最长的全限定名。
+  const stack = /(?:NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError):([^\r\n]{0,200})/g;
+  let frame: RegExpExecArray | null;
+  while ((frame = stack.exec(text)) !== null) {
+    const fqns = frame[1].match(/[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*){2,}/g) ?? [];
+    const shortest = fqns.sort((a, b) => b.length - a.length)[0];
+    if (!shortest) continue;
+    const parts = shortest.split(".").filter((part) => part.length > 0);
+    parts.pop(); // 末尾是方法名/字段名
+    // 类名（首字母大写或内部类 $）不是包名，连同 mixin/impl 这类通用包段一起去掉
+    while (parts.length > 2 && (/^[A-Z$]/.test(parts[parts.length - 1]) || PACKAGE_NOISE.has(parts[parts.length - 1].toLowerCase()))) parts.pop();
+    if (parts.length >= 2) push(parts.join("."));
+  }
+  for (const [source, flags] of MOD_PATTERN_SOURCES) {
+    const pattern = new RegExp(source, flags);
+    let matched: RegExpExecArray | null;
+    while ((matched = pattern.exec(text)) !== null) {
+      if (matched[1]) push(matched[1]);
+      // 零宽匹配要手动前进，否则死循环
+      if (matched.index === pattern.lastIndex) pattern.lastIndex += 1;
+      if (found.length >= MAX_RELATED_MODS * 3) break;
+    }
+  }
+  return found.slice(0, MAX_RELATED_MODS);
+}
+
+export interface LaunchDiagnosis {
+  kind: LaunchDiagnosisKind;
+  /** 一句话原因（已按界面语言翻译）。 */
+  reason: string;
+  /** 可操作建议，逐条（已翻译）。 */
+  advice: string[];
+  /** 可疑模组（只有模组类原因才填）。 */
+  mods: string[];
+}
+
+/** 取日志尾部最多 maxLines 行：崩溃现场只在末尾。 */
+function tailLines(text: string, maxLines: number): string {
+  const lines = text.split(/\r?\n/);
+  return lines.length <= maxLines ? text : lines.slice(lines.length - maxLines).join("\n");
+}
+
+/**
+ * Windows 上游戏日志可能是 UTF-8，也可能是 GBK（Java 默认按系统代码页写）：
+ * 先按 UTF-8 解，出现替换字符再按 GBK 解一次，避免中文报错变成乱码后认不出来。
+ */
+export function decodeGameLog(buffer: Buffer): string {
+  const utf8 = buffer.toString("utf8");
+  if (!utf8.includes("\uFFFD")) return utf8;
+  try {
+    return new TextDecoder("gbk").decode(buffer);
+  } catch {
+    return utf8;
+  }
+}
+
+/** `# C  [atio6axx.dll+0x131c42]` → atio6axx.dll；没有崩溃帧时返回空串。 */
+function crashFrameModule(text: string): string {
+  const matched = /Problematic frame:[\s\S]{0,120}?\[([^\]]+)\]/.exec(text);
+  return matched ? matched[1].split("+")[0].trim() : "";
+}
+
+/** 取 index 所在的那一整行（去 CDATA 包裹与多余空白，截断到 120 字）：报错原文比命中片段更有用。 */
+function lineAt(text: string, index: number): string {
+  const start = text.lastIndexOf("\n", index) + 1;
+  const end = text.indexOf("\n", index);
+  return text
+    .slice(start, end === -1 ? undefined : end)
+    .replace(/\[CDATA\[|\]\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+/** 取一段可供人看的日志片段（去 CDATA 包裹与多余空白，截断到 120 字）。 */
+function snippetOf(text: string, pattern: RegExp, fallback: string): string {
+  const matched = pattern.exec(text);
+  const line = (matched?.[0] ?? "").replace(/\s+/g, " ").replace(/\[CDATA\[|\]\]/g, "").trim();
+  return line.length > 0 ? line.slice(0, 120) : fallback;
+}
+
+/** class file 65.0 ↔ Java 21：major 减去 44 就是 Java 大版本。 */
+function javaMajorOfClassFile(classFileVersion: string | undefined): string | null {
+  if (!classFileVersion) return null;
+  const value = Number(classFileVersion);
+  const major = value - 44;
+  return Number.isFinite(major) && major > 0 ? String(major) : null;
+}
+
+/**
+ * 启动失败原因识别。返回 null 只有一种情况：日志里没内容（进程连一行输出都没有）。
+ * 判定顺序按「越具体越靠前」：显卡驱动崩溃的崩溃头最明确，模组解析失败比内存不足更接近根因。
+ */
+export function diagnoseLaunchLog(rawText: string): LaunchDiagnosis | null {
+  const text = tailLines(rawText, DIAG_TAIL_LINES);
+  if (text.trim().length === 0) return null;
+
+  // a) 显卡驱动崩溃：JVM 崩溃头 + 破坏性帧落在显卡驱动模块里
+  const frame = crashFrameModule(text);
+  if (/EXCEPTION_ACCESS_VIOLATION/i.test(text) && GPU_DRIVER_FRAME.test(frame.length > 0 ? frame : text)) {
+    return {
+      kind: "gpu-driver",
+      reason: mt("launch.diag.gpu.reason", { frame: frame.length > 0 ? frame : "OpenGL" }),
+      advice: [mt("launch.diag.gpu.advice1"), mt("launch.diag.gpu.advice2"), mt("launch.diag.gpu.advice3")],
+      mods: [],
+    };
+  }
+
+  // b) HTTPS 证书不被 Java 信任（Steamcommunity302 之类的代理最常见）
+  if (/PKIX path building failed/i.test(text) || /unable to find valid certification path/i.test(text)) {
+    return {
+      kind: "cert",
+      reason: mt("launch.diag.cert.reason"),
+      advice: [mt("launch.diag.cert.advice1"), mt("launch.diag.cert.advice2")],
+      mods: [],
+    };
+  }
+
+  // c) Java 版本不对：class file 版本号能直接算出需要的与当前的 Java 大版本
+  if (/UnsupportedClassVersionError/.test(text)) {
+    const need = /\(class file version (\d+)(?:\.\d+)?\)/.exec(text)?.[1] ?? /class file version (\d+)\.\d+/.exec(text)?.[1];
+    const have = /class file versions up to (\d+)(?:\.\d+)?/.exec(text)?.[1];
+    const needJava = javaMajorOfClassFile(need);
+    if (!need) {
+      return { kind: "java-version", reason: mt("launch.diag.ver.reasonPlain"), advice: [mt("launch.diag.ver.advice1", { needJava: "?" }), mt("launch.diag.ver.advice2")], mods: [] };
+    }
+    return {
+      kind: "java-version",
+      reason: mt("launch.diag.ver.reason", {
+        need: need + ".0",
+        needJava: needJava ?? "?",
+        have: have ? have + ".0" : "?",
+        haveJava: javaMajorOfClassFile(have) ?? "?",
+      }),
+      advice: [mt("launch.diag.ver.advice1", { needJava: needJava ?? "?" }), mt("launch.diag.ver.advice2")],
+      mods: [],
+    };
+  }
+
+  // d) JVM 根本没能起来：几乎都是额外 JVM 参数写错
+  if (/Could not create the Java Virtual Machine/.test(text) || /Error occurred during initialization of VM/.test(text)) {
+    return {
+      kind: "jvm-startup",
+      reason: mt("launch.diag.jvm.reason", { error: snippetOf(text, /(?:Could not create the Java Virtual Machine|Error occurred during initialization of VM)[^\r\n]{0,80}/, "JVM 初始化失败") }),
+      advice: [mt("launch.diag.jvm.advice1"), mt("launch.diag.jvm.advice2")],
+      mods: [],
+    };
+  }
+
+  // e) 模组问题：除了明确的加载器报错，退栈异常里的包名也算（模组以 mixin 方式崩进原版类时只有包名）
+  const signature = MOD_FAILURE_SIGNATURES.map((pattern) => pattern.exec(text)).find((matched) => matched !== null) ?? null;
+  const relatedMods = extractRelatedMods(text);
+  const stackOnly = signature === null && relatedMods.length > 0 && /(?:NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError)/.test(text);
+  if (signature !== null || stackOnly) {
+    const detail = signature
+      ? lineAt(text, signature.index)
+      : snippetOf(text, /(?:NoSuchMethodError|NoClassDefFoundError|ExceptionInInitializerError)[^\r\n]{0,100}/, "模组崩溃");
+    return {
+      kind: "mods",
+      reason: mt("launch.diag.mods.reason", { detail }),
+      advice: [mt("launch.diag.mods.advice1"), mt("launch.diag.mods.advice2")],
+      mods: relatedMods,
+    };
+  }
+
+  // f) 内存不足
+  if (/OutOfMemoryError|Java heap space/.test(text)) {
+    return {
+      kind: "memory",
+      reason: mt("launch.diag.oom.reason", { error: snippetOf(text, /(?:OutOfMemoryError|Java heap space)[^\r\n]{0,60}/, "OutOfMemoryError") }),
+      advice: [mt("launch.diag.oom.advice1"), mt("launch.diag.oom.advice2")],
+      mods: [],
+    };
+  }
+
+  return null;
+}
+
+/** 写进启动日志的两行（诊断 + 建议）：用户翻日志就能直接看到结论。 */
+export function launchDiagnosisLines(diagnosis: LaunchDiagnosis): string[] {
+  return [
+    mt("launch.diag.logReason", { text: diagnosis.reason }),
+    ...diagnosis.advice.map((step) => mt("launch.diag.logAdvice", { text: step })),
+  ];
+}
+
+/** 兜底结论：日志里没有任何已知特征时也要给用户一个能点的下一步。 */
+function unknownDiagnosis(code: number | null): LaunchDiagnosis {
+  return {
+    kind: "unknown",
+    reason: mt("launch.diag.unknown.reason", { code: code === null ? "?" : String(code) }),
+    advice: [mt("launch.diag.unknown.advice1"), mt("launch.diag.unknown.advice2")],
+    mods: [],
+  };
+}
+
+/** 延迟取 electron：launch.ts 会被自检脚本用 node 直接 require，那时没有 electron 模块。 */
+function electronMain(): {
+  app?: { getVersion?: () => string };
+  // Electron 同名函数区分「(options)」与「(browserWindow, options)」两种调用，所以这里收可变参数
+  dialog?: { showSaveDialog: (...args: any[]) => Promise<{ canceled?: boolean; filePath?: string }> };
+  BrowserWindow?: { getAllWindows?: () => Array<{ webContents?: { send?: (channel: string, payload: unknown) => void } }> };
+} | null {
+  try {
+    return require("electron") as ReturnType<typeof electronMain>;
+  } catch {
+    return null;
+  }
+}
+
+/** 诊断结果推给渲染层：弹窗要能给出「打开日志 / 导出诊断包」这类下一步动作。 */
+function pushLaunchDiagnosis(payload: LaunchDiagnosisEvent): void {
+  const electron = electronMain();
+  for (const win of electron?.BrowserWindow?.getAllWindows?.() ?? []) {
+    try {
+      win.webContents?.send?.(IPC.gameDiagnosis, payload);
+    } catch {
+      /* 窗口正在销毁 */
+    }
+  }
+}
+
+/**
+ * 进程退出后的自动诊断：读本次启动日志尾部 → 认原因 → 结论写回日志并推给界面。
+ * 退出码 0 但 30s 内就退出同样是异常，一并诊断（日志没特征时给「未知」结论）。
+ */
+async function diagnoseAfterExit(instance: InstanceMeta, logPath: string, gameDir: string, code: number | null): Promise<void> {
+  let text: string;
+  try {
+    text = decodeGameLog(await fs.readFile(logPath));
+  } catch (err) {
+    log.warn("读取启动日志失败，跳过自动诊断：" + messageOfLaunch(err));
+    return;
+  }
+  const diagnosis = diagnoseLaunchLog(text) ?? unknownDiagnosis(code);
+  try {
+    await fs.appendFile(logPath, launchDiagnosisLines(diagnosis).join("\r\n") + "\r\n", "utf8");
+  } catch (err) {
+    log.warn("诊断结论写入启动日志失败：" + messageOfLaunch(err));
+  }
+  log.warn("启动失败诊断（" + instance.name + "，exit=" + String(code) + "）：" + diagnosis.reason);
+  // 日志里永远留结论（事后排查只有这一个来源），但界面只在真有问题时才打扰：
+  // 退出码非 0，或确实认出了原因（同一条日志里出现 atio6axx.dll 这类崩溃标记时 exit=0 也要弹）。
+  if (code === 0 && diagnosis.kind === "unknown") {
+    log.info("退出码为 0 且未识别出失败特征，不弹窗（诊断结论已写入日志）");
+    return;
+  }
+  pushLaunchDiagnosis({
+    instanceId: instance.id,
+    instanceName: instance.name,
+    logPath,
+    gameDir,
+    code,
+    kind: diagnosis.kind,
+    reason: diagnosis.reason,
+    advice: diagnosis.advice,
+    mods: diagnosis.mods,
+  });
+}
+
+/** 目录不存在就返回空数组：调用方只关心「有哪些文件」。 */
+async function listDirSafe(dir: string): Promise<string[]> {
+  try {
+    return await fs.readdir(dir);
+  } catch {
+    return [];
+  }
+}
+
+/** Windows 文件名里不能出现的字符一律换成短横线。 */
+function safeFileName(name: string): string {
+  return name.replace(/[\\/:*?"<>|]/g, "-").replace(/[ .]+$/, "").trim() || "instance";
+}
+
+/** diagnosis.txt：把界面上的结论与实例信息固化进包，别人拿到 zip 不用再问是哪台机器哪个 Java。 */
+function diagnosisReport(instance: InstanceMeta, logPath: string, code: string, diagnosis: LaunchDiagnosis, javaPath: string, javaVersion: string): string {
+  const loaderKind = instance.loader ?? "vanilla";
+  const loader = instance.loaderVersion ? loaderKind + " " + instance.loaderVersion : loaderKind;
+  return [
+    mt("launch.diag.reportTitle"),
+    mt("launch.diag.reportTime", { time: new Date().toISOString() }),
+    mt("launch.diag.reportLauncher", { version: launcherVersion() }),
+    mt("launch.diag.reportInstance", { name: instance.name, id: instance.id, mc: instance.mcVersion, loader }),
+    mt("launch.diag.reportJava", { path: javaPath.length > 0 ? javaPath : "?", version: javaVersion.length > 0 ? "(" + javaVersion + ")" : "" }),
+    mt("launch.diag.reportExit", { code }),
+    mt("launch.diag.reportReason", { text: diagnosis.reason }),
+    ...diagnosis.advice.map((step) => mt("launch.diag.reportAdvice", { text: step })),
+    ...(diagnosis.mods.length > 0 ? [mt("launch.diag.reportMods", { list: diagnosis.mods.join(", ") })] : []),
+    mt("launch.diag.reportLog", { path: logPath }),
+  ].join("\r\n");
+}
+
+/**
+ * 导出诊断包：本次启动日志 + hs_err + 最新崩溃报告 + 最新启动器日志 + diagnosis.txt。
+ * 目的只有一个：用户把 zip 发给别人，对方不用再问「你什么版本、什么 Java」。
+ */
+export async function exportLaunchDiagnosis(instanceId: string, logPath: string): Promise<LaunchDiagnosisExport> {
+  const instance = await getInstance(instanceId);
+  if (!instance) throw new Error(mt("inst.notFound", { id: instanceId }));
+  const electron = electronMain();
+  if (!electron?.dialog) throw new Error(mt("launch.diag.exportFailed", { error: "dialog unavailable" }));
+  const paths = getPaths();
+  await fs.mkdir(paths.downloads, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const saveOptions = {
+    title: mt("launch.diag.exportTitle"),
+    // 默认文件名：<实例名>-诊断-<时间>.zip（"诊断" 走 i18n，英文用户看到 diagnosis）
+    defaultPath: join(paths.downloads, safeFileName(instance.name) + "-" + mt("launch.diag.exportFileSuffix") + "-" + stamp + ".zip"),
+    filters: [{ name: "ZIP", extensions: ["zip"] }],
+  };
+  // 挂到窗口上：不挂父窗口时保存框可能被启动器盖住或跑到别的屏幕
+  const parent = electron.BrowserWindow?.getAllWindows?.()[0];
+  const picked = parent ? await electron.dialog.showSaveDialog(parent, saveOptions) : await electron.dialog.showSaveDialog(saveOptions);
+  if (picked.canceled || !picked.filePath) return { path: null, files: [] };
+
+  const entries: Array<{ name: string; path: string }> = [];
+  const addFile = async (file: string, name?: string): Promise<void> => {
+    try {
+      await fs.access(file);
+      entries.push({ name: name ?? basename(file), path: file });
+    } catch {
+      /* 文件不存在就跳过：诊断包允许缺项 */
+    }
+  };
+
+  await addFile(logPath);
+  const gameDir = resolveGameDir(instance);
+  for (const name of await listDirSafe(gameDir)) {
+    if (/^hs_err_pid\d+\.log$/i.test(name)) await addFile(join(gameDir, name));
+  }
+  // 崩溃报告只带最新一份：旧的多半是同一个问题的重复
+  const crashDir = join(gameDir, "crash-reports");
+  const crashFiles: Array<{ name: string; time: number }> = [];
+  for (const name of await listDirSafe(crashDir)) {
+    try {
+      const stat = await fs.stat(join(crashDir, name));
+      if (stat.isFile()) crashFiles.push({ name, time: stat.mtimeMs });
+    } catch {
+      /* 读不到就跳过 */
+    }
+  }
+  // 同一秒内写出的多份报告 mtime 可能相同，名字（含时间戳）倒序兜底，保证总是取最新那份
+  crashFiles.sort((a, b) => b.time - a.time || b.name.localeCompare(a.name));
+  if (crashFiles.length > 0) await addFile(join(crashDir, crashFiles[0].name), crashFiles[0].name);
+  // 启动器主日志只带最新一天的：更早的文件对本次失败没有帮助
+  const launcherLogs = (await listDirSafe(paths.logs)).filter((name) => /^launcher-\d{8}\.log$/.test(name)).sort();
+  const latestLauncherLog = launcherLogs[launcherLogs.length - 1];
+  if (latestLauncherLog) await addFile(join(paths.logs, latestLauncherLog));
+
+  let logText = "";
+  try {
+    logText = decodeGameLog(await fs.readFile(logPath));
+  } catch {
+    /* 日志读不到也要能导出诊断包 */
+  }
+  const diagnosis = diagnoseLaunchLog(logText) ?? unknownDiagnosis(null);
+  const javaPath = /^# exe: (.+)$/m.exec(logText)?.[1]?.trim() ?? (instance.javaPath ?? "");
+  const javaVersion = /JRE version: ([^\r\n]+)/.exec(logText)?.[1]?.trim() ?? "";
+  const code = /进程已退出，code=(-?\d+)/.exec(logText)?.[1] ?? "?";
+  const report = diagnosisReport(instance, logPath, code, diagnosis, javaPath, javaVersion);
+
+  const zip = new AdmZip();
+  for (const entry of entries) {
+    try {
+      zip.addLocalFile(entry.path, "", entry.name);
+    } catch (err) {
+      log.warn("诊断包跳过文件 " + entry.name + "：" + messageOfLaunch(err));
+    }
+  }
+  zip.addFile("diagnosis.txt", Buffer.from(report + "\r\n", "utf8"));
+  await fs.writeFile(picked.filePath, zip.toBuffer());
+  log.info("已导出诊断包：" + picked.filePath);
+  return { path: picked.filePath, files: [...entries.map((entry) => entry.name), "diagnosis.txt"] };
+}
 /**
  * quickPlayLevel：存档文件夹名 → 直接进入该存档；"__new__" → 游戏新建世界并进入；不传则进标题画面。
  */
@@ -791,6 +1285,8 @@ export async function launchInstance(id: string, quickPlayLevel?: string): Promi
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const logPath = join(paths.logs, instance.id + "-" + stamp + ".log");
+  // 记录启动时刻：30s 内退出即使 code=0 也算异常退出，同样要诊断
+  const startedAt = Date.now();
   const stream = createWriteStream(logPath, { flags: "a" });
   const write = (text: string): void => {
     stream.write(text);
@@ -833,8 +1329,14 @@ export async function launchInstance(id: string, quickPlayLevel?: string): Promi
   child.on("exit", (code) => {
     write("# 进程已退出，code=" + String(code) + "\r\n");
     releaseSlot();
-    stream.end();
+    const exitedEarly = Date.now() - startedAt < EARLY_EXIT_MS;
+    // 诊断要读刚写好的日志：先等写入流 finish，再回读，避免读到半行或空文件
+    stream.end(() => {
+      if (code === 0 && !exitedEarly) return;
+      void diagnoseAfterExit(instance, logPath, gameDir, code);
+    });
     if (code !== 0) log.warn("游戏进程退出码 " + String(code) + "，详见 " + logPath);
+    else if (exitedEarly) log.warn("游戏进程启动 " + String(Date.now() - startedAt) + "ms 后就退出了（code=0），仍按异常退出诊断");
   });
   // 分离：主进程退出不影响游戏；日志通过管道继续落盘
   child.unref();

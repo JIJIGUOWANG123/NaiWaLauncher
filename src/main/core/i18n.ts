@@ -678,6 +678,138 @@ export const DICT: Record<string, Entry> = {
   "inst.diskEntryLimit": D("超过 {count} 个条目上限", "over the {count}-entry limit", "{count} 件の上限を超えています"),
   "skins.localServerName": D("NaiWa 本地皮肤", "NaiWa local skins", "NaiWa ローカルスキン"),
   "core.migrationMerge": D("合并", "merged", "統合"),
+
+  // ---- 启动失败自动诊断 / 诊断包导出 ----
+  "launch.diag.logReason": D("# 诊断：{text}", "# Diagnosis: {text}", "# 診断：{text}"),
+  "launch.diag.logAdvice": D("# 建议：{text}", "# Advice: {text}", "# 対処：{text}"),
+  "launch.diag.gpu.reason": D(
+    "显卡驱动崩了：崩溃发生在 {frame}（显卡的 OpenGL/Vulkan 驱动模块），不是 Java 或游戏文件的问题",
+    "The graphics driver crashed: the crash is inside {frame} (the GPU OpenGL/Vulkan driver), not a Java or download problem",
+    "グラフィックドライバーがクラッシュしました：クラッシュ箇所は {frame}（GPU の OpenGL/Vulkan ドライバー）で、Java やダウンロードの問題ではありません",
+  ),
+  "launch.diag.gpu.advice1": D(
+    "把显卡驱动更新到最新版（NVIDIA / AMD / Intel 官网或显卡厂商驱动），能选「干净安装」就选它",
+    "Update the GPU driver to the latest version from NVIDIA / AMD / Intel (use a clean install if offered)",
+    "GPU ドライバーを最新版に更新してください（NVIDIA / AMD / Intel の公式サイト。クリーンインストールが選べればなお良い）",
+  ),
+  "launch.diag.gpu.advice2": D(
+    "关掉显卡覆盖层与图像增强：GeForce Experience / NVIDIA App 的游戏内覆盖、AMD Adrenalin 的 Radeon 覆盖与图像锐化、Windows 设置 → 系统 → 屏幕 → 显卡里的「硬件加速 GPU 计划」",
+    "Turn off GPU overlays and image enhancements: the GeForce Experience / NVIDIA App in-game overlay, AMD Adrenalin Radeon overlay and image sharpening, and Hardware-accelerated GPU scheduling in Windows Settings → System → Display → Graphics",
+    "GPU のオーバーレイと画質補正を切ってください：GeForce Experience / NVIDIA App のゲーム内オーバーレイ、AMD Adrenalin の Radeon オーバーレイとシャープ化、Windows の設定 → システム → 画面 → グラフィック にある「ハードウェア アクセラレータ GPU スケジューリング」",
+  ),
+  "launch.diag.gpu.advice3": D(
+    "换同主版本的其他 JDK 构建再试：主版本不变（例如都是 25），只换成 Temurin / Zulu / Liberica 的另一家发行版，驱动接口的实现不同，可能就不崩了",
+    "Try another JDK build of the same major version (for example 25 → Temurin / Zulu / Liberica): the driver glue differs between builds and may stop crashing",
+    "同じメジャーバージョンの別 JDK ビルドを試してください（例：25 のまま Temurin / Zulu / Liberica に変更）。ドライバーとの接続実装が異なるため、クラッシュしない場合があります",
+  ),
+  "launch.diag.cert.reason": D(
+    "Java 不信任这张 HTTPS 证书（PKIX path building failed）：Java 默认不读 Windows 证书库，常见于使用 Steamcommunity302 这类 HTTPS 代理/加速工具",
+    "Java does not trust this HTTPS certificate (PKIX path building failed): the JVM ignores the Windows certificate store by default, which is common when an HTTPS proxy such as Steamcommunity302 is in use",
+    "Java がこの HTTPS 証明書を信頼していません（PKIX path building failed）：JVM は既定で Windows の証明書ストアを読まないため、Steamcommunity302 のような HTTPS プロキシを使うとよく起きます",
+  ),
+  "launch.diag.cert.advice1": D(
+    "到 启动设置 → Java 证书库 打开「信任 Windows 证书库」：启动器会补上 -Djavax.net.ssl.trustStoreType=WINDOWS-ROOT，让 Java 信任系统里的根证书",
+    "Open Launch settings → Java certificates → Trust the Windows certificate store: the launcher then adds -Djavax.net.ssl.trustStoreType=WINDOWS-ROOT so the JVM trusts the system root certificates",
+    "起動設定 → Java 証明書 → 「Windows の証明書ストアを信頼する」をオンにしてください：起動時に -Djavax.net.ssl.trustStoreType=WINDOWS-ROOT が付き、JVM がシステムのルート証明書を信頼します",
+  ),
+  "launch.diag.cert.advice2": D(
+    "如果只是临时连不上，也可以先关掉系统代理或 HTTPS 加速工具，直连启动一次看看",
+    "If you only need it to work right now, disable the system proxy or the HTTPS accelerator and launch once over a direct connection",
+    "一時的にしのぎたいだけなら、システムプロキシや HTTPS 高速化ツールを切って直結で一度起動してみてください",
+  ),
+  "launch.diag.ver.reason": D(
+    "Java 版本不对：游戏或模组需要 class file {need}（Java {needJava}），当前这个 JDK 只支持到 class file {have}（Java {haveJava}）",
+    "Wrong Java version: the game or a mod needs class file {need} (Java {needJava}), but the selected JDK only supports up to class file {have} (Java {haveJava})",
+    "Java のバージョンが合っていません：ゲームまたは Mod は class file {need}（Java {needJava}）を必要としますが、選択中の JDK は class file {have}（Java {haveJava}）までしか対応していません",
+  ),
+  "launch.diag.ver.reasonPlain": D(
+    "Java 版本不对：游戏或模组要求的 Java 比实例当前选的这个更新（日志里是 UnsupportedClassVersionError）",
+    "Wrong Java version: the game or a mod needs a newer Java than the instance currently uses (UnsupportedClassVersionError in the log)",
+    "Java のバージョンが合っていません：ゲームまたは Mod は、このインスタンスが使っている Java より新しいものを要求しています（ログは UnsupportedClassVersionError）",
+  ),
+  "launch.diag.ver.advice1": D(
+    "到 Java 页面把该实例的 Java 换成 Java {needJava} 或更新版本（装好后在实例里选中它）",
+    "Open the Java page and point this instance at Java {needJava} or newer (install it first, then select it for the instance)",
+    "Java ページでこのインスタンスの Java を {needJava} 以降に変更してください（先に導入してから選択します）",
+  ),
+  "launch.diag.ver.advice2": D(
+    "换完 Java 要重新启动游戏：已经跑起来的进程不会自动换 Java",
+    "Restart the game after switching Java: a running process never picks up a different JVM",
+    "Java を変えたらゲームを起動し直してください：起動中のプロセスは Java を切り替えません",
+  ),
+  "launch.diag.jvm.reason": D(
+    "JVM 还没跑起来就退出了：{error}；通常是指定的额外 JVM 参数有错，不是游戏文件坏了",
+    "The JVM exited before it started: {error}. This is usually a bad extra JVM argument, not a broken game install",
+    "JVM が起動する前に終了しました：{error}。多くの場合、追加の JVM 引数が誤っているだけでゲームファイルは壊れていません",
+  ),
+  "launch.diag.jvm.advice1": D(
+    "到 启动设置 → 额外 JVM 参数 先清空，再逐条加回：重点看拼错的 -X/-XX，以及超过物理内存的 -Xmx",
+    "Open Launch settings → extra JVM arguments, clear them, then add them back one by one — watch for mistyped -X/-XX options and an -Xmx larger than your RAM",
+    "起動設定 → 追加の JVM 引数 をいったん空にして、1 つずつ戻してください。綴り間違いの -X/-XX や、物理メモリを超える -Xmx に注意します",
+  ),
+  "launch.diag.jvm.advice2": D(
+    "确认实例选的 Java 位数和系统一致：32 位 JDK 上 -Xmx 超过 1.5G 会直接起不来",
+    "Make sure the selected Java matches your system bitness: a 32-bit JDK cannot start with -Xmx above 1.5G",
+    "選択中の Java のビット数が OS と一致しているか確認してください：32 ビット JDK では -Xmx が 1.5G を超えると起動できません",
+  ),
+  "launch.diag.mods.reason": D(
+    "模组解析失败：加载器在启动阶段就拒绝了这个组合（{detail}）",
+    "Mod resolution failed: the loader rejected this set of mods during startup ({detail})",
+    "Mod の解決に失敗しました：ローダーが起動段階でこの組み合わせを拒否しています（{detail}）",
+  ),
+  "launch.diag.mods.advice1": D(
+    "对照下面「可能相关的模组」列表，在 模组 页把缺的前置装齐；装不齐就先把对应模组移出 mods 目录再启动",
+    "Check the possibly-related mods below and install the missing dependencies from the Mods page; if you cannot, move the listed mods out of the mods folder and launch again",
+    "下の「関連していそうな Mod」を見て、足りない前提 Mod を Mod ページから導入してください。揃わない場合は該当 Mod を mods フォルダから外して起動します",
+  ),
+  "launch.diag.mods.advice2": D(
+    "同一个模组别同时留多个版本的文件：重复的 jar 会让加载器直接判定解析失败",
+    "Never keep two versions of the same mod: duplicate jars make the loader fail resolution outright",
+    "同じ Mod の複数バージョンを同時に置かないでください：jar が重複するとローダーが解決に失敗します",
+  ),
+  "launch.diag.oom.reason": D(
+    "内存不够：{error}（Java 堆被打满，游戏被强制结束）",
+    "Out of memory: {error} (the Java heap filled up and the game was killed)",
+    "メモリ不足：{error}（Java ヒープが埋まり、ゲームが強制終了しました）",
+  ),
+  "launch.diag.oom.advice1": D(
+    "到 启动设置 → 内存 把该实例的内存上限调大（整合包建议 4G 以上，同时给系统留够余量）",
+    "Raise this instance memory cap in Launch settings → Memory (4G+ for modpacks, while leaving headroom for the system)",
+    "起動設定 → メモリ でこのインスタンスの上限を増やしてください（Mod パックなら 4G 以上、OS 用の余裕も残します）",
+  ),
+  "launch.diag.oom.advice2": D(
+    "关掉「游戏内存优化」：AlwaysPreTouch 这类参数在内存紧张的机器上会加速崩溃",
+    "Turn off Game memory optimisation: options such as AlwaysPreTouch speed up the crash on memory-tight machines",
+    "「ゲームメモリ最適化」をオフにしてください：AlwaysPreTouch などの指定は、メモリが厳しい環境ではクラッシュを早めます",
+  ),
+  "launch.diag.unknown.reason": D(
+    "日志里没有匹配到已知的失败特征（退出码 {code}）：可能是模组、加载器或游戏自身的偶发问题",
+    "The log matches no known failure signature (exit code {code}): it may be a one-off problem in a mod, the loader or the game itself",
+    "ログに既知の失敗パターンが見つかりませんでした（終了コード {code}）：Mod・ローダー・ゲーム側の一時的な問題かもしれません",
+  ),
+  "launch.diag.unknown.advice1": D(
+    "点「导出诊断包」把日志发出来，或先只留必需模组再启动一次，用二分法定位是哪个模组",
+    "Use Export diagnosis package to share the logs, or launch with only the required mods and bisect from there",
+    "「診断パッケージを書き出す」でログを共有するか、必須 Mod だけにして起動し、二分法で原因の Mod を絞り込んでください",
+  ),
+  "launch.diag.unknown.advice2": D(
+    "如果这次是刚换过 Java、驱动或模组，先退回上一个能用的组合再逐步加回去",
+    "If you just changed Java, the GPU driver or mods, roll back to the last working combination and add changes back one at a time",
+    "直前に Java・ドライバー・Mod を変えた場合は、最後に動いていた組み合わせに戻し、1 つずつ足し直してください",
+  ),
+  "launch.diag.exportTitle": D("导出诊断包", "Export diagnosis package", "診断パッケージを書き出す"),
+  "launch.diag.exportFileSuffix": D("诊断", "diagnosis", "診断"),
+  "launch.diag.exportFailed": D("导出诊断包失败：{error}", "Failed to export the diagnosis package: {error}", "診断パッケージの書き出しに失敗しました：{error}"),
+  "launch.diag.reportTitle": D("NaiWa Launcher 启动失败诊断包", "NaiWa Launcher launch-failure diagnosis package", "NaiWa Launcher 起動失敗の診断パッケージ"),
+  "launch.diag.reportTime": D("导出时间：{time}", "Exported: {time}", "書き出し時刻：{time}"),
+  "launch.diag.reportLauncher": D("启动器版本：{version}", "Launcher version: {version}", "ランチャーのバージョン：{version}"),
+  "launch.diag.reportInstance": D("实例：{name}（{id}）· Minecraft {mc} · {loader}", "Instance: {name} ({id}) · Minecraft {mc} · {loader}", "インスタンス：{name}（{id}）· Minecraft {mc} · {loader}"),
+  "launch.diag.reportJava": D("Java：{path} {version}", "Java: {path} {version}", "使用 Java：{path} {version}"),
+  "launch.diag.reportExit": D("退出码：{code}", "Exit code: {code}", "終了コード：{code}"),
+  "launch.diag.reportReason": D("诊断：{text}", "Diagnosis: {text}", "診断：{text}"),
+  "launch.diag.reportAdvice": D("建议：{text}", "Advice: {text}", "対処：{text}"),
+  "launch.diag.reportMods": D("可能相关的模组：{list}", "Possibly related mods: {list}", "関連していそうな Mod：{list}"),
+  "launch.diag.reportLog": D("本次启动日志：{path}", "Launch log: {path}", "今回の起動ログ：{path}"),
 };
 
 /** 当前界面语言：settings 可能随时改，所以每次现读内存值（getSettings 已是内存快照，不读盘）。 */

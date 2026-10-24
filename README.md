@@ -2,7 +2,7 @@
 
 <img src="logo.png" width="120" align="right" alt="NaiWa Launcher" />
 
-现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，界面内显示「奶娃启动器 / NaiWa Launcher」。当前版本 **0.3.4**。
+现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，界面内显示「奶娃启动器 / NaiWa Launcher」。当前版本 **0.3.5**。
 
 主开发者 **奶龙** ｜ 协助开发者 **小七** ｜ 工具提供 **DeepSeek**
 
@@ -15,6 +15,7 @@
 - **存档直进**：列出现有单人存档（图标/大小/时间），点「进入」直接加载；也能新建存档并直接进入（1.20+ 的 quickPlay）
 - 实例级内容管理：模组 / 光影包 / 资源包各自列表、检查更新、更新、删除（光影与资源包读 pack.mcmeta 说明），文件名模板可自定义；可搜索已装资源并单独删除
 - **同时运行实例数**可设：默认只允许开一个，避免连点把内存吃满；需要多开改成「无限」
+- **信任 Windows 证书库**开关：开启后给游戏 JVM 追加 `-Djavax.net.ssl.trustStoreType=WINDOWS-ROOT`，让 Java 读系统根证书——专治「装了 HTTPS 代理后正版验证/皮肤/下载全部 PKIX 失败」；默认关，且不会覆盖你自己写的 `trustStore` 参数
 - **游戏内存优化**开关：开启后追加面向低延迟的 G1GC 参数（Aikar 风格），关掉只下发 `-Xms/-Xmx`；实例里的「额外 JVM 参数」始终最高优先
 
 ### 下载与资源
@@ -76,6 +77,20 @@
 - 界面有常驻版权标注：联机能力由 **Terracotta | 陶瓦联机** 提供 · 版权所有 © burningtnt 及贡献者 · AGPL-3.0-or-later · [项目主页](https://github.com/burningtnt/Terracotta)（依据其许可证的例外条款：原样分发未修改的二进制 + 只经 IPC 交互 + 界面标注版权）
 - 若你**自己已经开着一个陶瓦**，启动器会识别并复用它的端口（界面会提示「已复用正在运行的陶瓦」），「断开复用」只断开连接、不会结束你那个实例
 - 详细技术资料（接口、状态机、实测数据、风险）见 [docs/TERRACOTTA-FEASIBILITY.md](docs/TERRACOTTA-FEASIBILITY.md)
+
+### 启动失败诊断
+- 游戏异常退出后自动读这次启动日志并给出结论，把 `# 诊断：` / `# 建议：` 写进日志，同时**弹窗**说明原因：
+  | 能识别 | 典型症状 |
+  |---|---|
+  | 显卡驱动崩溃 | 崩溃帧里出现 `atio6axx.dll` / `nvoglv64.dll` / `ig*icd64.dll` 等驱动模块 |
+  | Java 不信任证书 | `PKIX path building failed`（常见于 Steamcommunity302 之类的 HTTPS 代理） |
+  | Java 版本不对 | `UnsupportedClassVersionError` |
+  | 内存不足 | `OutOfMemoryError: Java heap space` |
+  | JVM 参数导致起不来 | `Could not create the Java virtual machine` |
+  | 模组冲突 / 缺前置 | `Mod resolution failed`、`Missing or unsupported mandatory dependencies`、`Duplicate mods found` 等 |
+- 弹窗会列出**可能相关的模组**（去重、最多 8 个，含 jar 文件名），并提供 **打开日志 / 打开实例目录 / 导出诊断包**。
+- **导出诊断包**：打包本次启动日志、`hs_err_pid*.log`、最新 crash-report、最近一份启动器日志，外加 `diagnosis.txt`（版本、实例与加载器、使用的 Java 与版本、退出码、诊断结论、相关模组），可直接发给别人排查。
+- 日志按 UTF-8 / GBK 双解码，中文日志不会因编码漏判。
 
 ### 系统集成
 - **单实例**：启动器只能开一个，再次双击会把已有窗口叫到前台并提示
