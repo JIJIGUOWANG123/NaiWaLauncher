@@ -136,18 +136,42 @@ a {
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  gap: 18px;
   padding: 22px 16px 18px;
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
   color: var(--sidebar-text);
   backdrop-filter: blur(6px);
+  /* 窗口变矮时只让导航区滚动，底部的连接状态与版本号始终留在可见区（0.4.6） */
+  min-height: 0;
+  overflow: hidden;
 }
 
 .nav {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 给滚动条留位置，避免 hover 位移被裁掉 */
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text) 22%, transparent) transparent;
+}
+
+.nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.nav::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 20%, transparent);
+}
+
+.nav::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .nav-item {
@@ -210,7 +234,8 @@ a {
 }
 
 .sidebar-foot {
-  margin-top: auto;
+  /* 不再靠 margin-top:auto 顶到底：导航区已经 flex 撑开，这里固定不参与滚动 */
+  flex: none;
   display: flex;
   flex-direction: column;
   gap: 6px;
