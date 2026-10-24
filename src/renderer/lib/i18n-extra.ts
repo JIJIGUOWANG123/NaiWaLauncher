@@ -1201,9 +1201,33 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
     " ({skipped}'s file list is unavailable — using the fallback)",
     "（{skipped} のファイル一覧を取得できないため代替）",
   ),
-  "pages.lanMod.install": D("一键安装 {mod}", "Install {mod}", "{mod} をワンクリック導入"),
+  "pages.lanMod.installNow": D("立即安装", "Install now", "今すぐインストール"),
+  "pages.lanMod.installedShort": D("已安装", "Installed", "導入済み"),
   "pages.lanMod.installing": D("安装中…", "Installing…", "導入中…"),
   "pages.lanMod.installDone": D("已安装 {mod}：{file}", "Installed {mod}: {file}", "{mod} を導入しました：{file}"),
+  "pages.lanMod.choiceLabel": D("联机模组", "LAN mod", "LAN MOD"),
+  "pages.lanMod.choiceAuto": D("自动（推荐）", "Auto (recommended)", "自動（おすすめ）"),
+  "pages.lanMod.choiceOptionNoFile": D(
+    "（MC {version} 无可用文件）",
+    " (no file for MC {version})",
+    "（MC {version} のファイル無し）",
+  ),
+  "pages.lanMod.choiceOptionUnknown": D(
+    "（查不到文件）",
+    " (file list unavailable)",
+    "（一覧を取得できません）",
+  ),
+  "pages.lanMod.choicePicked": D("已按你的选择：{mod}", "Using your choice: {mod}", "選択した {mod} を使用中"),
+  "pages.lanMod.choiceUnavailableHint": D(
+    "{mod} 在 MC {version}（{loader}）没有可用文件，装了也不会生效",
+    "{mod} has no file for MC {version} ({loader}); installing it won't take effect",
+    "{mod} は MC {version}（{loader}）向けのファイルがありません。導入しても効果はありません",
+  ),
+  "pages.lanMod.choiceInstallWarning": D(
+    "会装最新版试试，但当前版本不保证生效",
+    "Installs the newest file; it may not work on this version",
+    "最新版を導入しますが、このバージョンでの動作は保証されません",
+  ),
   "pages.lanMod.retry": D("重试", "Retry", "再試行"),
   "pages.lanMod.checkFailed": D(
     "暂时查不到 {mod} 的可用文件（网络或来源站问题），可以点重试。",
@@ -1268,5 +1292,179 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
     "{n} 个文件下载失败",
     "{n} files failed to download",
     "{n} 個のファイルのダウンロードに失敗しました",
+  ),
+
+  // ---- 关于页 · 链接与致谢卡片（0.4.0） ----
+  "pages.about.thanks.projectHint": D("GitHub · 源码与发布", "GitHub · source and releases", "GitHub · ソースとリリース"),
+  "pages.about.thanks.modrinthHint": D("开源模组社区", "Open mod community", "オープンな Mod コミュニティ"),
+  "pages.about.thanks.curseforgeHint": D("模组与整合包站", "Mods and modpacks", "Mod と MOD パック"),
+  "pages.about.thanks.terracottaHint": D(
+    "联机能力提供 · AGPL-3.0-or-later",
+    "Multiplayer tooling · AGPL-3.0-or-later",
+    "マルチプレイ提供 · AGPL-3.0-or-later",
+  ),
+  "pages.about.thanksOpen": D(
+    "在浏览器打开 {label}（{hint}）",
+    "Open {label} in your browser ({hint})",
+    "ブラウザで {label} を開く（{hint}）",
+  ),
+
+  // ---- 资源页翻页（0.4.0）：上一页 / 页码 / 下一页 ----
+  "pages.mods.pagerAria": D("结果翻页", "Result pages", "結果のページ送り"),
+  "pages.mods.pagerPrev": D("上一页", "Previous", "前へ"),
+  "pages.mods.pagerNext": D("下一页", "Next", "次へ"),
+  "pages.mods.pagerGoTitle": D("跳到第 {page} 页", "Go to page {page}", "{page} ページ目へ"),
+
+  // ---- 图片灯箱（资源详情画廊，0.4.0） ----
+  "lightbox.open": D("放大查看", "View larger", "拡大表示"),
+  "lightbox.close": D("关闭", "Close", "閉じる"),
+  "lightbox.prev": D("上一张", "Previous image", "前の画像"),
+  "lightbox.next": D("下一张", "Next image", "次の画像"),
+  "lightbox.loading": D("加载中…", "Loading…", "読み込み中…"),
+  "lightbox.loadFailed": D(
+    "图片加载失败，可以按 Esc 或点右上角关闭",
+    "This image failed to load — press Esc or use the close button",
+    "画像の読み込みに失敗しました。Esc キーか右上の閉じるボタンで戻れます",
+  ),
+  "lightbox.viewer": D("图片查看器", "Image viewer", "画像ビューアー"),
+  "lightbox.imageAlt": D("图片 {index}", "Image {index}", "画像 {index}"),
+  "lightbox.hint": D(
+    "滚轮缩放 · 放大后可拖动 · 双击复位",
+    "Scroll to zoom · drag to pan when zoomed · double-click to reset",
+    "スクロールで拡大 · 拡大後はドラッグで移動 · ダブルクリックでリセット",
+  ),
+
+  // ---- 资源页「插件」类型（0.4.1）：装进「开服」的服务端，不进客户端实例 ----
+  "pages.mods.kindPlugin": D("插件", "Plugins", "プラグイン"),
+  "pages.mods.badgePlugin": D("插件", "Plugin", "プラグイン"),
+  "pages.mods.pluginInstall": D("安装到服务端", "Install to server", "サーバーにインストール"),
+  "pages.mods.placeholderPlugin": D("搜索插件…", "Search plugins…", "プラグインを検索…"),
+  "pages.mods.pluginServerLabel": D("目标服务端", "Target server", "対象サーバー"),
+  "pages.mods.pluginServerPlaceholder": D("选择服务端", "Pick a server", "サーバーを選択"),
+  "pages.mods.pluginServerHint": D(
+    "插件会装进「{name}」的 plugins 目录。",
+    "Plugins go into the plugins folder of \"{name}\".",
+    "「{name}」の plugins フォルダーにインストールします。",
+  ),
+  "pages.mods.pluginServerTarget": D(
+    "目标服务端：{name}（{mc}）",
+    "Target server: {name} ({mc})",
+    "対象サーバー：{name}（{mc}）",
+  ),
+  "pages.mods.pluginPickServerFirst": D("先选一个服务端", "Pick a server first", "先にサーバーを選んでください"),
+  "pages.mods.pluginCreateServerLink": D(
+    "还没有服务端？去「开服」新建一个",
+    "No server yet? Create one under Servers",
+    "サーバーがまだ無い場合は「サーバー」で作成します",
+  ),
+  "pages.mods.pluginCurseforgeHint": D(
+    "CurseForge 没有插件下载接口，插件请切到 Modrinth 或麦块社区",
+    "CurseForge has no plugin API — switch to Modrinth or Minekuai for plugins",
+    "CurseForge にはプラグイン配信 API がありません。Modrinth か麦块コミュニティに切り替えてください",
+  ),
+  "pages.mods.pluginInstalled": D(
+    "已安装到服务端「{name}」",
+    "Installed into server \"{name}\"",
+    "サーバー「{name}」にインストールしました",
+  ),
+  "pages.mods.pluginUnavailable": D(
+    "插件安装接口还没就绪，稍后再试",
+    "The plugin API is not ready yet — try again later",
+    "プラグイン API はまだ準備中です。後でもう一度お試しください",
+  ),
+  "pages.mods.pluginSubtitle": D(
+    "插件 · 目标服务端 {name}（{mc}）",
+    "Plugins · target server {name} ({mc})",
+    "プラグイン · 対象サーバー {name}（{mc}）",
+  ),
+  "pages.mods.pluginSubtitleNoServer": D(
+    "插件装进服务端：先在左侧选一个目标服务端",
+    "Plugins install into a server — pick a target server on the left first",
+    "プラグインはサーバーに入ります。左で対象サーバーを選んでください",
+  ),
+  "pages.mods.emptyHintPlugin": D(
+    "换个关键词、版本或分类再试试；插件只装进服务端的 plugins 目录，不进客户端实例。",
+    "Try another keyword, version or category — plugins go into the server's plugins folder, not a client instance.",
+    "別のキーワード・バージョン・カテゴリで試してください。プラグインはサーバーの plugins フォルダーに入り、クライアントのインスタンスには入りません。",
+  ),
+  "pages.modDetail.pluginInstallTo": D(
+    "将安装到服务端「{name}」",
+    "Will install to server \"{name}\"",
+    "サーバー「{name}」にインストールします",
+  ),
+  "pages.modDetail.pluginInstalled": D(
+    "服务端「{name}」里已有：{files}",
+    "Already in server \"{name}\": {files}",
+    "サーバー「{name}」に既にあります：{files}",
+  ),
+  "pages.mods.pluginPlatformWarn": D(
+    "这个文件是给 {platforms} 用的，你的服务端是 {core}，装了不会生效",
+    "This file targets {platforms}; your server is {core} — it will not work if you install it",
+    "このファイルは {platforms} 用です。サーバーは {core} なので、インストールしても動作しません",
+  ),
+  "pages.mods.pluginModdedServer": D(
+    "这是模组服，插件通常用不上，请装模组而不是插件",
+    "This is a modded server — plugins usually do nothing here; install mods instead",
+    "これは MOD サーバーです。プラグインは通常使えません。MOD をインストールしてください",
+  ),
+  // ---- 资源页目标选择器（0.4.1）：实例 / 服务端同在一个选择器里 ----
+  "pages.mods.targetLabel": D("安装目标", "Install target", "インストール先"),
+  "pages.mods.targetInstances": D("实例", "Instances", "インスタンス"),
+  "pages.mods.targetServers": D("服务端", "Servers", "サーバー"),
+  "pages.mods.serverInstall": D("安装到服务端", "Install to server", "サーバーにインストール"),
+  "pages.mods.modServerHint": D(
+    "会装进「{name}」的 mods 目录。",
+    "Installs into the mods folder of \"{name}\".",
+    "「{name}」の mods フォルダーにインストールします。",
+  ),
+  "pages.mods.serverSubtitle": D(
+    "{kind} · 目标服务端 {name}（{mc}）",
+    "{kind} · target server {name} ({mc})",
+    "{kind} · 対象サーバー {name}（{mc}）",
+  ),
+  "pages.mods.serverTargetUnsupported": D(
+    "这个类型只能装进实例，服务端装不了",
+    "This type only installs into an instance — not a server",
+    "この種類はインスタンスにのみインストールできます（サーバー不可）",
+  ),
+  "pages.mods.serverContentUnavailable": D(
+    "服务端内容接口还没就绪，稍后再试",
+    "The server content API is not ready yet — try again later",
+    "サーバーコンテンツ API はまだ準備中です。後でもう一度お試しください",
+  ),
+  "pages.mods.modOnPluginServer": D(
+    "这是插件服，装模组不会生效",
+    "This is a plugin server — mods will not load",
+    "これはプラグインサーバーです。MOD は読み込まれません",
+  ),
+  "pages.mods.modOnVanillaServer": D(
+    "原版服务端不支持模组",
+    "A vanilla server cannot load mods",
+    "バニラサーバーは MOD を読み込めません",
+  ),
+  "pages.mods.pluginOnModdedServer": D(
+    "这是模组服，请装模组而不是插件",
+    "This is a modded server — install mods instead of plugins",
+    "これは MOD サーバーです。プラグインではなく MOD を入れてください",
+  ),
+  "pages.mods.pluginOnVanillaServer": D(
+    "原版服务端不支持插件，请换成 Paper / Purpur 等核心",
+    "A vanilla server cannot load plugins — use Paper / Purpur and friends",
+    "バニラサーバーはプラグインを読み込めません。Paper / Purpur などに変更してください",
+  ),
+  "pages.modDetail.serverUnsupported": D(
+    "这个模组只支持客户端，装到服务端不会生效",
+    "This mod is client-only — it does nothing on a server",
+    "この MOD はクライアント専用です。サーバーに入れても動作しません",
+  ),
+  "pages.modDetail.serverUnknown": D(
+    "作者没标注服务端支持，可能装不上",
+    "The author did not mark server support — it may not work",
+    "作者がサーバー対応を明記していません。動作しない可能性があります",
+  ),
+  "pages.modDetail.serverRequired": D(
+    "这个模组要求在服务端也安装",
+    "This mod must be installed on the server as well",
+    "この MOD はサーバー側にもインストールが必要です",
   ),
 };

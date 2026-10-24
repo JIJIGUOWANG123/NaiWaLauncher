@@ -500,8 +500,9 @@ export interface DownloadJob {
   bytesPerSecond?: number;
 }
 
-/** 内容类型：模组 / 光影 / 资源包 / 整合包 / 地图。 */
-export type ModContentKind = "mod" | "shader" | "resourcepack" | "modpack" | "map";
+/** 内容类型：模组 / 光影 / 资源包 / 整合包 / 地图 / 服务端插件。
+ * plugin 是「装进服务端」的类型：目标不是客户端实例，而是「开服」里的某个服务端（放进它的 plugins 目录）。 */
+export type ModContentKind = "mod" | "shader" | "resourcepack" | "modpack" | "map" | "plugin";
 
 /** 麦块社区的社区地图（列表公开，下载需登录）。 */
 export interface MapEntry {
@@ -544,6 +545,9 @@ export interface ModDependency {
 }
 
 /** 模组详情（点击模组后展示）。 */
+/** 内容在某一侧的支持情况。unsupported = 明确不支持；unknown = 作者没标注。 */
+export type SideSupport = "required" | "optional" | "unsupported" | "unknown";
+
 export interface ModDetail {
   provider: ModProviderId;
   projectId: string;
@@ -565,6 +569,9 @@ export interface ModDetail {
   sourceUrl?: string;
   iconUrl?: string;
   gallery: string[];
+  /** 该内容在服务端/客户端的支持情况（Modrinth 的 server_side / client_side）；未知时字段缺省。 */
+  serverSide?: SideSupport;
+  clientSide?: SideSupport;
   updatedAt?: string;
   /** 展示用的游戏版本/加载器范围。 */
   gameVersions: string[];

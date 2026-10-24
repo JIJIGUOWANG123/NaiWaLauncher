@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { InstalledContentRef, InstanceMeta, LoaderKind, ModFileInfo } from "../../shared/types";
+import type { ModInstallResult } from "../../shared/ipc";
 import { api } from "../lib/api";
 import { loaderLabel } from "../lib/format";
 import { useT } from "../lib/i18n";
@@ -83,6 +84,141 @@ export function pickLanMod(
   return null;
 }
 
+/** 用户的选择：auto = 跟随推荐矩阵（含自动回退）；其余 = 用户点名要哪一个，选了就不再自动回退。 */
+export type LanChoice = "auto" | LanModKey;
+
+/** 按实例记住选择：键形如 naiwa.lanmod.choice.<instanceId>，实例删了这条记录自然失效。 */
+export const LAN_CHOICE_STORAGE_PREFIX = "naiwa.lanmod.choice.";
+
+export function lanChoiceStorageKey(instanceId: string): string {
+  return LAN_CHOICE_STORAGE_PREFIX + instanceId;
+}
+
+/** 只认已知的模组 key 与 "auto"：存坏了（改过版本/手改 localStorage）就退回自动。 */
+export function parseLanChoice(raw: string | null | undefined): LanChoice {
+  if (!raw) return "auto";
+  if (raw === "auto") return "auto";
+  return raw in LAN_MODS ? (raw as LanModKey) : "auto";
+}
+
+function choiceStorage(): Storage | null {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    // 隐私模式里访问 localStorage 会抛，按「没有记忆」处理。
+    return null;
+  }
+}
+
+export function readLanChoice(instanceId: string): LanChoice {
+  const store = choiceStorage();
+  if (!store || !instanceId) return "auto";
+  try {
+    return parseLanChoice(store.getItem(lanChoiceStorageKey(instanceId)));
+  } catch {
+    return "auto";
+  }
+}
+
+export function writeLanChoice(instanceId: string, choice: LanChoice): void {
+  const store = choiceStorage();
+  if (!store || !instanceId) return;
+  try {
+    store.setItem(lanChoiceStorageKey(instanceId), choice);
+  } catch {
+    // 存不进去只影响下次记忆，不影响这次的选择。
+  }
+}
+
+/** 记忆值已不在候选里（例如换过加载器）时回落推荐，并把旧值清掉。 */
+export function resolveStoredChoice(instanceId: string, candidates: LanModKey[]): LanChoice {
+  const stored = readLanChoice(instanceId);
+  if (stored === "auto") return "auto";
+  if (candidates.includes(stored)) return stored;
+  writeLanChoice(instanceId, "auto");
+  return "auto";
+}
+
+/** 安装目标：以「下拉当前值」为准；只有自动模式才回落到推荐项。 */
+export function lanInstallTarget(selectValue: string, plan: LanPlan): LanModKey | null {
+  const parsed = parseLanChoice(selectValue);
+  return parsed === "auto" ? plan.mod : parsed;
+}
+
+/** 下拉旁边那个按钮的状态：选中项已经装着就显示「已安装」并禁用，其余情况可点。 */
+export function lanInstallButton(
+  plan: LanPlan,
+  installMod: LanModKey | null,
+): { disabled: boolean; installed: boolean } {
+  const installed = installMod !== null && installMod === plan.mod && plan.install === "installed";
+  return { disabled: installMod === null || installed, installed };
+}
+
+/** 真正下发安装：projectId 跟着选中的模组走，自检用它断言「点按钮装的是下拉里那一个」。 */
+export async function installLanMod(req: {
+  instanceId: string;
+  mod: LanModKey;
+  fileId?: string;
+}): Promise<ModInstallResult> {
+  return api.mods.install({
+    provider: "modrinth",
+    projectId: LAN_MODS[req.mod].projectId,
+    fileId: req.fileId,
+    instanceId: req.instanceId,
+    kind: "mod",
+    installDependencies: true,
+  });
+}
+
+/** 下拉显示的值：自动模式下落在「当前推荐的那一个」上，用户一眼就能看出默认就是推荐。 */
+export function choiceSelectValue(choice: LanChoice, plan: LanPlan): string {
+  if (choice !== "auto") return choice;
+  return plan.mod ?? "auto";
+}
+
+export interface LanChoiceOption {
+  key: LanModKey | "auto";
+  label: string;
+  available: LanAvailability;
+  selected: boolean;
+}
+
+/**
+ * 下拉选项：不适配的模组不删掉，只在文案上标注（「LAN Properties（MC 1.21.4 无可用文件）」），
+ * 用户仍然可以选——他可能想装最新版或回头换版本。
+ */
+export function lanChoiceOptions(
+  candidates: LanModKey[],
+  availability: Partial<Record<LanModKey, LanAvailability>>,
+  selectValue: string,
+  mcVersion: string,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): LanChoiceOption[] {
+  const anyYes = pickLanMod(candidates, availability) !== null;
+  const allNo = candidates.length > 0 && candidates.every((key) => availability[key] === "no");
+  const options: LanChoiceOption[] = [{
+    key: "auto",
+    label: t("pages.lanMod.choiceAuto"),
+    available: anyYes ? "yes" : allNo ? "no" : "unknown",
+    selected: selectValue === "auto",
+  }];
+  for (const key of candidates) {
+    const available = availability[key] ?? "unknown";
+    const suffix = available === "no"
+      ? t("pages.lanMod.choiceOptionNoFile", { version: mcVersion })
+      : available === "unknown"
+        ? t("pages.lanMod.choiceOptionUnknown")
+        : "";
+    options.push({
+      key,
+      label: LAN_MODS[key].name + suffix,
+      available,
+      selected: selectValue === key,
+    });
+  }
+  return options;
+}
+
 export type OfflineLanState = "no-instance" | "vanilla" | "missing" | "unsupported" | "ok";
 /** host = 自己是房主（要自己装）；guest = 自己只是房客（让房主装/确认）。 */
 export type OfflineLanSide = "host" | "guest";
@@ -101,6 +237,8 @@ export interface LanFacts {
   instance: Pick<InstanceMeta, "mcVersion" | "loader"> | null;
   availability: Partial<Record<LanModKey, LanAvailability>>;
   installed: Partial<Record<LanModKey, LanInstalledInfo>>;
+  /** 用户手选的模组；缺省/auto = 跟随推荐矩阵。 */
+  choice?: LanChoice;
 }
 
 /** 实例里装着的「另一个」联机模组（不是当前推荐项）：状态行要指出来并给卸载按钮。 */
@@ -145,6 +283,10 @@ export interface LanPlan {
   noFiles: boolean;
   /** 实例里另外装着的联机模组（不是推荐项），最多 MAX_OTHER_LAN_MODS 个。 */
   others: LanOtherMod[];
+  /** 用户点名选中的模组（auto 时为 null）——它才是安装/已装判定的对象。 */
+  choice: LanModKey | null;
+  /** 手选的模组在当前版本没有可用文件（界面不给必然失败的安装按钮）。 */
+  choiceUnavailable: boolean;
 }
 
 function fallbackOf(candidates: LanModKey[], chosen: LanModKey | null): LanModKey | null {
@@ -167,6 +309,8 @@ export function resolveLanPlan(facts: LanFacts): LanPlan {
     fallbackUnknown: false,
     noFiles: false,
     others: [],
+    choice: null,
+    choiceUnavailable: false,
   };
   const instance = facts.instance;
   if (!instance) return base;
@@ -176,6 +320,41 @@ export function resolveLanPlan(facts: LanFacts): LanPlan {
   if (candidates.length === 0) return { ...base, state: "unsupported", install: "unavailable" };
 
   const noFiles = candidates.every((key) => facts.availability[key] === "no");
+
+  // 用户手选：以他为准，不再自动回退；选到当前版本没文件的模组也不改口，只把安装按钮收起来并说明原因。
+  const chosen = facts.choice && facts.choice !== "auto" && candidates.includes(facts.choice) ? facts.choice : null;
+  if (chosen) {
+    const chosenAvailability = facts.availability[chosen] ?? "unknown";
+    const chosenInstalled = facts.installed[chosen] ?? null;
+    const chosenOthers = otherLanMods(facts.installed, chosen);
+    if (!chosenInstalled) {
+      return {
+        ...base,
+        state: "missing",
+        mod: chosen,
+        install: "missing",
+        choice: chosen,
+        choiceUnavailable: chosenAvailability === "no",
+        noFiles,
+        others: chosenOthers,
+      };
+    }
+    const chosenMismatched = chosenInstalled.mcVersion !== null
+      && chosenInstalled.mcVersion !== instance.mcVersion;
+    return {
+      state: chosenMismatched ? "unsupported" : "ok",
+      mod: chosen,
+      install: chosenMismatched ? "mismatch" : "installed",
+      installed: chosenInstalled,
+      fallbackFrom: null,
+      fallbackUnknown: false,
+      noFiles,
+      others: chosenOthers,
+      choice: chosen,
+      choiceUnavailable: chosenAvailability === "no",
+    };
+  }
+
   const withFiles = pickLanMod(candidates, facts.availability);
   // 站点上一个可用文件都没有时，只要实例里已经装了候选之一，仍按它显示安装状态（比「不支持」更有用）。
   const mod = withFiles ?? candidates.find((key) => facts.installed[key]) ?? null;
@@ -208,6 +387,8 @@ export function resolveLanPlan(facts: LanFacts): LanPlan {
     fallbackUnknown,
     noFiles,
     others,
+    choice: null,
+    choiceUnavailable: false,
   };
 }
 
@@ -237,6 +418,10 @@ export interface LanView {
   showUninstall: boolean;
   /** 换装 / 多装冲突提示；没有其它联机模组时为 null。 */
   otherHint: string | null;
+  /** 用户手选了模组时的说明行（已按你的选择：X）；auto 时为 null。 */
+  choiceNote: string | null;
+  /** 手选的模组在当前版本没有文件时的明确提示（data-ol-mismatch）；其余情况为 null。 */
+  unavailableHint: string | null;
 }
 
 export function describeLanPlan(plan: LanPlan, options: LanViewOptions): LanView {
@@ -254,6 +439,8 @@ export function describeLanPlan(plan: LanPlan, options: LanViewOptions): LanView
       otherMods: [],
       showUninstall: false,
       otherHint: null,
+      choiceNote: null,
+      unavailableHint: null,
     };
   }
 
@@ -337,12 +524,17 @@ export function describeLanPlan(plan: LanPlan, options: LanViewOptions): LanView
     statusText,
     note,
     hint,
+    // 手选了不适配的模组也不禁用安装：用户可能想装最新版，按钮上给提醒就够了。
     showInstall: plan.install === "missing" && side === "host",
     // 只有「查不到文件」才给重试：版本不支持重试也没用。
     showRetry: plan.install === "unavailable" && options.queryFailed,
     otherMods,
     showUninstall: otherMods.length > 0,
     otherHint,
+    choiceNote: plan.choice ? t("pages.lanMod.choicePicked", { mod: modName }) : null,
+    unavailableHint: plan.choiceUnavailable && !plan.installed
+      ? t("pages.lanMod.choiceUnavailableHint", { mod: modName, version: mcVersion, loader })
+      : null,
   };
 }
 
@@ -359,6 +551,8 @@ export interface LanDataView {
   fallbackFrom: string;
   /** 另外装着的联机模组数量（data-ol-other-mods），没有就是 "0"。 */
   otherMods: string;
+  /** 当前生效的选择（data-ol-choice）：auto 或模组 key。 */
+  choice: string;
 }
 
 export function lanDataView(
@@ -377,6 +571,7 @@ export function lanDataView(
     projectId: plan.mod ? LAN_MODS[plan.mod].projectId : "",
     fallbackFrom: plan.fallbackFrom ?? "",
     otherMods: String(plan.others.length),
+    choice: plan.choice ?? "auto",
   };
 }
 
@@ -486,6 +681,22 @@ export function OfflineLanNotice({ side = "host" }: { side?: OfflineLanSide }) {
 
   const selected = useMemo(() => selectedInstance(instances, instanceId), [instances, instanceId]);
   const candidates = selected ? lanModCandidates(selected.loader) : [];
+
+  // 手选模组：按实例从 localStorage 记忆；存着的模组已经不在候选里（换过加载器）就回落推荐。
+  const [choice, setChoice] = useState<LanChoice>("auto");
+  const choiceInstance = selected?.id ?? "";
+  const choiceLoader = selected?.loader ?? "";
+  useEffect(() => {
+    if (!choiceInstance) {
+      setChoice("auto");
+      return;
+    }
+    setChoice(resolveStoredChoice(choiceInstance, lanModCandidates(choiceLoader as LanLoader)));
+  }, [choiceInstance, choiceLoader]);
+  const chooseMod = (next: LanChoice) => {
+    setChoice(next);
+    if (choiceInstance) writeLanChoice(choiceInstance, next);
+  };
   const probing = Boolean(selected) && selected?.loader !== "vanilla" && candidates.length > 0;
 
   const probe = useAsync<Probe>(async () => {
@@ -511,8 +722,7 @@ export function OfflineLanNotice({ side = "host" }: { side?: OfflineLanSide }) {
       const list = await fetchModFiles(key, instance.mcVersion, instance.loader);
       availability[key] = list === null ? "unknown" : list.length > 0 ? "yes" : "no";
       if (list) files[key] = list;
-      // 前一个候选有文件就不必再查后面的：回退只在前一个没文件时发生。
-      if (list !== null && list.length > 0) break;
+      // 每个候选都要查：选择器上要按模组显示「有没有适配当前版本」，不能提前收工。
     }
     return { instanceId: instance.id, availability, files, installed };
   }, [selected?.id ?? "", selected?.mcVersion ?? "", selected?.loader ?? ""]);
@@ -523,6 +733,7 @@ export function OfflineLanNotice({ side = "host" }: { side?: OfflineLanSide }) {
     instance: selected,
     availability: probed?.availability ?? {},
     installed: probed?.installed ?? {},
+    choice,
   });
 
   const mcVersion = selected?.mcVersion ?? "";
@@ -534,20 +745,24 @@ export function OfflineLanNotice({ side = "host" }: { side?: OfflineLanSide }) {
   const data = lanDataView(plan, { settled, fileId: targetFile?.fileId ?? "" });
   const modName = plan.mod ? LAN_MODS[plan.mod].name : "";
   const skipReason = settled && queryFailed;
+  const selectValue = choiceSelectValue(choice, plan);
+  const choiceOptions = lanChoiceOptions(candidates, probed?.availability ?? {}, selectValue, mcVersion, t);
+  // 下拉旁边那个「立即安装」装的是 selectValue 指向的模组（不是自动推荐项）。
+  const installMod = settled ? lanInstallTarget(selectValue, plan) : null;
+  // 选中项已经装着：按钮改成「已安装」并禁用，比留着可点更不容易让人重复装。
+  const installButton = lanInstallButton(plan, installMod);
+  const installDisabled = installing || installButton.disabled;
 
   const runInstall = async () => {
-    if (!selected || !plan.mod) return;
-    const mod = plan.mod;
+    if (!selected || !installMod) return;
+    const mod = installMod;
     setInstalling(true);
     try {
-      // 走现有安装队列：同一个 api.mods.install，装完会出现在「管理」页。
-      const result = await api.mods.install({
-        provider: "modrinth",
-        projectId: LAN_MODS[mod].projectId,
-        fileId: targetFile?.fileId ?? undefined,
+      // 走现有安装队列：装的是下拉里当前选中的那个模组，装完会出现在「管理」页。
+      const result = await installLanMod({
         instanceId: selected.id,
-        kind: "mod",
-        installDependencies: true,
+        mod,
+        fileId: mod === plan.mod ? targetFile?.fileId : undefined,
       });
       push(t("pages.lanMod.installDone", { mod: LAN_MODS[mod].name, file: result.fileName }), "success");
       // 装完立刻重探：状态行自己变成「已安装 …」。
@@ -599,6 +814,7 @@ export function OfflineLanNotice({ side = "host" }: { side?: OfflineLanSide }) {
       data-ol-candidates={candidates.join(",")}
       data-ol-fallback-from={data.fallbackFrom}
       data-ol-other-mods={data.otherMods}
+      data-ol-choice={data.choice}
     >
       {icon}
       <div className="net-offlinelan-body">
@@ -623,20 +839,63 @@ export function OfflineLanNotice({ side = "host" }: { side?: OfflineLanSide }) {
           </div>
         </div>
 
+        {candidates.length > 0 ? (
+          <div
+            className="net-offlinelan-choice"
+            data-ol-choice={choice}
+            data-ol-choice-selected={selectValue}
+          >
+            <span className="net-offlinelan-choice-label">{t("pages.lanMod.choiceLabel")}</span>
+            <div className="select-wrap">
+              <select
+                className="input select net-offlinelan-choice-select"
+                data-ol-choice-select
+                data-ol-choice-selected={selectValue}
+                aria-label={t("pages.lanMod.choiceLabel")}
+                value={selectValue}
+                onChange={(event) => chooseMod(parseLanChoice(event.target.value))}
+              >
+                {choiceOptions.map((option) => (
+                  <option
+                    key={option.key}
+                    value={option.key}
+                    data-ol-choice-item={option.key}
+                    data-ol-choice-available={option.available}
+                    data-ol-choice-selected={option.selected ? "true" : "false"}
+                  >
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <IconChevronDown size={16} className="select-icon" />
+            </div>
+            {side === "host" ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm net-offlinelan-install"
+                data-action="install-offlinelan"
+                data-ol-install={installMod ?? ""}
+                data-ol-install-disabled={installDisabled ? "true" : "false"}
+                title={plan.choiceUnavailable
+                  ? t("pages.lanMod.choiceInstallWarning", {
+                    mod: installMod ? LAN_MODS[installMod].name : "", version: mcVersion,
+                  })
+                  : undefined}
+                onClick={() => void runInstall()}
+                disabled={installDisabled}
+              >
+                {installing
+                  ? t("pages.lanMod.installing")
+                  : installButton.installed
+                    ? t("pages.lanMod.installedShort")
+                    : t("pages.lanMod.installNow")}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="net-offlinelan-statusrow" data-ol-status={data.status}>
           <span className="net-offlinelan-title">{view.statusText}</span>
-          {view.showInstall ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              data-action="install-offlinelan"
-              data-ol-action="install"
-              onClick={() => void runInstall()}
-              disabled={installing}
-            >
-              {installing ? t("pages.lanMod.installing") : t("pages.lanMod.install", { mod: modName })}
-            </button>
-          ) : null}
           {view.showRetry ? (
             <button type="button" className="btn btn-ghost btn-sm" data-ol-action="retry" onClick={() => probe.reload()}>
               {t("pages.lanMod.retry")}
@@ -645,7 +904,17 @@ export function OfflineLanNotice({ side = "host" }: { side?: OfflineLanSide }) {
         </div>
 
         {view.note ? <span className="net-offlinelan-hint">{view.note}</span> : null}
-        {settled && plan.mod ? (
+        {view.unavailableHint ? (
+          <span className="net-offlinelan-hint net-offlinelan-warn" data-ol-mismatch="true">
+            {view.unavailableHint}
+          </span>
+        ) : null}
+        {view.choiceNote ? (
+          <span className="net-offlinelan-hint net-offlinelan-reco" data-ol-choice-note={data.choice}>
+            {view.choiceNote}
+          </span>
+        ) : null}
+        {settled && plan.mod && !plan.choice ? (
           <span className="net-offlinelan-hint net-offlinelan-reco" data-ol-recommend={plan.mod}>
             {t("pages.lanMod.recommend", { mod: modName, loader })}
           </span>

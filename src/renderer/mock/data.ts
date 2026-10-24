@@ -447,6 +447,8 @@ export const MOCK_CONTENT: Record<ModContentKind, ModSearchResult[]> = {
   resourcepack: fillForPaging(MOCK_RESOURCEPACKS, 45),
   modpack: MOCK_MODPACKS,
   map: [],
+  // 插件只为预览兜底：数量够翻两页即可（后端真实来源是 Modrinth / 麦块）。
+  plugin: fillForPaging(MOCK_MODS, 12),
 };
 
 /**
@@ -888,6 +890,7 @@ const KIND_FILE_EXT: Record<ModContentKind, string> = {
   resourcepack: "zip",
   modpack: "mrpack",
   map: "zip",
+  plugin: "jar",
 };
 
 /** 依据目标版本与加载器生成一组可用文件，保证有精确匹配与不完全匹配。 */

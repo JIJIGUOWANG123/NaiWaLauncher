@@ -142,6 +142,11 @@ const api: NaiwaApi = {
     clearFinished: () => invoke(IPC.downloadsClearFinished),
     onChanged: (cb) => { const h = (_: unknown, jobs: DownloadJob[]) => cb(jobs); ipcRenderer.on(IPC.downloadsChanged, h); return () => ipcRenderer.off(IPC.downloadsChanged, h); },
   },
+  plugins: {
+    installed: (serverId) => invoke(IPC.pluginsInstalled, serverId),
+    install: (req) => invoke(IPC.pluginsInstall, req),
+    remove: (serverId, fileName) => invoke(IPC.pluginsRemove, serverId, fileName),
+  },
   skinsLocal: {
     list: (accountId) => invoke(IPC.skinsLocalList, accountId),
     select: (accountId, fileName) => invoke(IPC.skinsLocalSelect, accountId, fileName),
@@ -164,6 +169,10 @@ const api: NaiwaApi = {
     console: (id, limit) => invoke(IPC.serversConsole, id, limit),
     onConsole: (cb) => { const h = (_e: unknown, line: ServerConsoleLine) => cb(line); ipcRenderer.on(IPC.serversConsoleLine, h); return () => ipcRenderer.off(IPC.serversConsoleLine, h); },
     onStatus: (cb) => { const h = (_e: unknown, entries: ServerEntry[]) => cb(entries); ipcRenderer.on(IPC.serversStatus, h); return () => ipcRenderer.off(IPC.serversStatus, h); },
+    capabilities: (serverId) => invoke(IPC.serversCapabilities, serverId),
+    contentInstalled: (serverId, kind) => invoke(IPC.serversContentInstalled, serverId, kind),
+    contentInstall: (req) => invoke(IPC.serversContentInstall, req),
+    contentRemove: (serverId, kind, fileName) => invoke(IPC.serversContentRemove, serverId, kind, fileName),
   },
   capes: {
     list: (accountId) => invoke(IPC.capesList, accountId),

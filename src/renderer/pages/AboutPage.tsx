@@ -4,6 +4,9 @@ import avatarNailong from "../assets/team/nailong.png";
 import avatarXiaoqi from "../assets/team/xiaoqi.png";
 import avatarDeepseek from "../assets/team/deepseek.png";
 import avatarSakura from "../assets/team/sakura.png";
+import brandQq from "../assets/brand/qq.png";
+import brandModrinth from "../assets/brand/modrinth.png";
+import brandCurseforge from "../assets/brand/curseforge.png";
 import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
@@ -21,7 +24,6 @@ import {
   IconInstances,
   IconJava,
   IconLink,
-  IconMessage,
   IconMods,
   IconPackage,
   IconRefresh,
@@ -67,58 +69,57 @@ const CAPABILITIES = [
   { capKey: "updateMode", Icon: IconRefresh, titleKey: "pages.about.capability.updateMode", descKey: "pages.about.capability.updateModeDesc" },
 ];
 
-const LINKS = [
-  { Icon: IconLink, labelKey: "about.link.project", hintKey: "", url: PROJECT_URL },
-  { Icon: IconMessage, labelKey: "about.link.feedback", hintKey: "about.link.feedbackHint", url: FEEDBACK_URL },
-  { Icon: IconUser, labelKey: "about.link.qq", hintKey: "about.link.qqHint", url: QQ_GROUP_URL },
-  { Icon: IconPackage, labelKey: "about.link.modrinth", hintKey: "", url: "https://modrinth.com/" },
-  { Icon: IconMods, labelKey: "about.link.curseforge", hintKey: "", url: "https://www.curseforge.com/minecraft" },
-  { Icon: IconZap, labelKey: "about.link.mirror", hintKey: "about.link.mirrorHint", url: "https://bmclapi2.bangbang93.com/" },
-  { Icon: IconRocket, labelKey: "about.link.steam302", hintKey: "about.link.steam302Hint", url: RECOMMEND_URL },
+/** 外部站点常量（MODRINTH / CURSEFORGE 就是模组那两个官网）。 */
+const MODRINTH_URL = "https://modrinth.com/";
+const CURSEFORGE_URL = "https://www.curseforge.com/minecraft";
+const MIRROR_URL = "https://bmclapi2.bangbang93.com/";
+
+/** 致谢卡片：image 走本地 png（品牌 logo / 头像），Icon 走组件库里的实心图标。 */
+type ThanksEntry = {
+  /** data-about-thanks-item 的值，也是 React key。 */
+  key: string;
+  titleKey: string;
+  hintKey: string;
+  image?: string;
+  Icon?: typeof IconLink;
+  url: string;
+};
+
+/**
+ * 链接与致谢：和核心团队同一套卡片网格。
+ * 项目主页 / 问题反馈 / 陶瓦联机用 GitHub 图标；QQ 群、Modrinth、CurseForge、樱花穿透用品牌图片；
+ * 镜像与推荐的第三方工具沿用原有的功能图标。
+ */
+const THANKS: ThanksEntry[] = [
+  { key: "project", titleKey: "about.link.project", hintKey: "pages.about.thanks.projectHint", Icon: IconGithub, url: PROJECT_URL },
+  { key: "feedback", titleKey: "about.link.feedback", hintKey: "about.link.feedbackHint", Icon: IconGithub, url: FEEDBACK_URL },
+  { key: "qq", titleKey: "about.link.qq", hintKey: "about.link.qqHint", image: brandQq, url: QQ_GROUP_URL },
+  { key: "modrinth", titleKey: "about.link.modrinth", hintKey: "pages.about.thanks.modrinthHint", image: brandModrinth, url: MODRINTH_URL },
+  { key: "curseforge", titleKey: "about.link.curseforge", hintKey: "pages.about.thanks.curseforgeHint", image: brandCurseforge, url: CURSEFORGE_URL },
+  { key: "mirror", titleKey: "about.link.mirror", hintKey: "about.link.mirrorHint", Icon: IconZap, url: MIRROR_URL },
+  { key: "steam302", titleKey: "about.link.steam302", hintKey: "about.link.steam302Hint", Icon: IconRocket, url: RECOMMEND_URL },
+  { key: "sakura", titleKey: "pages.about.team.sakura", hintKey: "pages.about.role.net", image: avatarSakura, url: SAKURA_FRP_URL },
+  { key: "terracotta", titleKey: "pages.about.team.terracotta", hintKey: "pages.about.thanks.terracottaHint", Icon: IconGithub, url: TERRACOTTA_URL },
 ];
 
 
 
 type TeamEntry = {
-  /** 显示名；项目卡走 nameKey 翻译，人名保持原样。 */
+  /** 显示名；人名保持原样，需要翻译时用 nameKey。 */
   name: string;
   nameKey?: string;
   roleKey: string;
-  /** 没有头像时用首字色块或图标占位。 */
+  /** 没有头像时用首字色块占位。 */
   initial: string;
   avatar?: string;
-  Icon?: typeof IconLink;
   url: string;
-  kind?: "person" | "project";
-  license?: string;
 };
 
-/** 团队头像一律用本地 png；项目卡用组件库里已有的图标，不引新依赖。 */
+/** 核心团队只有 3 人；樱花穿透与陶瓦联机属于「链接与致谢」，不在团队卡里。 */
 const TEAM: TeamEntry[] = [
   { name: "奶龙", roleKey: "about.role.main", initial: "奶", avatar: avatarNailong, url: PROJECT_URL },
   { name: "小七", roleKey: "about.role.co", initial: "七", avatar: avatarXiaoqi, url: PROJECT_URL },
   { name: "DeepSeek", roleKey: "about.role.tools", initial: "D", avatar: avatarDeepseek, url: DEEPSEEK_URL },
-  {
-    name: "樱花穿透",
-    nameKey: "pages.about.team.sakura",
-    roleKey: "pages.about.role.net",
-    initial: "樱",
-    // 樱花穿透的官方头像（由 https://a.favicon.im/openid.13a.com 的 ico 转成 png 后随包分发，离线也能显示）
-    avatar: avatarSakura,
-    url: SAKURA_FRP_URL,
-    kind: "project",
-  },
-  {
-    name: "陶瓦联机",
-    nameKey: "pages.about.team.terracotta",
-    roleKey: "pages.about.role.net",
-    initial: "陶",
-    // 陶瓦联机没有官方应用图标，按需求直接用 GitHub 标志（它的项目与发布都在 GitHub 上）
-    Icon: IconGithub,
-    url: TERRACOTTA_URL,
-    kind: "project",
-    license: "AGPL-3.0-or-later",
-  },
 ];
 
 /** 把外壳 .app-bg 上当前铺着的背景图镜像到 Hero：轮播换图时跟着更新。 */
@@ -355,31 +356,45 @@ export function AboutPage() {
       <section className="panel">
         <div className="panel-head">
           <h2 className="panel-title">{tr("about.linksTitle")}</h2>
-          <span className="panel-count">{tr("about.linksCount", { count: LINKS.length })}</span>
+          <span className="panel-count">{tr("about.linksCount", { count: THANKS.length })}</span>
         </div>
-        <div className="about-link-list">
-          {LINKS.map(({ Icon, labelKey, hintKey, url }) => {
-            const label = tr(labelKey);
+        <ul className="about-thanks" data-about-thanks>
+          {THANKS.map((entry) => {
+            const Icon = entry.Icon;
+            const label = tr(entry.titleKey);
+            const hint = tr(entry.hintKey, { number: QQ_GROUP_NO });
+            const openLabel = tr("pages.about.thanksOpen", { label, hint });
             return (
-            <button
-              type="button"
-              className="about-link"
-              data-about-link
-              key={labelKey}
-              onClick={() => void open(url, label)}
-            >
-              <span className="about-link-icon">
-                <Icon size={16} />
-              </span>
-              <span className="about-link-text">
-                <strong>{label}</strong>
-                {hintKey ? <small>{tr(hintKey, { number: QQ_GROUP_NO })}</small> : null}
-              </span>
-              <IconChevronRight size={15} className="about-link-arrow" />
-            </button>
+              <li className="about-team-cell" key={entry.key}>
+                <button
+                  type="button"
+                  className="about-member about-thanks-card"
+                  data-about-link
+                  data-about-thanks-item={entry.key}
+                  data-about-thanks-url={entry.url}
+                  data-about-thanks-kind={entry.image ? "image" : "icon"}
+                  title={openLabel}
+                  aria-label={openLabel}
+                  onClick={() => void open(entry.url, label)}
+                >
+                  <span className="about-avatar" aria-hidden="true">
+                    {entry.image ? (
+                      <img src={entry.image} alt="" loading="lazy" />
+                    ) : Icon ? (
+                      <Icon size={22} />
+                    ) : (
+                      label.slice(0, 1)
+                    )}
+                  </span>
+                  <span className="about-member-text">
+                    <strong>{label}</strong>
+                    {hint ? <small>{hint}</small> : null}
+                  </span>
+                </button>
+              </li>
             );
           })}
-        </div>
+        </ul>
         <div className="about-dirs" data-about-dirs>
           <button
             type="button"
@@ -415,7 +430,6 @@ export function AboutPage() {
           </div>
           <ul className="about-team" data-about-team>
             {TEAM.map((member) => {
-              const Icon = member.Icon;
               const label = member.nameKey ? tr(member.nameKey) : member.name;
               const role = tr(member.roleKey);
               const openLabel = tr("pages.about.teamOpen", { label, role });
@@ -425,25 +439,17 @@ export function AboutPage() {
                     type="button"
                     className="about-member"
                     data-about-member
-                    data-about-member-kind={member.kind ?? "person"}
                     data-about-url={member.url}
                     title={openLabel}
                     aria-label={openLabel}
                     onClick={() => void open(member.url, label)}
                   >
                     <span className="about-avatar" aria-hidden="true">
-                      {member.avatar ? (
-                        <img src={member.avatar} alt="" loading="lazy" />
-                      ) : Icon ? (
-                        <Icon size={member.kind === "project" ? 22 : 17} />
-                      ) : (
-                        member.initial
-                      )}
+                      {member.avatar ? <img src={member.avatar} alt="" loading="lazy" /> : member.initial}
                     </span>
                     <span className="about-member-text">
                       <strong>{label}</strong>
                       <small>{role}</small>
-                      {member.license ? <small className="about-member-license">{member.license}</small> : null}
                     </span>
                   </button>
                 </li>

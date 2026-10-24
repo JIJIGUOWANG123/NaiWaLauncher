@@ -231,6 +231,54 @@
   color: color-mix(in srgb, var(--text-dim) 88%, transparent);
 }
 
+/* 联机模组选择器（0.3.7）：[下拉] [立即安装] 同一行，窄屏换行但顺序不变 */
+.net-offlinelan-choice {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin: 2px 0;
+}
+
+.net-offlinelan-choice-label {
+  color: var(--text-dim);
+  flex: none;
+}
+
+.net-offlinelan-choice .select-wrap {
+  flex: 0 1 260px;
+  min-width: 0;
+  max-width: 280px;
+}
+
+.net-offlinelan-install {
+  flex: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 780px) {
+  .net-offlinelan-choice {
+    flex-wrap: wrap;
+  }
+
+  .net-offlinelan-choice .select-wrap {
+    flex: 1 1 220px;
+  }
+}
+
+.net-offlinelan-choice-select {
+  width: 100%;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  font-size: 12.5px;
+}
+
+/* 手选了不适配的模组：橙色提示，但不挡安装 */
+.net-offlinelan-warn {
+  color: color-mix(in srgb, var(--danger) 66%, var(--text-strong));
+}
+
+
 /* 0.3.8：装了「另一个」联机模组时的条目列表 + 逐个卸载 */
 .net-offlinelan-others {
   display: flex;

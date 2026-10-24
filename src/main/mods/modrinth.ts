@@ -24,7 +24,25 @@ const PROJECT_TYPE: Record<ModContentKind, string> = {
   resourcepack: "resourcepack",
   shader: "shader",
   map: "mod",
+  plugin: "plugin",
 };
+
+/**
+ * 服务端插件可用的平台：Modrinth 的 loaders 字段里就是这些值（bukkit/spigot/paper…）。
+ * 客户端的 fabric/forge 对插件没有意义——带上它们只会把同一项目的客户端 jar 也捞出来。
+ * 这些平台由目标服务端的核心决定（Paper/Purpur/Folia → paper…，Velocity/Waterfall → velocity…），
+ * 文件列表按整个集合做「任一命中」过滤，服务端平台之外的文件（fabric/forge/quilt）因此被排除。
+ */
+export const PLUGIN_LOADERS = [
+  "bukkit",
+  "spigot",
+  "paper",
+  "purpur",
+  "folia",
+  "velocity",
+  "bungeecord",
+  "waterfall",
+] as const;
 
 function toSearchResult(raw: unknown): ModSearchResult {
   const hit = jsonObject(raw);
@@ -121,7 +139,8 @@ export async function listModrinthCategories(kind: ModContentKind): Promise<ModC
 async function listFiles(req: ModFilesRequest): Promise<ModFileInfo[]> {
   const params = new URLSearchParams();
   if (req.gameVersion) params.set("game_versions", JSON.stringify([req.gameVersion]));
-  const tags = loaderTags(req.loader);
+  // 插件只认服务端平台，与实例的客户端加载器无关
+  const tags = req.kind === "plugin" ? [...PLUGIN_LOADERS] : loaderTags(req.loader);
   if (tags.length > 0) params.set("loaders", JSON.stringify(tags));
   const qs = params.toString();
 
@@ -151,6 +170,7 @@ const PROJECT_TYPE_KIND: Record<string, ModContentKind> = {
   modpack: "modpack",
   resourcepack: "resourcepack",
   shader: "shader",
+  plugin: "plugin",
 };
 
 /** 依赖行要按项目类型落目录：查不到类型（项目不存在/接口失败）就返回 undefined，由调用方按模组兜底。 */

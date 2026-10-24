@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  DownloadJob, InstanceMeta, InstalledContentRef, LoaderKind, MapEntry, ModCategory, ModContentKind, ModDependency,
-  ModFileInfo, ModFilterOptions, ModProviderId, ModSearchResult,
+  DownloadJob, InstanceMeta, InstalledContentRef, InstalledModInfo, LoaderKind, ModCategory, ModContentKind, ModDependency,
+  ModFileInfo, ModFilterOptions, ModProviderId, ModSearchResult, ServerEntry,
 } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatAgo, formatCount, formatDate, loaderLabel } from "../lib/format";
 import {
-  KIND_BADGE_KEY, KIND_DIR, KIND_EMPTY_HINT_KEY, KIND_FILE_ACTION_KEY, KIND_INSTALL_LABEL_KEY, KIND_PLACEHOLDER_KEY,
-  KIND_TABS, MAPS_NOTICE_KEY, MAPS_WEB_URL, SORT_OPTIONS_KEY, isBackendKind, kindLabel, loaderOptionLabel, sourceBadge,
+  KIND_BADGE_KEY, KIND_DIR, KIND_FILE_ACTION_KEY, KIND_INSTALL_LABEL_KEY, KIND_PLACEHOLDER_KEY,
+  KIND_TABS, SORT_OPTIONS_KEY, checkPluginPlatform, isBackendKind, kindLabel, loaderOptionLabel, serverCapabilitiesOf,
+  serverContentKindOf, serverTargetGateFor, sourceBadge,
   showsLoader, showsResolution,
   type KindFilesRequest, type KindInstallRequest, type KindSearchRequest, type ModSort,
   type UiContentKind,
@@ -20,7 +21,6 @@ import { useToast } from "../components/Toast";
 import { AnchoredMenu } from "../components/AnchoredMenu";
 import { ModDetailPanel } from "../components/ModDetailPanel";
 import { ModDepsDialog, type DepsChoice } from "../components/ModDepsDialog";
-import { MapCards } from "../components/MapCards";
 import { ConfirmDialog, Modal } from "../components/Modal";
 import { MatchTag, ReleaseTypeTag } from "../components/Badges";
 import { Select } from "../components/Form";
@@ -105,19 +105,36 @@ interface StoredFilters {
 const DEFAULT_FILTERS: StoredFilters = { version: "", loader: "", resolution: "", categories: [] };
 
 /**
- * 一级「来源」与它支持的二级「类型」。
- * 数据包没有后端接口，继续以 disabled 的占位标签出现（与改造前一致）。
+ * 一级「来源」与它真正支持的二级「类型」。
+ * 数据包与地图两个入口已经撤掉：没有来源再列它们，标签栏自然只剩下面这些。
+ * 插件（plugin）装进服务端的 plugins 目录，是唯一不进客户端实例的类型。
  */
 const SOURCE_TABS: Array<{ value: ModProviderId; labelKey: string; kinds: UiContentKind[] }> = [
-  { value: "modrinth", labelKey: "pages.mods.sourceModrinth", kinds: ["modpack", "mod", "resourcepack", "datapack", "shader"] },
-  { value: "minekuai", labelKey: "pages.mods.sourceMinekuai", kinds: ["modpack", "mod", "resourcepack", "shader", "map"] },
+  { value: "modrinth", labelKey: "pages.mods.sourceModrinth", kinds: ["modpack", "mod", "resourcepack", "shader", "plugin"] },
+  { value: "minekuai", labelKey: "pages.mods.sourceMinekuai", kinds: ["modpack", "mod", "resourcepack", "shader", "plugin"] },
   { value: "curseforge", labelKey: "pages.mods.sourceCurseforge", kinds: ["modpack", "mod"] },
 ];
 
-/** 某来源支持的二级类型：按 KIND_TABS 的顺序过滤，保证按钮顺序稳定。 */
-function kindsForSource(source: ModProviderId): typeof KIND_TABS {
+/** 只展示、点不动的类型：CurseForge 还没有插件源，标签置灰并在 title 里说明原因。 */
+const DISABLED_KINDS: Partial<Record<ModProviderId, UiContentKind[]>> = { curseforge: ["plugin"] };
+
+/** 置灰标签的 title 文案。 */
+const KIND_DISABLED_TITLE_KEY: Partial<Record<UiContentKind, string>> = { plugin: "pages.mods.pluginCurseforgeHint" };
+
+/** 某来源列出来的二级类型：支持的 + 只展示的（后者置灰）。 */
+function kindsShownFor(source: ModProviderId): UiContentKind[] {
   const supported = SOURCE_TABS.find((item) => item.value === source)?.kinds ?? [];
-  return KIND_TABS.filter((tab) => supported.includes(tab.value));
+  return [...supported, ...(DISABLED_KINDS[source] ?? [])];
+}
+
+/** 某来源能点的二级类型：按 KIND_TABS 顺序过滤，保证按钮顺序稳定。 */
+function kindsForSource(source: ModProviderId): typeof KIND_TABS {
+  return KIND_TABS.filter((tab) => kindsShownFor(source).includes(tab.value));
+}
+
+/** 这个标签在当前来源下是不是置灰的（点不动）。 */
+function kindDisabledFor(source: ModProviderId, value: UiContentKind): boolean {
+  return (DISABLED_KINDS[source] ?? []).includes(value);
 }
 
 /** 读来源：只认具体站点；历史存过 "all" 或没存过的，默认落在 Modrinth。 */
@@ -314,6 +331,84 @@ function matchIn(index: InstalledIndex, kind: ModContentKind, candidate: Install
   return { strong: [], weak };
 }
 
+/** 页码区最多显示几个页码按钮。 */
+const PAGER_WINDOW = 5;
+
+/**
+ * 页码窗口：最多 PAGER_WINDOW 个，当前页居中，越界时贴边。
+ * last 为已知末页；接口不返回总数时传 null，按「当前页 + 2」估一个窗口。
+ */
+export function pagerPages(current: number, last: number | null): number[] {
+  const cur = Math.max(1, Math.trunc(current));
+  const edge = last === null ? cur + 2 : Math.max(cur, Math.trunc(last));
+  const size = Math.min(PAGER_WINDOW, edge);
+  // 当前页居中；靠近首页/末页时整窗贴边，避免出现 0 或越过末页的页码。
+  const start = Math.max(1, Math.min(cur - Math.floor(size / 2), edge - size + 1));
+  return Array.from({ length: size }, (_, index) => start + index);
+}
+
+/** 底部翻页条：上一页 / 页码 / 下一页。加载中只禁用，不清空列表。 */
+function Pager(props: {
+  page: number;
+  /** 已知末页；null = 还不知道一共几页（接口不返回总数）。 */
+  last: number | null;
+  hasNext: boolean;
+  loading: boolean;
+  onPage: (page: number) => void;
+}) {
+  const tr = useT();
+  const pages = pagerPages(props.page, props.last);
+  return (
+    <nav
+      className="pager"
+      data-pager
+      data-pager-page={props.page}
+      data-pager-pages={props.last ?? "?"}
+      aria-label={tr("pages.mods.pagerAria")}
+    >
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm pager-step"
+        data-pager-prev
+        disabled={props.loading || props.page <= 1}
+        onClick={() => props.onPage(props.page - 1)}
+      >
+        {tr("pages.mods.pagerPrev")}
+      </button>
+      <div className="pager-pages">
+        {pages[0] > 1 ? <span className="pager-gap" aria-hidden="true">…</span> : null}
+        {pages.map((item) => (
+          <button
+            key={item}
+            type="button"
+            className={`pager-page ${item === props.page ? "is-current" : ""}`.trim()}
+            data-pager-page-btn={item}
+            data-pager-current={item === props.page ? "" : undefined}
+            aria-current={item === props.page ? "page" : undefined}
+            disabled={props.loading}
+            title={tr("pages.mods.pagerGoTitle", { page: item })}
+            onClick={() => props.onPage(item)}
+          >
+            {item}
+          </button>
+        ))}
+        {props.last !== null && pages[pages.length - 1] < props.last
+          ? <span className="pager-gap" aria-hidden="true">…</span>
+          : null}
+      </div>
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm pager-step"
+        data-pager-next
+        disabled={props.loading || !props.hasNext}
+        onClick={() => props.onPage(props.page + 1)}
+      >
+        {tr("pages.mods.pagerNext")}
+      </button>
+    </nav>
+  );
+}
+
 /** 收藏图标：只在资源卡片上用，画在页内免得给通用 icons 添语义。 */
 function IconStar({ filled, size = 16 }: { filled: boolean; size?: number }) {
   return (
@@ -344,7 +439,7 @@ export function ModsPage() {
   }, []);
   const { push } = useToast();
   const tr = useT();
-  /** 二级「类型」：默认模组；数据包因后端缺口禁用（是否出现由来源决定）。 */
+  /** 二级「类型」：默认模组；能否出现由来源决定（插件在 CurseForge 下置灰）。 */
   const [kind, setKind] = useState<UiContentKind>("mod");
   /** 一级「来源」：三个站点单选（不再有「所有来源」合并）。 */
   const [source, setSourceState] = useState<ModProviderId>(readSource);
@@ -388,12 +483,16 @@ export function ModsPage() {
    * 置位期间重复检测不再拿缓存当快路径，避免用旧快照判「没装过」。
    */
   const [installedStale, setInstalledStale] = useState(false);
+  /** 插件目标服务端 id（空串＝还没选）：只对插件类型有意义。 */
+  const [serverId, setServerId] = useState("");
+  /** 正在装插件的项目 key：只禁用那一条，别的卡片照常可点。 */
+  const [pluginBusyKey, setPluginBusyKey] = useState<string | null>(null);
+  /** 该服务端插件列表的刷新计数（安装成功后 +1）。 */
+  const [pluginRefresh, setPluginRefresh] = useState(0);
 
   /** 实时翻译总开关：关掉后即使结果里带译名也回退原文。 */
   const translateMods = settings?.translateMods ?? true;
 
-  const isMap = kind === "map";
-  const isDatapack = kind === "datapack";
   /** 整合包装法是「新建实例」，卡片上没有实例下拉。 */
   const isModpack = kind === "modpack";
   /** 面板与文件列表只有后端支持的类型才会打开。 */
@@ -432,8 +531,10 @@ export function ModsPage() {
   /** 切换二级类型：清掉已打开的详情/下拉，并换成该标签上次的筛选（顺手滤掉不适用的项）。 */
   const changeKind = (next: UiContentKind) => {
     const tab = kindTabs.find((item) => item.value === next);
-    if (!tab || tab.disabled) return;
+    if (!tab || kindDisabledFor(source, next)) return;
     setKind(next);
+    // 新类型不能装服务端（光影/资源包/整合包）：目标退回实例，免得停在一个不可用的目标上。
+    if (serverContentKindOf(next) === null) setServerId("");
     setFilters(sanitizeFilters(readFilters(next), next));
     setLooseSearch(false);
     setSelected(null);
@@ -450,8 +551,8 @@ export function ModsPage() {
     setPicker(null);
     // 当前类型不被新来源支持时，落到该来源的第一个类型（数据包这种占位标签跳过）。
     const tabs = kindsForSource(next);
-    if (!tabs.some((tab) => tab.value === kind && !tab.disabled)) {
-      const first = tabs.find((tab) => !tab.disabled);
+    if (!tabs.some((tab) => tab.value === kind && !kindDisabledFor(next, tab.value))) {
+      const first = tabs.find((tab) => !kindDisabledFor(next, tab.value));
       if (first) {
         setKind(first.value);
         setFilters(sanitizeFilters(readFilters(first.value), first.value));
@@ -486,18 +587,72 @@ export function ModsPage() {
     writeFavorites(next);
   };
 
-  /** 筛选项：版本/加载器/分辨率来自后端；地图与数据包不请求。 */
+  /** 筛选项：版本/加载器/分辨率来自后端；数据包没有后端接口，不请求。 */
   const filterOptions = useAsync<ModFilterOptions>(
-    () => (isBackendKind(kind) && !isMap
+    () => (isBackendKind(kind)
       ? api.mods.filterOptions(kind)
       : Promise.resolve({ versions: [], loaders: [], resolutions: [] } as ModFilterOptions)),
-    [kind, isMap],
+    [kind],
   );
 
   /** 分类列表跟随类型与来源。 */
   const categoryList = useAsync<ModCategory[]>(
-    () => (isBackendKind(kind) && !isMap ? api.mods.categories(kind, source) : Promise.resolve([] as ModCategory[])),
-    [kind, source, isMap],
+    () => (isBackendKind(kind) ? api.mods.categories(kind, source) : Promise.resolve([] as ModCategory[])),
+    [kind, source],
+  );
+
+  /** 开服列表：插件要装进某个服务端，选择器、目标名与已装判定都读它。 */
+  const servers = useAsync<ServerEntry[]>(() => api.servers.list(), [tick]);
+  /** 目标服务端：列表刷新后找不到（被删掉）就按「没选」处理。 */
+  const pluginServer = useMemo(
+    () => (servers.data ?? []).find((item) => item.meta.id === serverId) ?? null,
+    [servers.data, serverId],
+  );
+  /** 目标：选了服务端就装服务端，否则沿用「当前实例」。 */
+  const serverTarget = serverId !== "" && pluginServer !== null;
+  const targetKind: "instance" | "server" = serverTarget ? "server" : "instance";
+  const targetValue = serverTarget
+    ? `server:${serverId}`
+    : (currentInstance ? `instance:${currentInstance.id}` : "");
+  /** 这个类型能不能装进服务端（资源包/光影/整合包只能装实例，服务端分组直接置灰）。 */
+  const serverKindOk = serverContentKindOf(kind) !== null;
+  /** 主进程给的能力表（拿不到就用核心推的兜底），决定这个类型能不能装进这个服务端。 */
+  const serverCaps = useAsync(
+    () => (serverTarget ? api.servers.capabilities(serverId) : Promise.resolve(null)),
+    [serverTarget, serverId, tick],
+  );
+  const caps = serverCaps.data ?? (pluginServer ? serverCapabilitiesOf(pluginServer.meta.core) : null);
+  const serverGate = caps && serverKindOk ? serverTargetGateFor(kind, caps) : null;
+  const serverBlocked = serverTarget && serverGate !== null && !serverGate.allowed;
+  const serverBlockHint = serverBlocked && serverGate?.reasonKey ? tr(serverGate.reasonKey) : null;
+  /** 服务端插件接口（api.plugins）：装进 <服务端目录>/plugins。 */
+  const plugins = api.plugins;
+  /** 目标服务端对应目录（mods / plugins）里已装的东西：卡片与详情面板的「已安装」判定都读它。 */
+  const installedPlugins = useAsync<InstalledModInfo[]>(
+    () => {
+      if (!serverTarget) return Promise.resolve([] as InstalledModInfo[]);
+      if (kind === "plugin") return plugins.installed(serverId);
+      if (kind === "mod") return api.servers.contentInstalled(serverId, "mod");
+      return Promise.resolve([] as InstalledModInfo[]);
+    },
+    [serverTarget, serverId, kind, plugins, pluginRefresh, tick],
+  );
+  /** 服务端目录的条目类型：模组服看 mods，插件服看 plugins。 */
+  const serverFileKind: ModContentKind = serverContentKindOf(kind) ?? "plugin";
+  /** 已有的三档索引直接复用：服务端目录清单按 fileName / projectId 当成普通条目喂进去。 */
+  const pluginIndex = useMemo(() => buildInstalledIndex((installedPlugins.data ?? []).map((item) => ({
+    provider: item.provider ?? "modrinth",
+    projectId: item.projectId ?? "",
+    kind: serverFileKind,
+    fileName: item.fileName,
+    modId: item.modId,
+    name: item.name,
+  }))), [installedPlugins.data, serverFileKind]);
+  /** 服务端目标的已装匹配：没选服务端一律当作没装。 */
+  const pluginMatchOf = (mod: ModSearchResult): InstalledMatch => (
+    serverTarget
+      ? matchIn(pluginIndex, serverFileKind, { projectId: mod.projectId, slug: mod.slug, title: mod.title })
+      : EMPTY_MATCH
   );
 
   /**
@@ -531,16 +686,15 @@ export function ModsPage() {
   const effectiveLoader = filters.loader
     || (looseSearch ? "" : showsLoader(kind) ? currentInstance?.loader ?? "" : "");
 
-  /** 一页拉多少条：首屏与「加载更多」共用同一个页大小。 */
-  const SEARCH_PAGE_SIZE = 40;
-  const MAPS_PAGE_SIZE = 20;
+  /** 每页固定 5 条：分页后列表只保留当前页，DOM 规模恒定。 */
+  const SEARCH_PAGE_SIZE = 5;
   /** 列表刷新的依赖清单：useAsync 与分页复位共用，保证两边永远同步。 */
   const searchDeps = [
     source, kind, submitted, effectiveVersion, effectiveLoader, filters.resolution, filters.categories.join(","),
-    sort, tick, noKey, isMap,
+    sort, tick, noKey,
   ];
 
-  /** 当前筛选对应的搜索请求（首屏 offset=0，加载更多时 offset 递增）。 */
+  /** 当前筛选对应的搜索请求：offset = (页码 - 1) × 每页条数，只拉当前页。 */
   const buildSearchRequest = useCallback((offset: number, searchKind: ModContentKind): KindSearchRequest => ({
     // 来源是单选按钮：provider 与 source 始终同一个站点，不再走「所有来源」合并。
     provider: source,
@@ -555,18 +709,12 @@ export function ModsPage() {
     sort,
   }), [effectiveLoader, effectiveVersion, filters.resolution, sort, source, submitted]);
 
-  /**
-   * 拉某一页：分类多选时每个分类各查一次再合并去重（去重键 provider:projectId，跨页同样有效）。
-   * full = 这一页还是满的，说明后面可能还有。
-   */
-  const fetchSearchPage = useCallback(async (offset: number): Promise<{ items: ModSearchResult[]; full: boolean }> => {
-    if (!isBackendKind(kind) || isMap || noKey) return { items: [], full: false };
+  /** 拉某一页：分类多选时每个分类各查一次再合并去重（去重键 provider:projectId）。 */
+  const fetchSearchPage = useCallback(async (offset: number): Promise<ModSearchResult[]> => {
+    if (!isBackendKind(kind) || noKey) return [];
     const request = buildSearchRequest(offset, kind);
     const categories = filters.categories;
-    if (categories.length === 0) {
-      const items = await api.mods.search(request);
-      return { items, full: items.length >= SEARCH_PAGE_SIZE };
-    }
+    if (categories.length === 0) return api.mods.search(request);
     // 分类是多选、后端只认单个 category：每个分类各查一次再合并去重（每个分类都用同一个 offset）。
     const lists = await Promise.all(categories.map((category) => api.mods.search({ ...request, category })));
     const seen = new Set<string>();
@@ -577,156 +725,72 @@ export function ModsPage() {
       seen.add(key);
       merged.push(item);
     }
-    // 任一分类这一页还是满的，就说明还有下一页可翻。
-    return { items: merged, full: lists.some((list) => list.length >= SEARCH_PAGE_SIZE) };
-  }, [buildSearchRequest, filters.categories, isMap, kind, noKey]);
+    return merged;
+  }, [buildSearchRequest, filters.categories, kind, noKey]);
 
-  /** 首屏那页是不是满的（决定还有没有下一页）：先写 ref，等 data 落地再同步到 state。 */
-  const firstPageFull = useRef(true);
-  const search = useAsync(async () => {
-    const page = await fetchSearchPage(0);
-    firstPageFull.current = page.full;
-    return page.items;
-  }, searchDeps);
+  /**
+   * 当前页码与筛选清单绑成一条记录：筛选一变 key 就对不上，页码自动回到 1，
+   * 既不需要额外 effect，也不会先把旧页码的请求发出去再纠正。
+   */
+  const searchKey = searchDeps.join("|");
+  const [pager, setPager] = useState<{ key: string; page: number }>({ key: searchKey, page: 1 });
+  const page = pager.key === searchKey ? pager.page : 1;
+  const goPage = useCallback((next: number) => {
+    setPager({ key: searchKey, page: Math.max(1, next) });
+  }, [searchKey]);
 
-  // 「加载更多」的累积页单独放 state：首屏渲染路径与改造前完全一致。
-  const [extraResults, setExtraResults] = useState<ModSearchResult[]>([]);
-  const [nextOffset, setNextOffset] = useState(SEARCH_PAGE_SIZE);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [reachedEnd, setReachedEnd] = useState(false);
-  const loadingMoreRef = useRef(false);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  /** 已知的末页（接口不返回总数，只有拿到「不满一页」才能确定）——同样按筛选清单失效。 */
+  const [lastPage, setLastPage] = useState<{ key: string; page: number | null }>({ key: searchKey, page: null });
+  const lastKnownPage = lastPage.key === searchKey ? lastPage.page : null;
 
-  // 任一筛选/刷新变化：清空累积页、offset 归零、hasMore 复位（与 useAsync 依赖同一份清单）。
+  /** 当前 data 是哪一页的结果：空页回退只认「确实是这一页交回来的空结果」。 */
+  const loadedPageRef = useRef(0);
+
+  /** 只取当前页：offset 跟页码走，请求结果由 useAsync 的 alive 闸门丢弃过期的。 */
+  const search = useAsync(() => {
+    const target = page;
+    return fetchSearchPage((target - 1) * SEARCH_PAGE_SIZE).then((items) => {
+      loadedPageRef.current = target;
+      return items;
+    });
+  }, [...searchDeps, page]);
+
+  // 这一页不满 ⇒ 它就是末页，记下来给页码区贴边与「下一页」禁用用。
   useEffect(() => {
-    setExtraResults([]);
-    setNextOffset(SEARCH_PAGE_SIZE);
-    setReachedEnd(false);
-    setLoadingMore(false);
-    loadingMoreRef.current = false;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, searchDeps);
+    if (search.loading || search.data === null || search.data.length >= SEARCH_PAGE_SIZE) return;
+    setLastPage((prev) => (prev.key === searchKey && prev.page === page ? prev : { key: searchKey, page }));
+  }, [page, search.data, search.loading, searchKey]);
 
-  // 首屏结果落地：用它判断到底了没有。
+  /** 末页判定不需要总数：当前页满就说明后面可能还有页。 */
+  const hasNextPage = !search.loading && search.data !== null && search.data.length >= SEARCH_PAGE_SIZE;
+
+  // 结果刚好是每页条数的整数倍时，「下一页」会翻进空页：退回上一页并把它记成末页。
   useEffect(() => {
-    if (search.data === null) return;
-    setNextOffset(SEARCH_PAGE_SIZE);
-    setReachedEnd(!firstPageFull.current);
-  }, [search.data]);
+    if (search.loading || search.data === null || search.data.length > 0 || page <= 1) return;
+    if (loadedPageRef.current !== page) return;
+    setLastPage({ key: searchKey, page: page - 1 });
+    goPage(page - 1);
+  }, [goPage, page, search.data, search.loading, searchKey]);
 
-  const hasMore = !reachedEnd && !search.loading && search.data !== null;
-
-  const loadMore = useCallback(async () => {
-    if (loadingMoreRef.current || !hasMore || isMap || noKey || !isBackendKind(kind)) return;
-    loadingMoreRef.current = true;
-    setLoadingMore(true);
-    try {
-      const page = await fetchSearchPage(nextOffset);
-      setExtraResults((prev) => [...prev, ...page.items]);
-      setNextOffset((prev) => prev + SEARCH_PAGE_SIZE);
-      if (!page.full) setReachedEnd(true);
-    } catch (error: unknown) {
-      push(errorMessage(error), "error");
-    } finally {
-      loadingMoreRef.current = false;
-      setLoadingMore(false);
-    }
-  }, [fetchSearchPage, hasMore, isMap, kind, nextOffset, noKey, push]);
-
-  // 滚到接近底部自动加载；按钮仍保留，作为手动兜底与无障碍入口。
-  useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node || !hasMore) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadMore();
-    }, { rootMargin: "240px 0px" });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [hasMore, loadMore]);
-
+  /** 文件列表按目标适配：插件看服务端的游戏版本（服务端没有加载器概念）。 */
   const files = useAsync(
     () => {
       if (selected === null) return Promise.resolve([] as ModFileInfo[]);
       const request: KindFilesRequest = {
         provider: selected.provider,
         projectId: selected.projectId,
-        gameVersion: currentInstance?.mcVersion,
-        loader: currentInstance?.loader,
+        gameVersion: serverTarget ? pluginServer?.meta.mcVersion : currentInstance?.mcVersion,
+        loader: serverTarget ? undefined : currentInstance?.loader,
         kind: detailKind,
         limit: 30,
       };
       return api.mods.files(request);
     },
-    [selected?.projectId, detailKind, currentInstance?.mcVersion, currentInstance?.loader],
+    [
+      selected?.projectId, detailKind, currentInstance?.mcVersion, currentInstance?.loader,
+      serverTarget, pluginServer?.meta.mcVersion,
+    ],
   );
-
-  const maps = useAsync(
-    () => (isMap ? api.mods.maps(submitted, 1, currentInstance?.id) : Promise.resolve([] as MapEntry[])),
-    [isMap, submitted, currentInstance?.id, tick],
-  );
-
-  // 地图分页：第 1 页由上面的 useAsync 拉，之后按 page 递增追加。
-  const [extraMaps, setExtraMaps] = useState<MapEntry[]>([]);
-  const [nextMapPage, setNextMapPage] = useState(2);
-  const [mapsLoadingMore, setMapsLoadingMore] = useState(false);
-  const [mapsEnd, setMapsEnd] = useState(false);
-  const mapsLoadingRef = useRef(false);
-  const mapsSentinelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    setExtraMaps([]);
-    setNextMapPage(2);
-    setMapsEnd(false);
-    setMapsLoadingMore(false);
-    mapsLoadingRef.current = false;
-  }, [isMap, submitted, currentInstance?.id, tick]);
-
-  useEffect(() => {
-    if (maps.data === null) return;
-    setNextMapPage(2);
-    setMapsEnd(maps.data.length < MAPS_PAGE_SIZE);
-  }, [maps.data]);
-
-  /** 第 1 页 + 追加页：按地图 id 去重。 */
-  const allMaps = useMemo(() => {
-    const seen = new Set<string>();
-    const out: MapEntry[] = [];
-    for (const item of [...(maps.data ?? []), ...extraMaps]) {
-      if (seen.has(item.id)) continue;
-      seen.add(item.id);
-      out.push(item);
-    }
-    return out;
-  }, [extraMaps, maps.data]);
-
-  const mapsHasMore = isMap && !mapsEnd && !maps.loading && maps.data !== null;
-
-  const loadMoreMaps = useCallback(async () => {
-    if (mapsLoadingRef.current || !mapsHasMore) return;
-    mapsLoadingRef.current = true;
-    setMapsLoadingMore(true);
-    try {
-      const page = await api.mods.maps(submitted, nextMapPage, currentInstance?.id);
-      setExtraMaps((prev) => [...prev, ...page]);
-      setNextMapPage((prev) => prev + 1);
-      if (page.length < MAPS_PAGE_SIZE) setMapsEnd(true);
-    } catch (error: unknown) {
-      push(errorMessage(error), "error");
-    } finally {
-      mapsLoadingRef.current = false;
-      setMapsLoadingMore(false);
-    }
-  }, [currentInstance?.id, mapsHasMore, nextMapPage, push, submitted]);
-
-  useEffect(() => {
-    const node = mapsSentinelRef.current;
-    if (!node || !mapsHasMore) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) void loadMoreMaps();
-    }, { rootMargin: "240px 0px" });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [loadMoreMaps, mapsHasMore]);
 
   /**
    * 实例里已装的内容：只查当前实例（没选实例就是空，界面自然不显示任何标记）。
@@ -734,10 +798,10 @@ export function ModsPage() {
    * 光影/资源包后列表会重载，角标要跟着消失。
    */
   const installedRefs = useAsync(
-    () => (currentInstance
+    () => (currentInstance && !serverTarget
       ? api.mods.installedContent(currentInstance.id)
       : Promise.resolve([] as InstalledContentRef[])),
-    [currentInstance?.id, tick, instances],
+    [currentInstance?.id, tick, instances, serverTarget],
   );
 
   /**
@@ -748,10 +812,12 @@ export function ModsPage() {
 
   /** 当前实例里这个候选资源的匹配结果；没选实例一律当作没装。 */
   const matchInstalled = (contentKind: ModContentKind, candidate: InstalledCandidate): InstalledMatch => (
-    currentInstance ? matchIn(installedIndex, contentKind, candidate) : EMPTY_MATCH
+    currentInstance && !serverTarget ? matchIn(installedIndex, contentKind, candidate) : EMPTY_MATCH
   );
   const isInstalledFile = (contentKind: ModContentKind, fileName: string): boolean => (
-    currentInstance ? installedIndex.files.has(installedFileKey(contentKind, fileName)) : false
+    serverTarget
+      ? pluginIndex.files.has(installedFileKey(serverFileKind, fileName))
+      : currentInstance ? installedIndex.files.has(installedFileKey(contentKind, fileName)) : false
   );
 
   // 新快照落地 = 缓存重新可信；此前（含刚安装完的那段窗口）都按旧数据/脏数据处理。
@@ -761,25 +827,24 @@ export function ModsPage() {
     perfSince("mods-page-installed-refs", mountedAt.current);
   }, [installedRefs.data]);
 
-  /** 首屏页 + 累积页：按 provider:projectId 去重（跨页重复也能挡住）。 */
-  const allResults = useMemo(() => {
+  /**
+   * 当前页的卡片：按 provider:projectId 去重后只留这一页（上限 SEARCH_PAGE_SIZE 条）。
+   * 分页取代累积，列表规模与滚动位置无关。
+   */
+  const results = useMemo(() => {
     const seen = new Set<string>();
     const out: ModSearchResult[] = [];
-    for (const item of [...(search.data ?? []), ...extraResults]) {
+    for (const item of search.data ?? []) {
       const key = `${item.provider}:${item.projectId}`;
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(item);
     }
-    return out;
-  }, [extraResults, search.data]);
-
-  /** 卡片列表：后端排序之外再兜一层本地排序，切换排序立即见效。 */
-  const results = useMemo(() => {
-    if (sort === "downloads") return [...allResults].sort((a, b) => b.downloads - a.downloads);
-    if (sort === "updated") return [...allResults].sort((a, b) => sortTime(b) - sortTime(a));
-    return allResults;
-  }, [allResults, sort]);
+    // 后端排序之外再兜一层本地排序，切换排序立即见效。
+    if (sort === "downloads") out.sort((a, b) => b.downloads - a.downloads);
+    else if (sort === "updated") out.sort((a, b) => sortTime(b) - sortTime(a));
+    return out.slice(0, SEARCH_PAGE_SIZE);
+  }, [search.data, sort]);
 
   const sortedFiles = useMemo(() => {
     const list = files.data ?? [];
@@ -1135,7 +1200,9 @@ export function ModsPage() {
   const panelInstalling = isEntryBusy(panelEntry);
   /** 详情面板当前项目在该实例的已装记录：整合包走「新建实例」，不参与判定。 */
   const selectedMatch = selected && detailKind !== "modpack"
-    ? matchInstalled(detailKind, { projectId: selected.projectId, slug: selected.slug, title: selected.title })
+    ? (detailKind === "plugin"
+      ? pluginMatchOf(selected)
+      : matchInstalled(detailKind, { projectId: selected.projectId, slug: selected.slug, title: selected.title }))
     : EMPTY_MATCH;
   /** 详情面板当前项目的匹配分级：null = 没装过。 */
   const selectedGrade = selectedMatch.strong.length > 0 ? "index" : selectedMatch.weak.length > 0 ? "scan" : null;
@@ -1150,6 +1217,52 @@ export function ModsPage() {
   const keyOf = (mod: ModSearchResult) => `${mod.provider}:${mod.projectId}`;
   /** 列表上显示的标题：开着实时翻译时用译名，整合包新建实例也用它当名字。 */
   const titleOf = (mod: ModSearchResult) => (translateMods ? mod.titleZh : undefined) ?? mod.title;
+
+  /**
+   * 装进服务端：plugin → <服务端>/plugins，mod → <服务端>/mods。
+   * 不进客户端实例、也不进安装队列（单个文件就完事，失败了重点一次即可）。
+   * 成功后提示并刷新该服务端对应目录的清单。
+   */
+  const installToServer = async (mod: ModSearchResult, file: ModFileInfo | null) => {
+    if (!pluginServer) {
+      push(tr("pages.mods.pluginPickServerFirst"), "info");
+      return;
+    }
+    if (serverBlocked) {
+      if (serverBlockHint) push(serverBlockHint, "info");
+      return;
+    }
+    const target = serverContentKindOf(kind);
+    if (target === null) {
+      push(tr("pages.mods.serverTargetUnsupported"), "info");
+      return;
+    }
+    setPluginBusyKey(keyOf(mod));
+    try {
+      if (target === "plugin") {
+        await plugins.install({
+          serverId: pluginServer.meta.id,
+          provider: mod.provider,
+          projectId: mod.projectId,
+          fileId: file?.fileId,
+        });
+      } else {
+        await api.servers.contentInstall({
+          serverId: pluginServer.meta.id,
+          kind: "mod",
+          provider: mod.provider,
+          projectId: mod.projectId,
+          fileId: file?.fileId,
+        });
+      }
+      push(tr("pages.mods.pluginInstalled", { name: pluginServer.meta.name }), "success");
+      setPluginRefresh((value) => value + 1);
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      setPluginBusyKey(null);
+    }
+  };
 
   const closePicker = useCallback(() => setPicker(null), []);
 
@@ -1210,26 +1323,6 @@ export function ModsPage() {
     setPicker(null);
   }, [search.loading]);
 
-  /** 地图直链交给系统浏览器（启动器暂不接管存档下载）。 */
-  const downloadMap = async (entry: MapEntry) => {
-    if (!entry.downloadUrl) return;
-    try {
-      await api.app.openExternal(entry.downloadUrl);
-      push(tr("pages.mods.mapLinkOpened"), "success");
-    } catch (error: unknown) {
-      push(errorMessage(error), "error");
-    }
-  };
-
-  const openMapsWeb = async () => {
-    try {
-      await api.app.openExternal(MAPS_WEB_URL);
-      push(tr("pages.mods.mapsPageOpened"), "success");
-    } catch (error: unknown) {
-      push(errorMessage(error), "error");
-    }
-  };
-
   const versionOptions = useMemo(
     () => [
       { value: "", label: tr("pages.mods.allVersions") },
@@ -1260,27 +1353,30 @@ export function ModsPage() {
     const parts: string[] = [];
     const sourceLabel = SOURCE_TABS.find((item) => item.value === source)?.labelKey ?? source;
     parts.push(tr("pages.mods.filterSource", { label: tr(sourceLabel) }));
-    if (!isMap) {
-      if (effectiveVersion) parts.push(tr("pages.mods.filterVersion", { version: effectiveVersion }));
-      if (effectiveLoader) parts.push(tr("pages.mods.filterLoader", { loader: loaderOptionLabel(effectiveLoader, tr) }));
-      if (filters.resolution) parts.push(tr("pages.mods.filterResolution", { resolution: filters.resolution }));
-      if (filters.categories.length > 0) {
-        const ids = new Set((categoryList.data ?? []).map((item) => item.id));
-        parts.push(
-          tr("pages.mods.filterCategories", {
-            names: filters.categories.map((id) => (ids.has(id) ? categoryName(id) : id)).join(", "),
-          }),
-        );
-      }
+    if (effectiveVersion) parts.push(tr("pages.mods.filterVersion", { version: effectiveVersion }));
+    if (effectiveLoader) parts.push(tr("pages.mods.filterLoader", { loader: loaderOptionLabel(effectiveLoader, tr) }));
+    if (filters.resolution) parts.push(tr("pages.mods.filterResolution", { resolution: filters.resolution }));
+    if (filters.categories.length > 0) {
+      const ids = new Set((categoryList.data ?? []).map((item) => item.id));
+      parts.push(
+        tr("pages.mods.filterCategories", {
+          names: filters.categories.map((id) => (ids.has(id) ? categoryName(id) : id)).join(", "),
+        }),
+      );
     }
     return parts.join(" · ");
-  }, [source, isMap, effectiveVersion, effectiveLoader, filters.resolution, filters.categories, categoryList.data, tr]);
+  }, [source, effectiveVersion, effectiveLoader, filters.resolution, filters.categories, categoryList.data, tr]);
 
 
-  const subtitle = isMap
-    ? (currentInstance
-      ? tr("pages.mods.mapSubtitleWithInstance", { name: currentInstance.name, mc: currentInstance.mcVersion })
-      : tr("pages.mods.mapSubtitleNoInstance"))
+  /** 副标题：插件写目标服务端，其它类型照旧写当前实例。 */
+  const subtitle = serverTarget
+    ? (pluginServer
+      ? tr("pages.mods.serverSubtitle", {
+        name: pluginServer.meta.name,
+        mc: pluginServer.meta.mcVersion,
+        kind: kindLabel(kind, tr),
+      })
+      : tr("pages.mods.pluginSubtitleNoServer"))
     : (currentInstance
       ? tr("pages.mods.subtitleInstance", {
         kind: kindLabel(kind, tr),
@@ -1290,7 +1386,7 @@ export function ModsPage() {
       })
       : tr("pages.mods.subtitleNoInstance"));
 
-  const resultCount = isMap ? (maps.data ?? []).length : results.length;
+  const resultCount = results.length;
 
   return (
     <section className="page">
@@ -1300,7 +1396,7 @@ export function ModsPage() {
           <p className="page-sub">{subtitle}</p>
         </div>
         <div className="page-actions">
-          <button type="button" className="btn btn-ghost" onClick={hardRefresh} disabled={isMap ? maps.loading : search.loading}>
+          <button type="button" className="btn btn-ghost" onClick={hardRefresh} disabled={search.loading}>
             <IconRefresh size={16} />
             {tr("pages.common.refresh")}
           </button>
@@ -1427,119 +1523,183 @@ export function ModsPage() {
 
         {/* 二级：类型，只列当前来源支持的那几个（数据包在支持它的来源下仍是禁用占位）。 */}
         <div className="kind-tabs" role="tablist" aria-label={tr("pages.mods.kindTabsAria")}>
-          {kindTabs.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              role="tab"
-              aria-selected={tab.value === kind}
-              aria-disabled={tab.disabled ? true : undefined}
-              className={`kind-tab ${tab.value === kind ? "active" : ""} ${tab.disabled ? "is-disabled" : ""}`.trim()}
-              data-kind-tab={tab.value}
-              data-kind-disabled={tab.disabled ? "1" : undefined}
-              title={tab.hintKey ? tr(tab.hintKey) : undefined}
-              disabled={tab.disabled}
-              onClick={() => changeKind(tab.value)}
-            >
-              {tr(tab.labelKey)}
-            </button>
-          ))}
+          {kindTabs.map((tab) => {
+            const disabled = kindDisabledFor(source, tab.value);
+            const titleKey = KIND_DISABLED_TITLE_KEY[tab.value];
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={tab.value === kind}
+                aria-disabled={disabled ? true : undefined}
+                className={`kind-tab ${tab.value === kind ? "active" : ""} ${disabled ? "is-disabled" : ""}`.trim()}
+                data-kind-tab={tab.value}
+                data-kind-option={tab.value}
+                data-kind-disabled={disabled ? "1" : undefined}
+                title={disabled && titleKey ? tr(titleKey) : undefined}
+                disabled={disabled}
+                onClick={() => changeKind(tab.value)}
+              >
+                {tr(tab.labelKey)}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       <div className="mods-layout">
         <aside className="mods-aside res-aside">
-          {!isMap ? (
-            <>
+          <>
+            <div className="aside-block">
+              <span className="field-label">{tr("pages.mods.versionLabel")}</span>
+              <Select
+                value={filters.version}
+                options={versionOptions}
+                onChange={(value) => patch({ version: value })}
+                keepEmpty
+                ariaLabel={tr("pages.mods.versionLabel")}
+              />
+            </div>
+
+            {showsLoader(kind) ? (
               <div className="aside-block">
-                <span className="field-label">{tr("pages.mods.versionLabel")}</span>
+                <span className="field-label">{tr("pages.mods.loaderLabelText")}</span>
                 <Select
-                  value={filters.version}
-                  options={versionOptions}
-                  onChange={(value) => patch({ version: value })}
+                  value={filters.loader}
+                  options={loaderOptions}
+                  onChange={(value) => patch({ loader: value })}
                   keepEmpty
-                  ariaLabel={tr("pages.mods.versionLabel")}
+                  ariaLabel={tr("pages.mods.loaderLabelText")}
                 />
               </div>
+            ) : null}
 
-              {showsLoader(kind) ? (
-                <div className="aside-block">
-                  <span className="field-label">{tr("pages.mods.loaderLabelText")}</span>
-                  <Select
-                    value={filters.loader}
-                    options={loaderOptions}
-                    onChange={(value) => patch({ loader: value })}
-                    keepEmpty
-                    ariaLabel={tr("pages.mods.loaderLabelText")}
-                  />
-                </div>
-              ) : null}
-
-              {showsResolution(kind) ? (
-                <div className="aside-block">
-                  <span className="field-label">{tr("pages.mods.resolutionLabel")}</span>
-                  <Select
-                    value={filters.resolution}
-                    options={resolutionOptions}
-                    onChange={(value) => patch({ resolution: value })}
-                    keepEmpty
-                    ariaLabel={tr("pages.mods.resolutionLabel")}
-                  />
-                </div>
-              ) : null}
-
+            {showsResolution(kind) ? (
               <div className="aside-block">
-                <span className="field-label">{tr("pages.mods.categoryLabel")}</span>
-                {categoryList.loading ? <p className="aside-hint">{tr("pages.mods.readingCategories")}</p> : null}
-                {categoryList.error ? <p className="aside-hint">{categoryList.error}</p> : null}
-                <div className="cat-list" data-cat-list>
-                  {(categoryList.data ?? []).map((category) => {
-                    const active = filters.categories.includes(category.id);
-                    return (
-                      <button
-                        key={category.id}
-                        type="button"
-                        className={`cat-item ${active ? "active" : ""}`.trim()}
-                        data-cat={category.id}
-                        aria-pressed={active}
-                        onClick={() => toggleCategory(category.id)}
-                      >
-                        <span className="cat-name">{category.name}</span>
-                        {typeof category.count === "number" ? <span className="cat-count">{category.count}</span> : null}
-                      </button>
-                    );
-                  })}
-                  {!categoryList.loading && (categoryList.data ?? []).length === 0 ? (
-                    <p className="aside-hint">{tr("pages.mods.noCategories")}</p>
-                  ) : null}
-                </div>
+                <span className="field-label">{tr("pages.mods.resolutionLabel")}</span>
+                <Select
+                  value={filters.resolution}
+                  options={resolutionOptions}
+                  onChange={(value) => patch({ resolution: value })}
+                  keepEmpty
+                  ariaLabel={tr("pages.mods.resolutionLabel")}
+                />
               </div>
-            </>
-          ) : null}
+            ) : null}
+
+            <div className="aside-block">
+              <span className="field-label">{tr("pages.mods.categoryLabel")}</span>
+              {categoryList.loading ? <p className="aside-hint">{tr("pages.mods.readingCategories")}</p> : null}
+              {categoryList.error ? <p className="aside-hint">{categoryList.error}</p> : null}
+              <div className="cat-list" data-cat-list>
+                {(categoryList.data ?? []).map((category) => {
+                  const active = filters.categories.includes(category.id);
+                  return (
+                    <button
+                      key={category.id}
+                      type="button"
+                      className={`cat-item ${active ? "active" : ""}`.trim()}
+                      data-cat={category.id}
+                      aria-pressed={active}
+                      onClick={() => toggleCategory(category.id)}
+                    >
+                      <span className="cat-name">{category.name}</span>
+                      {typeof category.count === "number" ? <span className="cat-count">{category.count}</span> : null}
+                    </button>
+                  );
+                })}
+                {!categoryList.loading && (categoryList.data ?? []).length === 0 ? (
+                  <p className="aside-hint">{tr("pages.mods.noCategories")}</p>
+                ) : null}
+              </div>
+            </div>
+          </>
 
           <div className="aside-block">
-            <span className="field-label">{tr("pages.mods.currentInstanceLabel")}</span>
-            <Select
-              value={currentInstance?.id ?? ""}
-              options={instanceOptions}
-              onChange={(value) => setCurrentInstanceId(value === "" ? null : value)}
-              keepEmpty
-              ariaLabel={tr("pages.mods.currentInstanceLabel")}
-            />
-            {currentInstance ? (
-              <p className="aside-hint">
-                {isMap
-                  ? tr("pages.mods.mapInstanceHint")
-                  : tr("pages.mods.kindInstanceHint", { kind: kindLabel(kind, tr) })}
-              </p>
+            {/* 目标：实例与服务端同在一个选择器里（服务端分组对光影/资源包/整合包置灰）。 */}
+            <span className="field-label">{tr("pages.mods.targetLabel")}</span>
+            <div
+              className="select-wrap"
+              data-target-select
+              data-plugin-server-select
+              data-target-kind={targetKind}
+              data-target-id={serverTarget ? serverId : currentInstance?.id ?? ""}
+            >
+              <select
+                className="input select"
+                value={targetValue}
+                aria-label={tr("pages.mods.targetLabel")}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value.startsWith("server:")) {
+                    setServerId(value.slice("server:".length));
+                    return;
+                  }
+                  setServerId("");
+                  setCurrentInstanceId(value === "" ? null : value.slice("instance:".length));
+                }}
+              >
+                <option value="">{tr("pages.mods.browseOnlyOption")}</option>
+                <optgroup label={tr("pages.mods.targetInstances")}>
+                  {instances.map((item) => (
+                    <option
+                      key={item.id}
+                      value={`instance:${item.id}`}
+                      data-target-kind="instance"
+                      data-target-id={item.id}
+                    >
+                      {`${item.name} · ${item.mcVersion} ${loaderLabel(item.loader, tr)}`}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label={tr("pages.mods.targetServers")} disabled={!serverKindOk}>
+                  {(servers.data ?? []).map((item) => (
+                    <option
+                      key={item.meta.id}
+                      value={`server:${item.meta.id}`}
+                      data-target-kind="server"
+                      data-target-id={item.meta.id}
+                    >
+                      {`${item.meta.name} · ${item.meta.mcVersion} · ${item.meta.core}`}
+                    </option>
+                  ))}
+                </optgroup>
+              </select>
+              <IconChevronDown size={16} className="select-icon" />
+            </div>
+
+            {serverTarget && pluginServer ? (
+              <>
+                <p className="aside-hint" data-server-target-hint>
+                  {tr(serverContentKindOf(kind) === "plugin" ? "pages.mods.pluginServerHint" : "pages.mods.modServerHint", {
+                    name: pluginServer.meta.name,
+                  })}
+                </p>
+                {serverBlockHint ? (
+                  <p className="aside-hint" data-server-target-blocked>{serverBlockHint}</p>
+                ) : null}
+              </>
+            ) : currentInstance ? (
+              <p className="aside-hint">{tr("pages.mods.kindInstanceHint", { kind: kindLabel(kind, tr) })}</p>
             ) : (
               <p className="aside-hint" data-instance-empty-hint>
                 {noInstance ? tr("pages.mods.noInstancesBrowse") : tr("pages.mods.noInstanceChosen")}
               </p>
             )}
-            {noInstance ? (
+
+            {!serverKindOk ? (
+              <p className="aside-hint" data-server-target-unsupported>{tr("pages.mods.serverTargetUnsupported")}</p>
+            ) : null}
+
+            {noInstance && !serverKindOk ? (
               <button type="button" className="link-btn" onClick={() => navigate("instances")}>
                 {tr("pages.mods.createInstanceLink")}
+              </button>
+            ) : null}
+            {(servers.data ?? []).length === 0 ? (
+              <button type="button" className="link-btn" onClick={() => navigate("servers")}>
+                {tr("pages.mods.pluginCreateServerLink")}
               </button>
             ) : null}
           </div>
@@ -1564,11 +1724,9 @@ export function ModsPage() {
               {tr("pages.mods.searchAction")}
             </button>
             <span className="res-count" data-res-count>
-              {isMap
-                ? (maps.loading ? tr("pages.mods.searching") : tr("pages.mods.resultCount", { count: resultCount }))
-                : (search.loading && results.length === 0
-                  ? tr("pages.mods.searching")
-                  : tr("pages.mods.resultCount", { count: resultCount }))}
+              {search.loading && results.length === 0
+                ? tr("pages.mods.searching")
+                : tr("pages.mods.resultCount", { count: resultCount })}
             </span>
             <div className="res-sort">
               <span className="res-sort-label">{tr("pages.mods.sortLabel")}</span>
@@ -1581,7 +1739,7 @@ export function ModsPage() {
             </div>
           </div>
 
-          {!isMap && filters.categories.length > 0 ? (
+          {filters.categories.length > 0 ? (
             <div className="res-chips" data-res-chips>
               <span className="res-chips-label">{tr("pages.mods.selectedCategories")}</span>
               {filters.categories.map((id) => (
@@ -1600,59 +1758,7 @@ export function ModsPage() {
             </div>
           ) : null}
 
-          {isDatapack ? (
-            <EmptyState
-              title={tr("pages.mods.datapackUnsupportedTitle")}
-              hint={tr("pages.mods.datapackUnsupportedHint")}
-            />
-          ) : null}
-
-          {isMap ? (
-            <>
-              <p className="kind-notice" data-maps-notice>{tr(MAPS_NOTICE_KEY)}</p>
-
-              {maps.loading ? <SkeletonRows count={4} /> : null}
-              {maps.error ? <ErrorState message={maps.error} onRetry={maps.reload} /> : null}
-
-              {!maps.loading && !maps.error && allMaps.length === 0 ? (
-                <EmptyState
-                  title={tr("pages.mods.noMapsTitle")}
-                  hint={submitted ? tr("pages.mods.noMapsHint", { query: submitted }) : tr(KIND_EMPTY_HINT_KEY.map)}
-                />
-              ) : null}
-
-              {allMaps.length > 0 ? (
-                <MapCards
-                  entries={allMaps}
-                  mcVersion={currentInstance?.mcVersion}
-                  onDownload={(entry) => void downloadMap(entry)}
-                  onOpenWeb={() => void openMapsWeb()}
-                />
-              ) : null}
-
-              {allMaps.length > 0 ? (
-                <div className="load-more" data-mods-load-more="maps" data-loaded-count={allMaps.length}>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    data-load-more-maps
-                    data-load-more-state={mapsLoadingMore ? "loading" : mapsHasMore ? "idle" : "end"}
-                    disabled={mapsLoadingMore || !mapsHasMore}
-                    onClick={() => void loadMoreMaps()}
-                  >
-                    {mapsLoadingMore
-                      ? tr("pages.mods.loadingMore")
-                      : mapsHasMore
-                        ? tr("pages.mods.loadMoreCount", { count: allMaps.length })
-                        : tr("pages.mods.allLoadedCount", { count: allMaps.length })}
-                  </button>
-                  <div ref={mapsSentinelRef} className="load-more-sentinel" aria-hidden="true" />
-                </div>
-              ) : null}
-            </>
-          ) : null}
-
-          {!isMap && noKey ? (
+          {noKey ? (
             <div className="guide-card">
               <h3 className="hint-title">{tr("pages.mods.cfKeyTitle")}</h3>
               <p className="hint-text">{tr("pages.mods.cfGuideText")}</p>
@@ -1667,10 +1773,11 @@ export function ModsPage() {
             </div>
           ) : null}
 
-          {!isMap && !isDatapack && !noKey && search.loading ? <SkeletonRows count={5} /> : null}
-          {!isMap && !isDatapack && !noKey && search.error ? <ErrorState message={search.error} onRetry={search.reload} /> : null}
+          {/* 只有首屏（还没有任何数据）才铺骨架；换页时保留当前页，翻页条自己显示「加载中」的禁用态。 */}
+          {!noKey && search.loading && search.data === null ? <SkeletonRows count={5} /> : null}
+          {!noKey && search.error ? <ErrorState message={search.error} onRetry={search.reload} /> : null}
 
-          {!isMap && !isDatapack && !noKey && !search.loading && !search.error && results.length === 0 ? (
+          {!noKey && !search.loading && !search.error && results.length === 0 ? (
             <EmptyState
               title={
                 submitted ? tr("pages.mods.noMatchTitle") : tr("pages.mods.noResultForKind", { kind: kindLabel(kind, tr) })
@@ -1693,7 +1800,7 @@ export function ModsPage() {
             />
           ) : null}
 
-          {!isMap && !isDatapack && results.length > 0 ? (
+          {results.length > 0 ? (
             <div className="res-grid" data-res-grid>
               {results.map((mod) => {
                 const key = `${mod.provider}:${mod.projectId}`;
@@ -1706,9 +1813,12 @@ export function ModsPage() {
                 const updatedAt = updatedAtOf(mod);
                 const badgeKey = isBackendKind(kind) ? KIND_BADGE_KEY[kind] : null;
                 // 项目级判定：索引命中=已安装，扫描兜底命中=疑似已安装（可能只是同名）。
-                const installedMatch = isBackendKind(kind)
-                  ? matchInstalled(kind, { projectId: mod.projectId, slug: mod.slug, title: mod.title })
-                  : EMPTY_MATCH;
+                // 插件看目标服务端的 plugins 目录，其它类型看当前实例。
+                const installedMatch = serverTarget
+                  ? pluginMatchOf(mod)
+                  : isBackendKind(kind)
+                    ? matchInstalled(kind, { projectId: mod.projectId, slug: mod.slug, title: mod.title })
+                    : EMPTY_MATCH;
                 const installedGrade = installedMatch.strong.length > 0
                   ? "index"
                   : installedMatch.weak.length > 0 ? "scan" : null;
@@ -1796,6 +1906,22 @@ export function ModsPage() {
                         >
                           {creating ? phaseText(cardEntry as InstallEntry) : tr("pages.mods.installAndCreate")}
                         </button>
+                      ) : serverTarget ? (
+                        /* 服务端目标：模组装 mods、插件装 plugins，按核心能力决定能不能点。 */
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${serverBlocked || !pluginServer ? "btn-ghost" : "btn-primary"}`.trim()}
+                          data-plugin-install={key}
+                          data-server-install={key}
+                          data-server-blocked={serverBlocked ? "1" : undefined}
+                          disabled={!pluginServer || serverBlocked || pluginBusyKey === key}
+                          title={!pluginServer
+                            ? tr("pages.mods.pluginPickServerFirst")
+                            : serverBlockHint ?? tr("pages.mods.serverInstall")}
+                          onClick={() => void installToServer(mod, null)}
+                        >
+                          {pluginBusyKey === key ? tr("pages.mods.installing") : tr("pages.mods.serverInstall")}
+                        </button>
                       ) : (
                         <button
                           type="button"
@@ -1817,7 +1943,19 @@ export function ModsPage() {
                         </button>
                       )}
 
-                      {noInstance && !isModpack ? (
+                      {serverTarget && !pluginServer ? (
+                        <span className="muted-text" data-plugin-need-server>
+                          {tr("pages.mods.pluginPickServerFirst")}
+                        </span>
+                      ) : null}
+
+                      {serverTarget && serverBlockHint ? (
+                        <span className="muted-text" data-plugin-modded-server data-server-blocked-hint>
+                          {serverBlockHint}
+                        </span>
+                      ) : null}
+
+                      {!serverTarget && noInstance && !isModpack ? (
                         <button type="button" className="link-btn res-create" data-res-create onClick={() => navigate("instances")}>
                           {tr("pages.mods.createInstanceLink")}
                         </button>
@@ -1829,26 +1967,15 @@ export function ModsPage() {
             </div>
           ) : null}
 
-          {/* 加载更多：按钮给手动与无障碍入口，哨兵给滚到底自动加载；两路共用同一个 loadMore。 */}
-          {!isMap && !isDatapack && !noKey && results.length > 0 ? (
-            <div className="load-more" data-mods-load-more="search" data-loaded-count={results.length}>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                data-load-more
-                data-load-more-state={loadingMore ? "loading" : hasMore ? "idle" : "end"}
-                data-loaded-count={results.length}
-                disabled={loadingMore || !hasMore}
-                onClick={() => void loadMore()}
-              >
-                {loadingMore
-                  ? tr("pages.mods.loadingMore")
-                  : hasMore
-                    ? tr("pages.mods.loadMoreCount", { count: results.length })
-                    : tr("pages.mods.allLoadedCount", { count: results.length })}
-              </button>
-              <div ref={sentinelRef} className="load-more-sentinel" aria-hidden="true" />
-            </div>
+          {/* 翻页：上一页 / 页码 / 下一页；列表只保留当前页，滚动不再追加。 */}
+          {!noKey && (results.length > 0 || page > 1) ? (
+            <Pager
+              page={page}
+              last={lastKnownPage ?? (hasNextPage ? null : page)}
+              hasNext={hasNextPage}
+              loading={search.loading}
+              onPage={goPage}
+            />
           ) : null}
         </div>
       </div>
@@ -1919,6 +2046,11 @@ export function ModsPage() {
               setPackConfirm(selected);
               return;
             }
+            // 插件：装进上面选好的服务端（没选服务端就不发请求）。
+            if (detailKind === "plugin") {
+              void installToServer(selected, sortedFiles[0] ?? null);
+              return;
+            }
             // 没选实例：提示一句并把实例选择交回卡片浮层。
             if (!currentInstance) {
               nudgeToPickInstance(selected);
@@ -1926,17 +2058,28 @@ export function ModsPage() {
             }
             void installContent(selected, currentInstance, sortedFiles[0] ?? null);
           }}
-          installing={panelInstalling}
+          targetKind={targetKind}
+          installing={panelInstalling || (serverTarget && pluginBusyKey === keyOf(selected))}
+          installTitle={serverBlockHint ?? undefined}
           installingLabel={panelEntry ? phaseText(panelEntry) : undefined}
-          instanceName={currentInstance?.name}
-          installHint={detailKind === "modpack"
-            ? tr("pages.mods.modpackInstallHint", { name: titleOf(selected) })
-            : selectedGrade === "index"
-              ? tr("pages.mods.alreadyInstalledHint")
-              : selectedGrade === "scan"
-                ? tr("pages.mods.maybeInstalledHint", { files: hitFileNames(selectedMatch) })
-                : undefined}
-          noInstance={detailKind !== "modpack" && !currentInstance}
+          instanceName={serverTarget ? pluginServer?.meta.name : currentInstance?.name}
+          installHint={serverTarget
+            ? (serverBlockHint
+              ? serverBlockHint
+              : pluginServer
+              ? (selectedGrade === "index"
+                ? tr("pages.modDetail.pluginInstalled", { name: pluginServer.meta.name, files: hitFileNames(selectedMatch) })
+                : tr("pages.modDetail.pluginInstallTo", { name: pluginServer.meta.name }))
+              : tr("pages.mods.pluginPickServerFirst"))
+            : detailKind === "modpack"
+              ? tr("pages.mods.modpackInstallHint", { name: titleOf(selected) })
+              : selectedGrade === "index"
+                ? tr("pages.mods.alreadyInstalledHint")
+                : selectedGrade === "scan"
+                  ? tr("pages.mods.maybeInstalledHint", { files: hitFileNames(selectedMatch) })
+                  : undefined}
+          installDisabled={serverTarget && (!pluginServer || serverBlocked)}
+          noInstance={detailKind === "modpack" ? false : serverTarget ? !pluginServer : !currentInstance}
           filesSlot={
             <>
               {detailKind === "mod" && currentInstance?.loader === "vanilla" ? (
@@ -1946,12 +2089,19 @@ export function ModsPage() {
               <div className="drawer-section-head">
                 <span className="field-label">{tr("pages.mods.availableFiles")}</span>
                 <span className="muted-text">
-                  {currentInstance
-                    ? tr("pages.mods.highlightMatch", {
-                      mc: currentInstance.mcVersion,
-                      loader: loaderLabel(currentInstance.loader, tr),
-                    })
-                    : ""}
+                  {serverTarget
+                    ? (pluginServer
+                      ? tr("pages.mods.pluginServerTarget", {
+                        name: pluginServer.meta.name,
+                        mc: pluginServer.meta.mcVersion,
+                      })
+                      : "")
+                    : currentInstance
+                      ? tr("pages.mods.highlightMatch", {
+                        mc: currentInstance.mcVersion,
+                        loader: loaderLabel(currentInstance.loader, tr),
+                      })
+                      : ""}
                 </span>
               </div>
 
@@ -1963,7 +2113,13 @@ export function ModsPage() {
                   {sortedFiles.map((file) => {
                     // 每个文件只关心自己那条安装：别的文件在装不会禁用这一行
                     const fileEntry = entryOf(selected.provider, selected.projectId, file.fileId, fileInstanceId);
-                    const busy = isEntryBusy(fileEntry);
+                    // 插件不进安装队列：这一行只看自己那条插件的安装状态。
+                    const busy = serverTarget ? pluginBusyKey === keyOf(selected) : isEntryBusy(fileEntry);
+                    // 文件自己的平台 vs 目标核心：不拦安装，只提示（用户可能就是想换核心）。
+                    const platform = serverTarget && pluginServer
+                      ? checkPluginPlatform(file.loaders, pluginServer.meta.core)
+                      : null;
+                    const platformWarn = Boolean(platform?.mismatch);
                     return (
                       <li key={file.fileId} className={`file-row ${file.exactMatch ? "is-match" : ""}`.trim()}>
                         <div className="file-main">
@@ -1983,6 +2139,21 @@ export function ModsPage() {
                                 {tr("pages.mods.fileInstalledOtherScan")}
                               </span>
                             ) : null}
+                            {platformWarn && pluginServer ? (
+                              <span
+                                className="badge plugin-platform-warn"
+                                data-plugin-platform-warn={platform?.filePlatforms.join("/")}
+                                title={tr("pages.mods.pluginPlatformWarn", {
+                                  platforms: platform?.filePlatforms.join(" / ") ?? "",
+                                  core: pluginServer.meta.core,
+                                })}
+                              >
+                                {tr("pages.mods.pluginPlatformWarn", {
+                                  platforms: platform?.filePlatforms.join(" / ") ?? "",
+                                  core: pluginServer.meta.core,
+                                })}
+                              </span>
+                            ) : null}
                           </div>
                           <div className="file-meta">
                             <ReleaseTypeTag type={file.releaseType} />
@@ -1996,9 +2167,21 @@ export function ModsPage() {
                           type="button"
                           className={`btn btn-sm ${file.exactMatch ? "btn-primary" : "btn-ghost"}`.trim()}
                           data-file-install={file.fileId}
+                          title={serverBlockHint
+                            ? serverBlockHint
+                            : platformWarn && pluginServer
+                              ? tr("pages.mods.pluginPlatformWarn", {
+                                platforms: platform?.filePlatforms.join(" / ") ?? "",
+                                core: pluginServer.meta.core,
+                              })
+                              : undefined}
                           onClick={() => {
                             if (detailKind === "modpack") {
                               void installModpackAndCreate(selected, file.fileId);
+                              return;
+                            }
+                            if (detailKind === "plugin") {
+                              void installToServer(selected, file);
                               return;
                             }
                             if (!currentInstance) {
@@ -2007,10 +2190,12 @@ export function ModsPage() {
                             }
                             void installContent(selected, currentInstance, file);
                           }}
-                          disabled={busy}
+                          disabled={busy || (serverTarget && (!pluginServer || serverBlocked))}
                         >
                           <IconDownload size={15} />
-                          {busy ? phaseText(fileEntry as InstallEntry) : tr(KIND_FILE_ACTION_KEY[detailKind])}
+                          {busy
+                            ? (serverTarget ? tr("pages.mods.installing") : phaseText(fileEntry as InstallEntry))
+                            : tr(KIND_FILE_ACTION_KEY[detailKind])}
                         </button>
                       </li>
                     );

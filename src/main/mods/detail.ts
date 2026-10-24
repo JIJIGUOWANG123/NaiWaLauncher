@@ -1,7 +1,7 @@
 // 模组详情：Modrinth 走官方 /v2/project；CurseForge 有 Key 走 /v1/mods（外加独立的描述接口），
 // 无 Key 用 cfwidget 的只读项目数据拼装。两个来源都拿不到的字段一律留空，绝不用推测值填充，
 // 中文只在 settings.translateMods 时由 translate.ts 实时补（摘要），正文太长不翻。
-import type { ModDetail, ModProviderId } from "../../shared/types";
+import type { ModDetail, ModProviderId, SideSupport } from "../../shared/types";
 import { logger } from "../core/logger";
 import { getSettings } from "../core/settings";
 import { fetchCfWidgetProject } from "./cfwidget";
@@ -114,6 +114,18 @@ async function modrinthAuthor(projectId: string): Promise<string> {
   }
 }
 
+/** Modrinth 的 server_side / client_side 字段取值集合（用于校验，别把脏值塞进详情）。 */
+const SIDES: readonly SideSupport[] = ["required", "optional", "unsupported", "unknown"];
+
+/**
+ * 服务端/客户端支持情况：Modrinth 原样给 "required"/"optional"/"unsupported"/"unknown"，
+ * 这里只做取值校验；字段缺失或拼写不认识就返回 undefined（详情里不填，界面按「未知」处理）。
+ */
+function sideSupport(value: unknown): SideSupport | undefined {
+  const text = jsonString(value).trim().toLowerCase();
+  return (SIDES as readonly string[]).includes(text) ? (text as SideSupport) : undefined;
+}
+
 function modrinthLicense(project: Record<string, unknown>): string | undefined {
   const license = jsonObject(project.license);
   // Polyform 这类自定义许可 name 为空，只能退回 id 才有信息量
@@ -125,7 +137,7 @@ async function modrinthDetail(projectId: string): Promise<ModDetail> {
   const title = jsonString(project.title);
   if (!title) throw new Error(mt("mods.modrinthNoTitle", { project: projectId }));
   const author = await modrinthAuthor(projectId);
-  return {
+  const detail: ModDetail = {
     provider: "modrinth",
     projectId: jsonString(project.id) || projectId,
     slug: jsonString(project.slug) || projectId,
@@ -149,6 +161,12 @@ async function modrinthDetail(projectId: string): Promise<ModDetail> {
     loaders: jsonStringArray(project.loaders).map(canonicalLoader),
     translated: false,
   };
+  // 支持情况是项目级字段：拿不到就不填，绝不用推测值填充
+  const serverSide = sideSupport(project.server_side);
+  if (serverSide) detail.serverSide = serverSide;
+  const clientSide = sideSupport(project.client_side);
+  if (clientSide) detail.clientSide = clientSide;
+  return detail;
 }
 
 // ---------- CurseForge ----------

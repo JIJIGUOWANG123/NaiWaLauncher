@@ -19,11 +19,16 @@ const JAR_SUFFIX = ".jar";
 /** Windows 文件名上限 120 字符（含后缀）：模组名再长也不能把路径撑爆。 */
 const MAX_FILE_NAME = 120;
 
-/** 非模组内容的落盘子目录（同样跟随实例隔离设置）。 */
-const CONTENT_SUBDIRS: Record<"shader" | "resourcepack" | "modpack", string> = {
+/**
+ * 非模组内容的落盘子目录（同样跟随实例隔离设置）。
+ * plugin 只为满足类型完备：插件实际只装进「开服」的服务端（servers/plugins.ts 写入 <serverDir>/plugins），
+ * 客户端的实例目录里不会有 plugins 的安装入口。
+ */
+const CONTENT_SUBDIRS: Record<"shader" | "resourcepack" | "modpack" | "plugin", string> = {
   shader: "shaderpacks",
   resourcepack: "resourcepacks",
   modpack: "modpacks",
+  plugin: "plugins",
 };
 
 /** 地图下载要登录麦块社区（mapFileUrl 全为 null），启动器暂不支持：整句文案直接抛给界面。 */
@@ -48,6 +53,7 @@ export const KIND_NOUN: Record<ModContentKind, string> = {
   resourcepack: "资源包",
   modpack: "整合包",
   map: "地图",
+  plugin: "插件",
 };
 
 /** 界面用名词（任务标题与报错），随界面语言变化；KIND_NOUN 仍供日志使用。 */
@@ -106,11 +112,13 @@ const FALLBACK_SUFFIX: Record<ModContentKind, string> = {
   resourcepack: ".zip",
   modpack: ".mrpack",
   map: ".zip",
+  // 插件与服务端核心一样只读 .jar
+  plugin: JAR_SUFFIX,
 };
 
-/** 落盘后缀：模组固定 .jar，其余沿用远端后缀（光影/资源包 .zip，整合包 .mrpack）。 */
+/** 落盘后缀：模组与插件固定 .jar，其余沿用远端后缀（光影/资源包 .zip，整合包 .mrpack）。 */
 export function contentSuffix(kind: ModContentKind, remoteFileName: string): string {
-  if (kind === "mod") return JAR_SUFFIX;
+  if (kind === "mod" || kind === "plugin") return JAR_SUFFIX;
   const ext = extname(remoteFileName).toLowerCase();
   return ext.length > 1 && ext.length <= 12 ? ext : FALLBACK_SUFFIX[kind];
 }

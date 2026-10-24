@@ -148,6 +148,15 @@ export const IPC = {
   serversConsole: "servers:console",
   serversConsoleLine: "servers:consoleLine",
   serversStatus: "servers:status",
+  // 服务端内容（模组/插件）统一入口：kind=mod → <serverDir>/mods，kind=plugin → <serverDir>/plugins
+  serversContentInstalled: "servers:contentInstalled",
+  serversContentInstall: "servers:contentInstall",
+  serversContentRemove: "servers:contentRemove",
+  serversCapabilities: "servers:capabilities",
+  // 旧的插件通道保留（并行 UI 单在用），实现上转调同一个通用函数
+  pluginsInstalled: "plugins:installed",
+  pluginsInstall: "plugins:install",
+  pluginsRemove: "plugins:remove",
   modsInstalledContent: "mods:installedContent",
   instancesSetLoader: "instances:setLoader",
 } as const;
@@ -169,6 +178,50 @@ export interface ServerCreateRequest {
   memoryMb?: number;
   maxPlayers?: number;
   onlineMode?: boolean;
+}
+
+/** 把某个插件装进「开服」里的服务端：provider 只用来定位文件，实际下载走 Modrinth 通道。 */
+export interface ServerPluginInstallRequest {
+  /** 目标服务端 id（<root>/servers/<id>）。 */
+  serverId: string;
+  provider: ModProviderId;
+  projectId: string;
+  /** 版本（文件）id；缺省按服务端的游戏版本挑最优的插件文件。 */
+  fileId?: string;
+}
+
+/** 安装结果：fileName/sizeBytes 供界面显示，path 只用于展示（渲染层不参与拼路径）。 */
+export interface ServerPluginInstallResult {
+  fileName: string;
+  sizeBytes: number;
+  path: string;
+}
+
+/** 能装进服务端的内容类型：mod → <serverDir>/mods，plugin → <serverDir>/plugins。 */
+export type ServerContentKind = "mod" | "plugin";
+
+/** 把某个模组/插件装进「开服」里的服务端：provider 只用来定位文件，实际下载走对应来源通道。 */
+export interface ServerContentInstallRequest {
+  /** 目标服务端 id（<root>/servers/<id>）。 */
+  serverId: string;
+  /** 内容类型：决定落盘目录，也决定核心是否支持（见 servers:capabilities）。 */
+  kind: ServerContentKind;
+  provider: ModProviderId;
+  projectId: string;
+  /** 版本（文件）id；缺省按服务端的游戏版本挑最优文件。 */
+  fileId?: string;
+}
+
+/** 安装结果：与插件安装结果同形。 */
+export type ServerContentInstallResult = ServerPluginInstallResult;
+
+/** 服务端核心能装什么：modded = 加载 mods，plugins = 加载 plugins；两者都不支持时带可读原因。 */
+export interface ServerCapabilities {
+  core: string;
+  modded: boolean;
+  plugins: boolean;
+  /** 装不了任何内容时的原因（原版核心），界面直接显示。 */
+  reason?: string;
 }
 
 export interface ModSearchRequest {
@@ -558,6 +611,15 @@ export interface NaiwaApi {
     /** 实例里已装内容的索引记录（资源页判断重复安装用；文件已被删除的记录不返回）。 */
     installedContent(instanceId: string): Promise<InstalledContentRef[]>;
   };
+  /** 服务端插件：装进「开服」里的某个服务端（<root>/servers/<id>/plugins），文件全部由主进程落盘。 */
+  plugins: {
+    /** 这个服务端的 plugins 目录里已装的插件（*.jar，含 sha1 便于判重）；目录不存在就是空列表。 */
+    installed(serverId: string): Promise<InstalledModInfo[]>;
+    /** 把这个插件装进服务端（文件经 Modrinth 通道下载，进度进「管理」页）。 */
+    install(req: ServerPluginInstallRequest): Promise<ServerPluginInstallResult>;
+    /** 卸载：删掉 plugins 目录里的一个 .jar。 */
+    remove(serverId: string, fileName: string): Promise<void>;
+  };
   /** 本地皮肤库：与账号解耦，账号只负责提供预览用的昵称。 */
   skinsLocal: {
     /** 列出官方内置与用户导入的皮肤；accountId 用于标记哪个是当前选中的。 */
@@ -597,6 +659,14 @@ export interface NaiwaApi {
     onConsole(cb: (line: ServerConsoleLine) => void): () => void;
     /** 列表状态变化推送（启动/停止/崩溃）。 */
     onStatus(cb: (entries: ServerEntry[]) => void): () => void;
+    /** 这个服务端的核心能装哪类内容（modded = mods，plugins = plugins）。 */
+    capabilities(serverId: string): Promise<ServerCapabilities>;
+    /** 服务端某一类内容目录里已装的文件（kind=mod → mods，plugin → plugins；含 sha1 便于判重）。 */
+    contentInstalled(serverId: string, kind: ServerContentKind): Promise<InstalledModInfo[]>;
+    /** 把模组/插件装进服务端（文件由主进程下载落盘，进度进「管理」页）。 */
+    contentInstall(req: ServerContentInstallRequest): Promise<ServerContentInstallResult>;
+    /** 卸载：删掉对应内容目录里的一个 .jar。 */
+    contentRemove(serverId: string, kind: ServerContentKind, fileName: string): Promise<void>;
   };
   /** 本地披风库：微软账号只读官方披风，离线账号可选本地披风并应用。 */
   capes: {

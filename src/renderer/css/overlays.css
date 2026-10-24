@@ -392,3 +392,209 @@
   to { opacity: 0; }
 }
 
+/* ---------- 图片灯箱（资源详情画廊 / 正文插图） ---------- */
+
+/*
+ * 层级：抽屉所在的 .overlay 是 z-index 60，而且它的 backdrop-filter 会成为 fixed 后代的
+ * 包含块，所以灯箱用 Portal 挂到 body、自己铺满视口。80 稳稳盖住抽屉（60）与弹窗（60），
+ * 仍低于提示条（90），关灯箱时顶部的操作提示不会被挡。
+ */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: rgb(0 0 0 / 0.84);
+  backdrop-filter: blur(6px);
+  animation: fade-in 0.16s ease;
+}
+
+/* 舞台铺在遮罩上但不吃鼠标事件，点空白处的事件目标仍是 .lightbox 本身 → 关闭 */
+.lightbox-stage {
+  position: absolute;
+  inset: 56px 76px 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.lightbox-frame {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 240px;
+  min-height: 160px;
+  max-width: 92vw;
+  max-height: 92vh;
+}
+
+/* 大图：contain 不变形，宽高都不超过视口 92%（高度再让出底部说明那一行） */
+.lightbox-image {
+  max-width: 92vw;
+  max-height: 86vh;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.55);
+  transform-origin: center;
+  transition: transform 0.12s ease;
+  cursor: default; /* 1x 不接管拖动，点空白仍是关闭 */
+  pointer-events: auto;
+  user-select: none;
+}
+
+/* 放大后才进入拖拽模式：grab/grabbing；顺带关掉触屏/触控板的默认手势，否则 pointermove 会被滚动吃掉 */
+.lightbox-image.is-zoomed {
+  cursor: grab;
+  touch-action: none;
+}
+
+.lightbox-image.is-dragging {
+  cursor: grabbing;
+  transition: none; /* 拖动时别让 transform 补间拖后腿 */
+}
+
+/* 加载失败时把破图藏起来（保留元素，data-lightbox-image 依然在），改用可读提示 */
+.lightbox-image.is-error {
+  visibility: hidden;
+}
+
+.lightbox-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px;
+  border-radius: var(--radius-sm);
+  color: rgb(255 255 255 / 0.72);
+  font-size: 13px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.lightbox-status-error {
+  flex-direction: column;
+  border: 1px dashed color-mix(in srgb, var(--danger) 60%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+  line-height: 1.6;
+}
+
+.lightbox-caption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgb(255 255 255 / 0.66);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lightbox-close,
+.lightbox-nav {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  background: rgb(0 0 0 / 0.45);
+  color: var(--cream);
+  cursor: pointer;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+
+.lightbox-close {
+  top: 14px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+}
+
+.lightbox-nav {
+  top: 50%;
+  width: 42px;
+  height: 42px;
+  transform: translateY(-50%);
+}
+
+.lightbox-nav-prev { left: 18px; }
+.lightbox-nav-next { right: 18px; }
+
+/* 复用同一个右箭头图标，上一张镜像过来 */
+.lightbox-nav-prev .lightbox-nav-glyph {
+  transform: rotate(180deg);
+}
+
+.lightbox-close:hover,
+.lightbox-nav:hover {
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 55%, rgb(0 0 0 / 0.5));
+}
+
+.lightbox-close:focus-visible,
+.lightbox-nav:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- 画廊缩略图按钮（尺寸沿用 mods.css 的 .mod-gallery-shot，这里只补按钮壳与悬停） ---------- */
+
+.mod-gallery-btn {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.mod-gallery-btn .mod-gallery-shot {
+  display: block;
+  transition: filter 0.14s ease, border-color 0.14s ease;
+}
+
+.mod-gallery-btn:hover .mod-gallery-shot,
+.mod-gallery-btn:focus-visible .mod-gallery-shot {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  filter: brightness(1.08);
+}
+
+.mod-gallery-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 悬停提示：缩略图右下角的「放大查看」小标 */
+.mod-gallery-hint {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.62);
+  color: var(--cream);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+  pointer-events: none;
+}
+
+.mod-gallery-btn:hover .mod-gallery-hint,
+.mod-gallery-btn:focus-visible .mod-gallery-hint {
+  opacity: 1;
+}
+

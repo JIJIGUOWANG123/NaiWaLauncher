@@ -40,7 +40,10 @@ import {
   cancel as cancelDownloadJob, clearFinished as clearFinishedDownloads, hintNextJob, list as listDownloadJobs,
   ready as readyDownloadJobs, remove as removeDownloadJob, resume as resumeDownloadJob, runCancellable,
 } from "../downloads/index";
-import type { ServerCreateRequest } from "../../shared/ipc";
+import type {
+  ServerCapabilities, ServerContentInstallRequest, ServerContentInstallResult, ServerContentKind,
+  ServerCreateRequest, ServerPluginInstallRequest, ServerPluginInstallResult,
+} from "../../shared/ipc";
 import { listWallpapers } from "../media/wallpaper";
 import { resolveApiBackground } from "../media/apiBackground";
 import type {
@@ -51,6 +54,10 @@ import {
   createServer, installLifecycle as installServerLifecycle, listEntries as listServerEntries,
   removeServer, sendCommand as sendServerCommand, startServer, stopServer, updateServer,
 } from "../servers/index";
+import { installPluginToServer, listServerPlugins, removeServerPlugin } from "../servers/plugins";
+import {
+  installServerContent, listServerContent, removeServerContent, serverSupports,
+} from "../servers/content";
 import { mt } from "../core/i18n";
 
 const handle = <T>(channel: string, fn: (...args: any[]) => Promise<T> | T): void => {
@@ -385,4 +392,19 @@ export function registerIpc(): void {
   handle<ServerEntry>(IPC.serversStop, (id: string) => stopServer(id));
   handle<void>(IPC.serversCommand, (id: string, line: string) => sendServerCommand(id, line));
   handle<ServerConsoleLine[]>(IPC.serversConsole, (id: string, limit?: number) => readServerConsole(id, limit));
+  // 服务端内容（模组/插件）：文件全在主进程落盘，渲染层只传 id / kind / 文件名；
+  // 下载走 runCancellable 才能让「管理」页的终止真正中断传输
+  handle<ServerCapabilities>(IPC.serversCapabilities, (serverId: string) => serverSupports(serverId));
+  handle<InstalledModInfo[]>(IPC.serversContentInstalled, (serverId: string, kind: ServerContentKind) =>
+    listServerContent(serverId, kind));
+  handle<ServerContentInstallResult>(IPC.serversContentInstall, (req: ServerContentInstallRequest) =>
+    runCancellable((signal) => installServerContent(req, signal)));
+  handle<void>(IPC.serversContentRemove, (serverId: string, kind: ServerContentKind, fileName: string) =>
+    removeServerContent(serverId, kind, fileName));
+  // 旧插件通道（并行 UI 单在用）：保留原名，实现转调同一个通用函数，行为不变
+  handle<InstalledModInfo[]>(IPC.pluginsInstalled, (serverId: string) => listServerPlugins(serverId));
+  handle<ServerPluginInstallResult>(IPC.pluginsInstall, (req: ServerPluginInstallRequest) =>
+    runCancellable((signal) => installPluginToServer(req, signal)),
+  );
+  handle<void>(IPC.pluginsRemove, (serverId: string, fileName: string) => removeServerPlugin(serverId, fileName));
 }

@@ -10,12 +10,17 @@ import {
 } from "./provider";
 import { mt } from "../core/i18n";
 
-/** 内容类型 → 面板接口路径。地图不走面板接口（见下面的 MAP_LIST），单独处理。 */
+/**
+ * 内容类型 → 面板接口路径。地图不走面板接口（见下面的 MAP_LIST），单独处理。
+ * 插件（mc-plugins）同样是公开面板接口，条目的 project_id 也是 Modrinth 项目 ID（实测 simple-voice-chat / 9eGKb6K1），
+ * 所以插件不需要登录也能搜，文件列表与下载沿用 Modrinth 通道（见 servers/plugins.ts）。
+ */
 const PANEL_PATHS: Record<Exclude<ModContentKind, "map">, string> = {
   mod: "mc-mods",
   shader: "mc-shaders",
   resourcepack: "mc-resourcepacks",
   modpack: "mc-modpacks",
+  plugin: "mc-plugins",
 };
 
 const PANEL_BASE = "https://api.minekuai.cn/panel/public/";

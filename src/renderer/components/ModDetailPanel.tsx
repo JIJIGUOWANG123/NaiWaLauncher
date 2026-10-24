@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { ModProviderId } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatCount, formatDate } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { Drawer } from "./Drawer";
+import { ImageLightbox } from "./ImageLightbox";
 import { ErrorState, SkeletonRows } from "./State";
 import { useToast } from "./Toast";
 
@@ -17,9 +18,60 @@ function providerName(id: ModProviderId, tr: (key: string, vars?: Record<string,
 /** 版本标签最多展开 10 个，其余折叠成「+N」。 */
 const VERSION_LIMIT = 10;
 
+/**
+ * 画廊：每张缩略图都包在原生 button 里（可 Tab 聚焦，Enter/Space 打开灯箱），
+ * 点击后由 ImageLightbox 定位到同一份去重数组里的那一张，所以 index 始终对得上。
+ * 「完整介绍」那边是纯文本渲染（没有 <img>），图片集合因此只有画廊本身。
+ * 导出是为了让预览/SSR 能单独渲染它做断言；面板里只把它当普通组件用。
+ */
+export function ModGallery({
+  images, altFor,
+}: {
+  images: string[];
+  altFor: (index: number) => string;
+}) {
+  const tr = useT();
+  const shots = useMemo(() => Array.from(new Set(images.filter(Boolean))), [images]);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  if (shots.length === 0) return null;
+
+  return (
+    <>
+      <div className="mod-gallery" data-mod-gallery>
+        {shots.map((shot, index) => (
+          <button
+            key={`${index}-${shot.slice(0, 24)}`}
+            type="button"
+            className="mod-gallery-btn"
+            data-gallery-open={index}
+            aria-haspopup="dialog"
+            aria-label={altFor(index)}
+            title={tr("lightbox.open")}
+            onClick={() => setOpenIndex(index)}
+          >
+            <img className="mod-gallery-shot" src={shot} alt={altFor(index)} data-gallery-item loading="lazy" />
+            <span className="mod-gallery-hint" aria-hidden="true">{tr("lightbox.open")}</span>
+          </button>
+        ))}
+      </div>
+      {openIndex === null ? null : (
+        <ImageLightbox
+          images={shots}
+          index={openIndex}
+          alt={altFor(openIndex)}
+          onIndex={setOpenIndex}
+          onClose={() => setOpenIndex(null)}
+        />
+      )}
+    </>
+  );
+}
+
 export function ModDetailPanel({
   open, provider, projectId, fallbackTitle, titleZh, summaryZh, onClose, filesSlot, installLabel,
-  onInstall, installing, installingLabel, instanceName, installHint, noInstance,
+  onInstall, installing, installingLabel, instanceName, installHint, noInstance, installDisabled, installTitle,
+  targetKind = "instance",
 }: {
   open: boolean;
   provider: ModProviderId;
@@ -37,6 +89,12 @@ export function ModDetailPanel({
   installLabel?: string;
   onInstall: () => void;
   installing: boolean;
+  /** 没有可用目标时（插件还没选目标服务端 / 目标是模组服）把安装按钮禁掉。 */
+  installDisabled?: boolean;
+  /** 按钮的悬停说明（插件的平台不匹配、目标核心是模组服时写清楚原因）。 */
+  installTitle?: string;
+  /** 装到哪里：实例（默认）还是服务端。服务端下要额外看 mod 的 serverSide。 */
+  targetKind?: "instance" | "server";
   /** 进行中的按钮文案（整合包是「正在创建实例…」）。 */
   installingLabel?: string;
   instanceName?: string;
@@ -51,6 +109,14 @@ export function ModDetailPanel({
   const sourceUrl = data?.sourceUrl ?? "";
   /** 详情自带译名优先，其次用搜索结果里的译名；都没有就保持原文。 */
   const zhTitle = data?.titleZh ?? titleZh;
+  /**
+   * 服务端目标下的「这个内容支不支持服务端」：unsupported 直接禁用按钮，
+   * unknown / 没标注只提示（作者没写不代表一定不行）；实例目标不看这个字段。
+   */
+  const serverSide = data?.serverSide;
+  const sideUnsupported = targetKind === "server" && serverSide === "unsupported";
+  const sideUnknown = targetKind === "server" && (serverSide === "unknown" || serverSide === undefined);
+  const sideRequired = targetKind === "server" && serverSide === "required";
 
   const openHome = async () => {
     if (!sourceUrl) return;
@@ -91,7 +157,8 @@ export function ModDetailPanel({
           type="button"
           className="btn btn-primary"
           onClick={onInstall}
-          disabled={installing || !data}
+          disabled={installing || !data || installDisabled || sideUnsupported}
+          title={sideUnsupported ? tr("pages.modDetail.serverUnsupported") : installTitle}
           data-action="install"
         >
           {installing ? (installingLabel ?? tr("pages.modDetail.installing")) : (installLabel ?? tr("pages.modDetail.installToCurrent"))}
@@ -136,6 +203,21 @@ export function ModDetailPanel({
                 <span><b data-field="license">{data.license ?? tr("pages.modDetail.unmarked")}</b> {tr("pages.modDetail.license")}</span>
                 <span><b data-field="updatedAt">{data.updatedAt ? formatDate(data.updatedAt) : "—"}</b> {tr("pages.modDetail.lastUpdated")}</span>
               </div>
+              {targetKind === "server" ? (
+                sideUnsupported ? (
+                  <p className="hint-inline plugin-side-warn" data-mod-server-unsupported>
+                    {tr("pages.modDetail.serverUnsupported")}
+                  </p>
+                ) : sideUnknown ? (
+                  <p className="hint-inline" data-mod-server-unknown>
+                    {tr("pages.modDetail.serverUnknown")}
+                  </p>
+                ) : sideRequired ? (
+                  <p className="hint-inline" data-mod-server-required>
+                    {tr("pages.modDetail.serverRequired")}
+                  </p>
+                ) : null
+              ) : null}
             </div>
           </div>
 
@@ -183,18 +265,10 @@ export function ModDetailPanel({
           {data.gallery.length > 0 ? (
             <section className="mod-detail-section">
               <span className="field-label">{tr("pages.modDetail.gallery")}</span>
-              <div className="mod-gallery" data-mod-gallery>
-                {data.gallery.map((shot, index) => (
-                  <img
-                    key={`${index}-${shot.slice(0, 24)}`}
-                    className="mod-gallery-shot"
-                    src={shot}
-                    alt={tr("pages.modDetail.galleryAlt", { index: index + 1 })}
-                    data-gallery-item
-                    loading="lazy"
-                  />
-                ))}
-              </div>
+              <ModGallery
+                images={data.gallery}
+                altFor={(index) => tr("pages.modDetail.galleryAlt", { index: index + 1 })}
+              />
             </section>
           ) : null}
         </div>

@@ -1,5 +1,7 @@
 import type {
-  CreateInstanceRequest, GithubDownloadRequest, ModFilesRequest, ModInstallRequest, ModSearchRequest, ModSourceFilter, NaiwaApi, ServerCreateRequest,
+  CreateInstanceRequest, GithubDownloadRequest, ModFilesRequest, ModInstallRequest, ModSearchRequest, ModSourceFilter, NaiwaApi,
+  ServerCapabilities, ServerContentInstallRequest, ServerContentInstallResult, ServerContentKind,
+  ServerCreateRequest, ServerPluginInstallRequest, ServerPluginInstallResult,
 } from "../../shared/ipc";
 import type {
   Account, DownloadJob, InstalledContentRef, InstalledModInfo, InstanceMeta, InstalledJava, LanAddress, LoaderKind,
@@ -256,13 +258,14 @@ function readKind(req: KindCarrier): ModContentKind {
   return req.kind ?? "mod";
 }
 
-/** 各类型的落盘目录：模组落 mods，光影/资源包/整合包各自独立目录。 */
+/** 各类型的落盘目录：模组落 mods，光影/资源包/整合包各自独立目录（插件只装进服务端）。 */
 const DIR_BY_KIND: Record<ModContentKind, string> = {
   mod: "mods",
   shader: "shaderpacks",
   resourcepack: "resourcepacks",
   modpack: "modpacks",
   map: "saves",
+  plugin: "plugins",
 };
 
 /** 报错文案里的类型名，与界面分区标题一致。 */
@@ -272,6 +275,7 @@ const KIND_LABEL: Record<ModContentKind, string> = {
   resourcepack: "资源包",
   modpack: "整合包",
   map: "存档",
+  plugin: "插件",
 };
 
 /** 各类型目录的内存态键：实例 + 类型，避免光影/资源包读到模组列表。 */
@@ -477,6 +481,13 @@ export function createMockApi(): NaiwaApi {
 
   // ---- 开服：内存态 + 日志缓冲 + 两个推送集合 + 每个服务端的假定时器 ----
   let servers: ServerEntry[] = MOCK_SERVERS.map((item) => ({ ...item, meta: { ...item.meta } }));
+  /** 服务端 plugins 目录的演示状态：serverId → 已装插件（真实实现落在 <serverDir>/plugins）。 */
+  const serverPluginFiles = new Map<string, InstalledModInfo[]>();
+  /** 服务端 mods 目录的演示状态：serverId → 已装模组（真实实现落在 <serverDir>/mods）。 */
+  const serverModFiles = new Map<string, InstalledModInfo[]>();
+  /** 按内容类型取演示存储（plugin 沿用旧的那个 Map，界面上两处看到的是一份数据）。 */
+  const serverContentStore = (kind: string): Map<string, InstalledModInfo[]> =>
+    (kind === "mod" ? serverModFiles : serverPluginFiles);
   const serverBuffers = new Map<string, ServerConsoleLine[]>();
   const serverLineListeners = new Set<(line: ServerConsoleLine) => void>();
   const serverStatusListeners = new Set<(entries: ServerEntry[]) => void>();
@@ -2157,6 +2168,7 @@ export function createMockApi(): NaiwaApi {
         const buffer = serverBuffers.get(id) ?? [];
         return buffer.slice(Math.max(0, buffer.length - limit)).map((line) => ({ ...line }));
       },
+
       onConsole: (cb: (line: ServerConsoleLine) => void) => {
         serverLineListeners.add(cb);
         return () => { serverLineListeners.delete(cb); };
@@ -2165,8 +2177,91 @@ export function createMockApi(): NaiwaApi {
         serverStatusListeners.add(cb);
         return () => { serverStatusListeners.delete(cb); };
       },
+      capabilities: async (serverId: string): Promise<ServerCapabilities> => {
+        trace("servers.capabilities", { serverId });
+        const core = requireServer(serverId).meta.core;
+        await sleep(40);
+        const modded = core === "Fabric" || core === "Forge" || core === "NeoForge" || core === "Arclight";
+        const plugins = core === "Paper" || core === "Purpur" || core === "Folia" || core === "Arclight";
+        const caps: ServerCapabilities = { core, modded, plugins };
+        if (!modded && !plugins) caps.reason = `原版（${core}）服务端既不加载 mods 也不加载 plugins`;
+        return caps;
+      },
+      contentInstalled: async (serverId: string, kind: ServerContentKind) => {
+        trace("servers.contentInstalled", { serverId, kind });
+        requireServer(serverId);
+        await sleep(120);
+        return (serverContentStore(kind).get(serverId) ?? []).map((item) => ({ ...item }));
+      },
+      contentInstall: async (req: ServerContentInstallRequest): Promise<ServerContentInstallResult> => {
+        trace("servers.contentInstall", { ...req });
+        const entry = requireServer(req.serverId);
+        const label = req.kind === "mod" ? "模组" : "插件";
+        const fileName = `${req.projectId}-${req.fileId ?? "latest"}.jar`;
+        await simulateTask("mod", `安装${label} ${fileName}`, `下载${label}`, 240_000, 700, 1);
+        const store = serverContentStore(req.kind);
+        const list = store.get(req.serverId) ?? [];
+        const stem = fileName.replace(/\.jar$/i, "");
+        const taken = list.filter((item) => item.fileName.replace(/\.jar$/i, "") === stem).length;
+        const installed: InstalledModInfo = {
+          fileName: taken === 0 ? fileName : `${stem} (${taken}).jar`,
+          sizeBytes: 240_000,
+          sha1: `mock-${req.kind}-sha1`,
+          name: req.projectId,
+          provider: req.provider,
+          projectId: req.projectId,
+        };
+        store.set(req.serverId, [...list, installed]);
+        return {
+          fileName: installed.fileName,
+          sizeBytes: installed.sizeBytes,
+          path: `servers/${entry.meta.id}/${req.kind === "mod" ? "mods" : "plugins"}/${installed.fileName}`,
+        };
+      },
+      contentRemove: async (serverId: string, kind: ServerContentKind, fileName: string) => {
+        trace("servers.contentRemove", { serverId, kind, fileName });
+        requireServer(serverId);
+        const store = serverContentStore(kind);
+        const list = store.get(serverId) ?? [];
+        if (!list.some((item) => item.fileName === fileName)) throw new Error(`${kind} 目录里没有 ${fileName}`);
+        store.set(serverId, list.filter((item) => item.fileName !== fileName));
+      },
     },
 
+    /** 服务端插件：装进某个服务端的 plugins 目录（真机由主进程落盘）。 */
+    plugins: {
+      installed: async (serverId: string) => {
+        trace("plugins.installed", { serverId });
+        requireServer(serverId);
+        await sleep(120);
+        return (serverPluginFiles.get(serverId) ?? []).map((item) => ({ ...item }));
+      },
+      install: async (req: ServerPluginInstallRequest): Promise<ServerPluginInstallResult> => {
+        trace("plugins.install", { ...req });
+        const entry = requireServer(req.serverId);
+        const fileName = `${req.projectId}-${req.fileId ?? "latest"}.jar`;
+        await simulateTask("mod", `安装插件 ${fileName}`, "下载插件", 240_000, 700, 1);
+        const list = serverPluginFiles.get(req.serverId) ?? [];
+        const taken = list.filter((item) => item.fileName.replace(/\.jar$/i, "") === fileName.replace(/\.jar$/i, "")).length;
+        const installed: InstalledModInfo = {
+          fileName: taken === 0 ? fileName : `${fileName.replace(/\.jar$/i, "")} (${taken}).jar`,
+          sizeBytes: 240_000,
+          sha1: "mock-plugin-sha1",
+          name: req.projectId,
+          provider: req.provider,
+          projectId: req.projectId,
+        };
+        serverPluginFiles.set(req.serverId, [...list, installed]);
+        return { fileName: installed.fileName, sizeBytes: installed.sizeBytes, path: `servers/${entry.meta.id}/plugins/${installed.fileName}` };
+      },
+      remove: async (serverId: string, fileName: string) => {
+        trace("plugins.remove", { serverId, fileName });
+        requireServer(serverId);
+        const list = serverPluginFiles.get(serverId) ?? [];
+        if (!list.some((item) => item.fileName === fileName)) throw new Error(`plugins 目录里没有 ${fileName}`);
+        serverPluginFiles.set(serverId, list.filter((item) => item.fileName !== fileName));
+      },
+    },
     wallpaper: {
       list: async () => {
         trace("wallpaper.list");

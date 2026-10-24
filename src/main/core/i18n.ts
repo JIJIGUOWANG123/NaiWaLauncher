@@ -182,6 +182,28 @@ export const DICT: Record<string, Entry> = {
   "srv.taskLabel": D("服务端 {name}", "Server {name}", "サーバー {name}"),
   "srv.stage.download": D("下载服务端", "Downloading server", "サーバーをダウンロード中"),
 
+  // ---- 服务端内容：模组与插件（servers/content.ts） ----
+  "srv.content.kind.mod": D("模组", "mod", "MOD"),
+  "srv.content.kind.plugin": D("插件", "plugin", "プラグイン"),
+  "srv.content.installTitle": D("安装{kind} {file}", "Installing {kind} {file}", "{kind} {file} をインストール中"),
+  "srv.content.serverMissing": D("服务端 {id} 不存在", "Server {id} does not exist", "サーバー {id} は存在しません"),
+  "srv.content.badKind": D("未知的服务端内容类型：{kind}（只支持 mod / plugin）", "Unknown server content kind: {kind} (only mod / plugin)", "不明なサーバーコンテンツ種別：{kind}（mod / plugin のみ）"),
+  "srv.content.projectMissing": D("缺少{kind}的项目 id", "Missing the {kind} project id", "{kind} のプロジェクト ID がありません"),
+  "srv.content.unknownProvider": D("未知的内容来源：{provider}", "Unknown content source: {provider}", "不明なコンテンツ提供元：{provider}"),
+  "srv.content.noUrl": D("文件 {file} 没有下载地址", "File {file} has no download URL", "ファイル {file} にダウンロード URL がありません"),
+  "srv.content.noFile": D("没有找到适合这个服务端的{kind}文件（项目 {project}，游戏版本 {version}）：该内容可能不提供服务端平台的文件", "No {kind} file fits this server (project {project}, game version {version}) — this content may not ship a server-platform file", "このサーバーに合う{kind}ファイルが見つかりません（プロジェクト {project}、ゲームバージョン {version}）：サーバー向けファイルが提供されていない可能性があります"),
+  "srv.content.notJar": D("服务端内容文件必须是 .jar：{file}", "A server content file must be a .jar: {file}", "サーバーコンテンツは .jar である必要があります：{file}"),
+  "srv.content.emptyDownload": D("{kind}下载为空（0 字节）：{file}", "The {kind} download is empty (0 bytes): {file}", "{kind} のダウンロードが空です（0 バイト）：{file}"),
+  "srv.content.checksumFailed": D("{kind}校验失败：{file} 期望 sha1 {expected}，实际 {actual}", "{kind} verification failed: {file} expected sha1 {expected}, got {actual}", "{kind} の検証に失敗しました：{file} の期待値 sha1 {expected}、実際 {actual}"),
+  "srv.content.tooManyDuplicates": D("{dir} 目录里同名文件太多，无法安装 {file}", "Too many files with that name in the {dir} directory, cannot install {file}", "{dir} ディレクトリに同名ファイルが多すぎるため {file} をインストールできません"),
+  "srv.content.deleteWrongType": D("只能删除 .jar 文件：{file}", "Only .jar files can be removed: {file}", "削除できるのは .jar ファイルのみです：{file}"),
+  "srv.content.missing": D("{dir} 目录里没有 {file}", "The {dir} directory has no {file}", "{dir} ディレクトリに {file} がありません"),
+  // 核心能力：装不了的时候要说出「为什么」和「换什么」
+  "srv.content.vanillaNoContent": D("原版（{core}）服务端既不加载 mods 也不加载 plugins：请改用 Paper/Purpur 这类插件核心，或 Fabric/Forge 这类模组核心", "A vanilla ({core}) server loads neither mods nor plugins — use a plugin core such as Paper/Purpur, or a mod core such as Fabric/Forge", "バニラ（{core}）サーバーは mods も plugins も読み込みません。Paper/Purpur などのプラグインコア、または Fabric/Forge などの MOD コアをご利用ください"),
+  "srv.content.noMods": D("核心 {core} 不能装模组：只有 Fabric/Forge/NeoForge 这类模组核心才加载 mods 目录，这个服务端请改用插件", "The {core} core cannot take mods: only mod cores such as Fabric/Forge/NeoForge load the mods directory — use plugins for this server", "コア {core} に MOD はインストールできません：mods を読み込むのは Fabric/Forge/NeoForge などの MOD コアのみです。このサーバーではプラグインをご利用ください"),
+  "srv.content.noPlugins": D("核心 {core} 不能装插件：只有 Paper/Purpur/Folia 这类插件核心才加载 plugins 目录，这个服务端请改用模组", "The {core} core cannot take plugins: only plugin cores such as Paper/Purpur/Folia load the plugins directory — use mods for this server", "コア {core} にプラグインはインストールできません：plugins を読み込むのは Paper/Purpur/Folia などのプラグインコアのみです。このサーバーでは MOD をご利用ください"),
+  "srv.content.clientOnly": D("模组 {project} 只支持客户端，服务端装不了（Modrinth 标记了 server_side=unsupported）", "The mod {project} is client-side only, so it cannot be installed on a server (Modrinth marks it server_side=unsupported)", "MOD {project} はクライアント専用のため、サーバーにはインストールできません（Modrinth の server_side=unsupported）"),
+
   // ---- 联机 / 内网穿透（net/*.ts） ----
   "net.natfrp.noUserId": D("樱花穿透接口没有返回用户 id", "The SakuraFrp API did not return a user id", "SakuraFrp API がユーザー ID を返しませんでした"),
   "net.natfrp.tunnelNameRequired": D("隧道名不能为空", "The tunnel name cannot be empty", "トンネル名は空にできません"),
@@ -484,6 +506,7 @@ export const DICT: Record<string, Entry> = {
   "mods.noun.resourcepack": D("资源包", "resource pack", "リソースパック"),
   "mods.noun.modpack": D("整合包", "modpack", "MOD パック"),
   "mods.noun.map": D("地图", "map", "マップ"),
+  "mods.noun.plugin": D("插件", "plugin", "プラグイン"),
 
   // ---- 第五批：登录/鉴权（auth/*）----
   "core.requestTimeout": D("请求超时（{ms}ms）", "Request timed out ({ms}ms)", "リクエストがタイムアウトしました（{ms}ms）"),
