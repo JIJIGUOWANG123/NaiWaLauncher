@@ -1477,9 +1477,9 @@ export const pagesDict: Record<string, { "zh-CN": string; "en-US": string; "ja-J
     "中国語を入力すると、英語に翻訳してから検索します。",
   ),
   "pages.otherSettings.deeplHint": D(
-    "默认已内置一把免费 Key；填自己的会覆盖，清空则改回免费接口 uapis.cn / suapi.net。",
-    "A free key is built in; entering your own overrides it, and clearing the field returns to the free uapis.cn / suapi.net endpoint.",
-    "無料のキーがあらかじめ組み込まれています。ご自身のキーを入力すると上書きされ、空欄にすると無料の uapis.cn / suapi.net に戻ります。",
+    "留空即使用自带的免费翻译（uapis.cn / suapi.net），不需要填；想要更稳定的质量可以填自己的 DeepL Key，会优先用它。",
+    "Leave it empty to use the built-in free translation (uapis.cn / suapi.net). Enter your own DeepL key only if you want better quality — it takes priority.",
+    "空欄なら内蔵の無料翻訳（uapis.cn / suapi.net）を使います。より高品質にしたい場合のみ、ご自身の DeepL キーを入力してください（優先されます）。",
   ),
   "pages.otherSettings.deeplPlaceholder": D("以 :fx 结尾为免费版", "Keys ending in :fx are the free tier", "末尾が :fx のキーは無料版です"),
   "pages.otherSettings.hideKey": D("隐藏 DeepL Key", "Hide the DeepL key", "DeepL キーを隠す"),

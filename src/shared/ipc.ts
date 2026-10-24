@@ -23,6 +23,8 @@ export const IPC = {
   appUpdateState: "app:updateState",
   appReveal: "app:reveal",
   appChangelog: "app:changelog",
+  /** 关于页「最新新闻」：主进程抓 minecraft.net 最新一篇（失败返回 null）。 */
+  newsLatest: "news:latest",
   downloadsList: "downloads:list",
   downloadsResume: "downloads:resume",
   downloadsCancel: "downloads:cancel",
@@ -82,6 +84,11 @@ export const IPC = {
   skinsRemoveFromWardrobe: "skins:removeFromWardrobe",
   skinsProfiles: "skins:profiles",
   skinsSelectProfile: "skins:selectProfile",
+  // 微软正版（Mojang 官方接口）：读官方档案/皮肤、上传皮肤、披风列表与切换
+  mojangProfile: "skin:mojangProfile",
+  mojangUpload: "skin:mojangUpload",
+  mojangCapes: "skin:mojangCapes",
+  mojangSetCape: "skin:mojangSetCape",
   accountsBeginMicrosoft: "accounts:beginMicrosoft",
   accountsPollMicrosoft: "accounts:pollMicrosoft",
 
@@ -396,7 +403,74 @@ export interface UpdateStateEvent {
   message?: string;
 }
 
+/**
+ * 关于页「最新新闻」：minecraft.net 的最新一篇文章。
+ * title / summary 已由主进程译成中文（翻译不可用时退回原文）；整条失败时 news:latest 返回 null。
+ */
+export interface NewsItem {
+  title: string;
+  url: string;
+  summary?: string;
+  image?: string;
+  /** 文章页的 article:published_time（ISO 8601），抓不到就没有。 */
+  publishedAt?: string;
+}
+
 /** The surface exposed on window.naiwa by the preload script. */
+/** 官方档案里的一张皮肤：state 为 ACTIVE 的就是当前启用那张。 */
+export interface MojangSkinEntry {
+  id: string;
+  /** ACTIVE / INACTIVE（拿不到时为空串）。 */
+  state: string;
+  url: string;
+  variant: MojangVariant;
+}
+
+/** 官方档案里的一件披风（账号拥有的，按 state 区分是否启用）。 */
+export interface MojangCapeEntry {
+  id: string;
+  /** ACTIVE / INACTIVE（拿不到时为空串）。 */
+  state: string;
+  /** 披风的可读名（Mojang 只对部分披风返回）。 */
+  alias?: string;
+  /** 披风贴图直链（64×32），界面直接当缩略图用。 */
+  url: string;
+}
+
+/** 模型：classic = Steve，slim = Alex。 */
+export type MojangVariant = "classic" | "slim";
+
+/** skin:mojangProfile 的返回：没有微软正版账号时整个对象为 null。 */
+export interface MojangProfile {
+  /** 无横线 32 位档案 id。 */
+  id: string;
+  name: string;
+  skins: MojangSkinEntry[];
+  capes: MojangCapeEntry[];
+  /** 读取失败时的可读原因（界面提示用，不抛异常）。 */
+  error?: string;
+}
+
+/** skin:mojangUpload：filePath（本地 PNG，multipart）与 url（图片直链，JSON）二选一。 */
+export interface MojangSkinUploadRequest {
+  accountId: string;
+  filePath?: string;
+  url?: string;
+  variant: MojangVariant;
+}
+
+/** skin:mojangSetCape：capeId 为 null 表示移除当前披风。 */
+export interface MojangCapeRequest {
+  accountId: string;
+  capeId: string | null;
+}
+
+/** 写操作结果：失败时 error 是可直接 toast 的人话。 */
+export interface MojangActionResult {
+  ok: boolean;
+  error?: string;
+}
+
 export interface NaiwaApi {
   app: {
     info(): Promise<AppInfo>;
@@ -427,6 +501,10 @@ export interface NaiwaApi {
     /** 把启动失败现场（启动日志、hs_err、最新崩溃报告、启动器日志、diagnosis.txt）打包成 zip，返回保存路径。 */
     exportLaunchDiagnosis(instanceId: string, logPath: string): Promise<LaunchDiagnosisExport>;
     openExternal(url: string): Promise<void>;
+  };
+  /** 关于页「最新新闻」：离线或抓取失败时返回 null（界面整块不显示）。 */
+  news: {
+    latest(): Promise<NewsItem | null>;
   };
   settings: {
     get(): Promise<Settings>;
@@ -636,6 +714,17 @@ export interface NaiwaApi {
     ensureMod(instanceId: string): Promise<{ installed: boolean; fileName?: string; message?: string }>;
     /** 拖放进来的 File 拿绝对路径（Electron 38 只允许经 webUtils 取，渲染层不能直接用 file.path）。 */
     pathForFile(file: File): string;
+  };
+  /** 微软正版（Mojang 官方接口）：官方皮肤/披风的查看与修改。 */
+  mojang: {
+    /** 官方档案（名字 + 皮肤 + 披风）；没有微软正版账号时返回 null。 */
+    profile(accountId: string): Promise<MojangProfile | null>;
+    /** 上传/设置官方皮肤：传本地 PNG（multipart）或图片直链（JSON）。 */
+    upload(req: MojangSkinUploadRequest): Promise<MojangActionResult>;
+    /** 该账号拥有的披风列表（GET /minecraft/profile/capes）。 */
+    capes(accountId: string): Promise<MojangCapeEntry[]>;
+    /** 切换当前披风；capeId 传 null 表示移除。 */
+    setCape(req: MojangCapeRequest): Promise<MojangActionResult>;
   };
   /** 开服：服务端列表、下载、进程与控制台。 */
   servers: {

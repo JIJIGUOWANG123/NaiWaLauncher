@@ -41,8 +41,13 @@ async function findJdkRoot(dir: string): Promise<string | undefined> {
   return undefined;
 }
 
-/** 先按 sha256 校验，没有哈希就按大小；不匹配删掉重下一次。 */
-async function downloadVerified(
+/**
+ * 按 sha256 校验，没有哈希就按大小；不匹配删掉重下一次。
+ * urls 是候选链（加速地址在前、原始地址兜底），逐条试到一条通过校验为止。
+ * 导出给 adoptium 用：它原来有一份同逻辑的私有副本，Adoptium 的下载地址也是 GitHub Releases，
+ * 需要同一条候选链，不该再写第二个下载器。
+ */
+export async function downloadVerified(
   release: JavaRelease,
   zipPath: string,
   task: TaskHandle,

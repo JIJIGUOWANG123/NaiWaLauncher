@@ -345,6 +345,18 @@ export async function resolveMinecraftSession(
   return { accessToken: session.accessToken, uuid: account.uuid, name: account.name, expiresAt: session.expiresAt };
 }
 
+/**
+ * 给皮肤/披风接口用：令牌被提前吊销（401）时重建一次 Minecraft 会话。
+ * 只复用既有的「刷新微软令牌 + 重走 XBL/XSTS 链路」，不改登录流程。
+ */
+export async function reauthenticateMinecraftSession(account: Account): Promise<{ accessToken: string; expiresAt: number }> {
+  if (account.type !== "microsoft" || !account.microsoft) throw new Error(mt("auth.ms.onlineOnlyMicrosoft"));
+  sessions.delete(account.id);
+  const refreshed = await refreshTokens(account);
+  const session = await mintSession(refreshed);
+  return { accessToken: session.accessToken, expiresAt: session.expiresAt };
+}
+
 /** 读档案；401 说明 MC token 被提前吊销 → 刷新微软令牌后重走链路，只重试一次。 */
 export async function getMinecraftProfile(account: Account): Promise<{ id: string; name: string }> {
   const session = await resolveMinecraftSession(account);

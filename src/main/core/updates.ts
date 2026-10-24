@@ -7,10 +7,17 @@ const APP_VERSION_FALLBACK = "0.1.5";
 import { logger } from "./logger";
 import type { UpdateCheckResult } from "../../shared/types";
 import { mt } from "./i18n";
-import { GITHUB_NODES, accelerate, githubAcceleratedCandidates, githubAcceleratedPrefixes, normalizeBase } from "../net/github";
+import {
+  GITHUB_NODES,
+  LAUNCHER_REPO,
+  accelerate,
+  githubAcceleratedCandidates,
+  githubAcceleratedPrefixes,
+  normalizeBase,
+} from "../net/github";
 
 const log = logger("updates");
-const REPO = "JIJIGUOWANG123/NaiWaLauncher";
+const REPO = LAUNCHER_REPO;
 /** 更新包固定文件名：Release 里永远用这两个名字上传，所以 latest/download 直链永远指向最新版。 */
 const PORTABLE_ASSET = "naiwalauncher.exe";
 const SETUP_ASSET = "naiwalauncher-setup.exe";
@@ -21,9 +28,9 @@ function fixedAssetUrl(name: string): string {
 
 /**
  * 记住「哪些加速节点能代理 api.github.com」。
- * 实测四个节点里只有 github.cnxiaobai.com 给 200，其余把 API 请求回成 403 错误页；
- * 而按延迟排序时 cnxiaobai（约 485ms）经常被挤出前二，于是两个 API 通道全 403。
- * 进程内缓存即可：首次探测成功的节点下次直接排最前。
+ * 七个节点里只有部分给 200（其余把 API 请求回成 403 错误页）；而按延迟排序时能代理的那个
+ * 经常排在后面，于是先试的通道全 403。githubAcceleratedPrefixes 已按测速里的 apiProxy 先排，
+ * 这里再补一层运行时学习：真正抓到 release JSON 的节点下次直接排最前。
  */
 const apiProxyNodes: string[] = [];
 
@@ -49,8 +56,8 @@ interface Channel {
 }
 
 /**
- * API 镜像通道：四个节点**全部**给出（顺序按测速，已知能代理 api 的排最前）。
- * 只按测速取前二会把唯一能代理的节点漏掉，所以这里不设上限。
+ * API 镜像通道：七个节点**全部**给出（顺序按测速且能代理 api 的排最前，再叠运行时学习）。
+ * 只按测速取前二会把能代理的节点漏掉，所以这里不设上限。
  */
 async function apiMirrorChannels(apiUrl: string): Promise<Channel[]> {
   const prefixes = await githubAcceleratedPrefixes();
@@ -67,7 +74,7 @@ async function apiMirrorChannels(apiUrl: string): Promise<Channel[]> {
 }
 
 /**
- * 通道（依次尝试）：官方 API → 四个加速节点的 API 镜像 → jsDelivr → raw 直连 → 加速节点的 raw 镜像。
+ * 通道（依次尝试）：官方 API → 七个加速节点的 API 镜像 → jsDelivr → raw 直连 → 加速节点的 raw 镜像。
  * 加速节点不再硬编码，统一走 githubAccelerator 的顺序（auto 先测速排序，固定节点优先）。
  */
 async function buildChannels(): Promise<Channel[]> {

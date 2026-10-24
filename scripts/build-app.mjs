@@ -82,6 +82,30 @@ function run(cmd, args, env) {
 run(process.execPath, [join(root, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.main.json"], process.env);
 run(process.execPath, [join(root, "node_modules", "vite", "bin", "vite.js"), "build"], process.env);
 
+// 1.5) 内置 Microsoft client id：源码里是占位符，这里用仓库根目录的 .ms-client-id（未入库）注入到编译产物。
+//      这样别人拿到的源码快照里没有这个 id，而发行版仍然内置它。
+const clientIdFile = join(root, ".ms-client-id");
+const settingsOut = join(root, "dist-electron", "main", "core", "settings.js");
+if (existsSync(clientIdFile) && existsSync(settingsOut)) {
+  const raw = readFileSync(clientIdFile, "utf8");
+  /** 本地文件的格式：第一行是 client id，可选的第二行 DEEPL_KEY=... 是翻译 Key。 */
+  const lines = raw.split(/\r?\n/);
+  const clientId = (lines.find((line) => line.trim() && !line.includes("=")) ?? "").trim();
+  const deeplKey = (lines.find((line) => /^DEEPL_KEY\s*=/.test(line)) ?? "").split("=")[1]?.trim() ?? "";
+  let text = readFileSync(settingsOut, "utf8");
+  const before = text;
+  if (clientId) text = text.split("__NAIWA_MS_CLIENT_ID__").join(clientId);
+  if (deeplKey) text = text.split("__NAIWA_DEEPL_API_KEY__").join(deeplKey);
+  if (text !== before) {
+    writeFileSync(settingsOut, text, "utf8");
+    log("已把内置凭据注入编译产物（client id " + (clientId ? "有" : "无") + " · DeepL Key " + (deeplKey ? "有" : "无") + "），源码不含这些值");
+  } else {
+    log("提示：编译产物里没有占位符，跳过凭据注入");
+  }
+} else if (!existsSync(clientIdFile)) {
+  log("提示：没找到 .ms-client-id，发行版将不内置 client id 与 DeepL Key（用户需自己填）");
+}
+
 // 2) 上一次中断留下的 win-unpacked.tmp(.lock) 会让 electron-builder 卡在改名步骤，目标目录也一起清掉：
 //    它每次都整份重新解包，留着旧目录只会在 Windows 上把 rename 顶住。
 for (const stale of ["win-unpacked.tmp", "win-unpacked.tmp.lock", "win-unpacked"]) {

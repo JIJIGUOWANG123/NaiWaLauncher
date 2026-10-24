@@ -11,8 +11,30 @@ const log = logger("settings");
 /** 内置默认 CurseForge Key：用户可在设置页覆盖，空值回落为它。 */
 // 发行版不内置 Key：CurseForge 官方 API 需使用者自行申请并在设置里填写，避免把凭据随安装包分发。
 export const DEFAULT_CURSEFORGE_API_KEY = "";
-/** 内置公共 Azure 应用 client id；用户手动填写后不再使用内置值。 */
-export const BUILTIN_MICROSOFT_CLIENT_ID = "fd3e219a-6e6a-4188-8a39-e241f0e63324";
+/**
+ * 内置公共 Azure 应用 client id。
+ * **源码里刻意不留字面量**：构建时由 scripts/build-app.mjs 用仓库根目录的 .ms-client-id（未入库）
+ * 替换下面这个占位符，或在开发时通过环境变量 NAIWA_MS_CLIENT_ID 提供；两者都没有就是空串，
+ * 界面上等同「未内置 client id」，需要用户自己填。
+ */
+const CLIENT_ID_PLACEHOLDER = "__NAIWA_MS_CLIENT_ID__";
+/** DeepL 内置试用 Key 的占位符，处理方式与 client id 相同：源码留空，构建时注入。 */
+const DEEPL_KEY_PLACEHOLDER = "__NAIWA_DEEPL_API_KEY__";
+export const BUILTIN_MICROSOFT_CLIENT_ID: string = (() => {
+  const fromEnv = (process.env.NAIWA_MS_CLIENT_ID ?? "").trim();
+  if (fromEnv) return fromEnv;
+  return CLIENT_ID_PLACEHOLDER.startsWith("__") ? "" : CLIENT_ID_PLACEHOLDER;
+})();
+
+/**
+ * 内置 DeepL 试用 Key：同样**源码里不留字面量**，构建时注入或由 NAIWA_DEEPL_API_KEY 提供。
+ * 空串表示不内置 —— 此时翻译自动只走 uapis.cn / suapi.net 两个免费接口。
+ */
+export const BUILTIN_DEEPL_API_KEY: string = (() => {
+  const fromEnv = (process.env.NAIWA_DEEPL_API_KEY ?? "").trim();
+  if (fromEnv) return fromEnv;
+  return DEEPL_KEY_PLACEHOLDER.startsWith("__") ? "" : DEEPL_KEY_PLACEHOLDER;
+})();
 
 const SOURCE_IDS: DownloadSourceId[] = ["official", "bmclapi", "sjtu", "auto"];
 /** JDK 下载源（顺序即界面顺序）：auto 走测速，其余固定站点。 */
@@ -21,7 +43,16 @@ const CLOSE_ACTIONS: Array<"ask" | "tray" | "quit"> = ["ask", "tray", "quit"];
 /** 更新方式：manual 只手动检查（默认）；auto 打开程序时自动检查。 */
 const UPDATE_MODES: Array<"manual" | "auto"> = ["manual", "auto"];
 /** GitHub 加速节点（auto = 测速挑最快）。 */
-const GITHUB_ACCELERATORS: Array<"auto" | "ghf" | "padao" | "ghfast" | "cnxiaobai"> = ["auto", "ghf", "padao", "ghfast", "cnxiaobai"];
+const GITHUB_ACCELERATORS: Array<"auto" | "ghf" | "padao" | "ghfast" | "cnxiaobai" | "tangbai" | "chenc" | "xyz"> = [
+  "auto",
+  "ghf",
+  "padao",
+  "ghfast",
+  "cnxiaobai",
+  "tangbai",
+  "chenc",
+  "xyz",
+];
 /** 背景来源：本地文件 / 随机图 API / Steam 壁纸引擎。 */
 const BACKGROUND_SOURCES: Array<"local" | "api" | "wallpaperEngine"> = ["local", "api", "wallpaperEngine"];
 
@@ -118,7 +149,7 @@ export function defaults(): Settings {
     startupSound: "off",
     startupVolume: 0.6,
     natfrpToken: "",
-    deeplApiKey: "0db97fea-a8ba-4356-bded-c1dc06475552:fx",
+    deeplApiKey: BUILTIN_DEEPL_API_KEY,
     activeAccountId: "",
     // 微软登录默认使用的 Azure 应用 client id（可在设置里替换）；
     // 该应用需在 Azure 门户开启「允许公共客户端流」，否则设备码登录会返回 AADSTS70002。

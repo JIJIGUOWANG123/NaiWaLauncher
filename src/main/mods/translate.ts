@@ -495,3 +495,195 @@ export async function translateText(text: string, toLang: string): Promise<strin
   const [value] = await translateBatch([text], toLang);
   return value;
 }
+
+// ---------- 长文（详情正文）分段翻译 ----------
+// 详情正文几千到几万字符，一条请求吃不下（接口上限 3000）：按空行切段落，逐段判定
+// 「能不能翻」，逐段回填——任一段失败只保留那一段原文，绝不整篇回退或抛错。
+
+/** 单块目标长度：接口上限 3000，留余量给前后缀。 */
+const BODY_BLOCK_CHARS = 1800;
+/** 正文最多翻多少块（约 2 万字符）：再多只会把详情页拖死，剩下的保留原文。 */
+const BODY_MAX_BLOCKS = 12;
+/** 正文整体预算：到点就带着已翻部分返回，剩下的保留原文（详情页不能无限等）。 */
+const BODY_BUDGET_MS = 20_000;
+
+/** 正文翻译结果：text 是可以直接展示的（部分）译文，其余字段用于自检/日志。 */
+export interface BodyTranslation {
+  text: string;
+  /** 识别出的可翻块数。 */
+  blocks: number;
+  /** 成功翻出的块数。 */
+  translated: number;
+  /** 翻失败（保留原文）的块数。 */
+  failed: number;
+  /** 因超出块数上限而没翻的块数。 */
+  overLimit: number;
+  /** 按规则整块跳过（代码块/纯链接/分隔线等）的块数。 */
+  skipped: number;
+  /** 预算/条数用尽：还有块没翻完。 */
+  pending: boolean;
+  elapsedMs: number;
+}
+
+/** 段落里出现围栏行（``` / ~~~）就当成代码块处理。 */
+const FENCE_LINE = /^\s*(?:```|~~~)/gm;
+
+/** 整块跳过：空块、代码块、纯链接/图片行、纯 URL、分隔线、没有自然语言的块。 */
+function skippableBodyBlock(block: string): boolean {
+  const text = block.trim();
+  if (!text) return true;
+  // 纯链接行 / 纯图片行 / 纯 URL：翻了只会把目标地址翻坏
+  if (/^!?\[[^\]]*\]\([^)]*\)$/.test(text)) return true;
+  if (/^<?https?:\/\/\S+>?$/i.test(text)) return true;
+  // 分隔线、表格对齐行
+  if (/^[-=_*\s|:]+$/.test(text)) return true;
+  // 英文单词都没有（纯数字/符号/中文）：没必要翻
+  if (!/[A-Za-z]{2}/.test(text)) return true;
+  return false;
+}
+
+/** 拆出「缩进 + Markdown 标记 / 正文 / 尾部空白」，译文只替换正文，标记原样保留。 */
+function splitBodyBlock(block: string): { prefix: string; core: string; tail: string } {
+  const lead = /^\s*/.exec(block)?.[0] ?? "";
+  const rest0 = block.slice(lead.length);
+  const mark = /^(?:#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)/.exec(rest0)?.[0] ?? "";
+  const rest = rest0.slice(mark.length);
+  const trail = /\s*$/.exec(rest)?.[0] ?? "";
+  return { prefix: lead + mark, core: rest.slice(0, rest.length - trail.length), tail: trail };
+}
+
+/** 超长段落按句末切开，切点找不到就退回空格，最后才硬切。 */
+function splitLongText(text: string, limit: number): string[] {
+  const parts: string[] = [];
+  let rest = text;
+  while (rest.length > limit) {
+    const window = rest.slice(0, limit);
+    const at = Math.max(
+      window.lastIndexOf(". "),
+      window.lastIndexOf("! "),
+      window.lastIndexOf("? "),
+      window.lastIndexOf("\n"),
+      window.lastIndexOf("; "),
+    );
+    const cut = at > limit * 0.4 ? at + 1 : limit;
+    parts.push(rest.slice(0, cut));
+    rest = rest.slice(cut);
+  }
+  if (rest) parts.push(rest);
+  return parts;
+}
+
+/**
+ * 长文（Markdown 正文）分段翻译：逐段判定 → 逐段回填，块数/时间双上限。
+ * 只翻自然语言段落，代码块、纯链接、分隔线整块保留原文；任何一段失败都只影响它自己。
+ */
+export async function translateMarkdownBody(
+  body: string,
+  toLang = "zh-CN",
+  options: { maxBlocks?: number; budgetMs?: number } = {},
+): Promise<BodyTranslation> {
+  const started = Date.now();
+  const target = String(toLang ?? "").trim() || "zh-CN";
+  const maxBlocks = Math.max(1, options.maxBlocks ?? BODY_MAX_BLOCKS);
+  const budget = Math.max(0, options.budgetMs ?? BODY_BUDGET_MS);
+  const source = String(body ?? "");
+
+  /** 一块待回填的段落：pieces 是它拆出来的请求片段，zh 是已拿到的译文（缺省=保留原文）。 */
+  interface Unit {
+    token: number;
+    prefix: string;
+    tail: string;
+    pieces: { text: string; zh?: string }[];
+  }
+
+  const tokens = source.split(/(\n\s*\n)/);
+  const units: Unit[] = [];
+  const queue: string[] = [];
+  let skipped = 0;
+  let overLimit = 0;
+  let inFence = false;
+
+  for (let token = 0; token < tokens.length; token += 2) {
+    const raw = tokens[token] ?? "";
+    if (!raw.trim()) {
+      skipped += 1;
+      continue;
+    }
+    const marks = (raw.match(FENCE_LINE) ?? []).length;
+    if (inFence) {
+      skipped += 1;
+      if (marks % 2 === 1) inFence = false;
+      continue;
+    }
+    if (marks > 0) {
+      skipped += 1;
+      if (marks % 2 === 1) inFence = true;
+      continue;
+    }
+    if (skippableBodyBlock(raw)) {
+      skipped += 1;
+      continue;
+    }
+    const { prefix, core, tail } = splitBodyBlock(raw);
+    if (!core.trim()) {
+      skipped += 1;
+      continue;
+    }
+    if (units.length >= maxBlocks) {
+      overLimit += 1;
+      continue;
+    }
+    const unit: Unit = { token, prefix, tail, pieces: splitLongText(core, BODY_BLOCK_CHARS).map((text) => ({ text })) };
+    for (const piece of unit.pieces) {
+      // 片段本身是中文（混排正文）就别浪费额度
+      if (containsCjk(piece.text)) piece.zh = piece.text;
+      else queue.push(piece.text);
+    }
+    units.push(unit);
+  }
+
+  // 一段一请求：接口对某段报错/限流时，只有那段的负缓存被记上，其它段照常翻。
+  // （整批一起发更快，但一批里有一个坏段落会让同批全挂，正文就整段回退了。）
+  let pending = false;
+  const wanted = units.flatMap((unit) => unit.pieces.filter((piece) => piece.zh === undefined));
+  for (const piece of wanted) {
+    if (Date.now() - started >= budget) {
+      pending = true;
+      break;
+    }
+    try {
+      const [value] = await translateBatch([piece.text], target);
+      if (typeof value === "string" && value.trim() && value !== piece.text) piece.zh = value;
+    } catch (err) {
+      // 这一段保留原文，继续下一段
+      log.warn(`正文分段翻译失败（保留原文）：${messageOf(err)}`);
+    }
+  }
+
+  let translated = 0;
+  let failed = 0;
+  for (const unit of units) {
+    for (const piece of unit.pieces) {
+      if (piece.zh === undefined) failed += 1;
+      else translated += 1;
+    }
+  }
+  const out = tokens.slice();
+  for (const unit of units) {
+    // 整块没有任何译文就原样留着，避免拼出空的段落
+    if (unit.pieces.every((piece) => piece.zh === undefined)) continue;
+    out[unit.token] = unit.prefix + unit.pieces.map((piece) => piece.zh ?? piece.text).join("") + unit.tail;
+  }
+
+  return {
+    text: out.join(""),
+    blocks: units.length,
+    translated,
+    failed,
+    overLimit,
+    skipped,
+    pending,
+    elapsedMs: Date.now() - started,
+  };
+}
+

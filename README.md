@@ -2,7 +2,7 @@
 
 <img src="logo.png" width="120" align="right" alt="NaiWa Launcher" />
 
-现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，界面内显示「奶娃启动器 / NaiWa Launcher」。当前版本 **0.4.1**。
+现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，界面内显示「奶娃启动器 / NaiWa Launcher」。当前版本 **0.4.2**。
 
 主开发者 **奶龙** ｜ 协助开发者 **小七** ｜ 工具提供 **DeepSeek**
 
@@ -23,14 +23,17 @@
 - 多线程下载、**断点续传（关闭软件后重启会接着已下载的部分继续，进度与字节数持久化）**、全局限速
 - **下载统一在「管理」页查看**：实时速度、已下载 / 总大小、失败原因，以及继续 / 终止 / 移除 / 清空已完成
 - **可以同时安装多个模组**（排队进行）：真正同时下载的数量在「其它」页设置（**默认 8**，范围 1–32），超出部分排队等待；同页还能调单文件分片连接数与速度限制（设置页不再重复放这些项）
-- **GitHub 加速下载**（「其它」页顶部）：粘贴 GitHub 地址即可加速下载，四个节点可选 —— `ghf.无名氏.top` / `gh.padao.fun` / `ghfast.top` / `github.cnxiaobai.com`
-  - 默认**自动测速挑最快**，也可手动锁定某个节点，界面显示各节点实测延迟
+- **GitHub 加速下载**（「其它」页顶部）：粘贴 GitHub 地址即可加速下载，**七个节点**可选 —— `ghf.无名氏.top` / `gh.padao.fun` / `ghfast.top` / `github.cnxiaobai.com` / `git.tangbai.cc` / `github.chenc.dev` / `30006000.xyz`
+  - 默认**自动测速挑最快**，也可手动锁定某个节点，界面显示各节点实测延迟；**其中 3 个节点还能代理 GitHub API**（下拉里标「· API」），检查更新优先用它们
+  - **Java 下载也用这套加速**：Adoptium 等 GitHub 源会按节点候选链依次尝试，全部失败才落原始地址
   - 文件默认存到 **`<启动器根目录>\DL`**，可自行指定目录；重名自动加 `(1)`
   - 下载进度显示在「管理」页（与游戏/整合包下载同一套任务列表），可取消、可继续
 - **资源列表改为翻页**：每页 **10 个**（两列 × 5 行），底部「上一页 / 页码 / 下一页」（页码最多显示 5 个），**不再自动无限加载**，长列表也不会把界面拖卡
 - **可以装到服务端**：点安装会弹出「安装到…」窗口，分**实例**与**服务端**两组（**插件**只列服务端、**模组**两组都列，整合包/资源包/光影只列实例）——**插件**进 `plugins`、**模组**进 `mods`；会按服务端核心判断能否安装（Paper/Purpur/Folia 等插件服、Fabric/Forge/NeoForge 模组服、Arclight 混合端、Vanilla 都不行），并读取 Modrinth 的 `server_side` 判断模组是否支持服务端
 - **插件类型**：麦块社区与 Modrinth 支持，CurseForge 置灰；装到插件服时还会校核文件平台（Velocity 的文件装到 Paper 服会提示）
 - **详情图集可点开大图**：滚轮缩放 1x–4x、放大后拖动平移、双击复位、← → 切换、Esc 关闭
+- **选中目标就直接装**：已选好实例/服务端时，点卡片按钮直接安装；没选才弹出「安装到…」
+- **详情自动翻译**：简介与完整介绍都会给中文译文，可切「译文 / 原文」；翻译不可用时直接显示原文，不报错
 - Modrinth 完整支持；CurseForge 支持「自备 Key」与「无 Key 粘贴链接」两种模式
 - **前置依赖检查**：安装前解析必需前置（模组 / 光影包 / 资源包都查），已装的标「已安装」，缺失的可一键一并安装；光影按加载器规则补（Fabric/Quilt/NeoForge → Iris，Forge → Oculus）
 - **中文搜索与实时翻译**（DeepL → uapis.cn → suapi.net 自动主备切换）：输入中文先译英文再检索，结果标题/简介实时回译（7 天本地缓存，可关闭）
@@ -166,7 +169,7 @@
 
 ### 自动更新
 - **安装版**：点「立即更新」会下载 Release 里的 `NaiWaLauncher-Setup.exe`，静默安装回**当前所在目录**，然后自动重启（数据原地不动）
-- 检查更新会依次尝试 GitHub 官方 API 与四个加速节点（**四个节点全试**，并记住哪个能代理 API）；若某个通道只给出版本号、拿不到发布资产清单，会用**固定名直链**（`releases/latest/download/NaiWaLauncher-Setup.exe`）兜底，不会因为读不到清单就不能更新
+- 检查更新会依次尝试 GitHub 官方 API 与**七个加速节点**（能代理 API 的优先，其余也会试；并记住哪些可用）；若某个通道只给出版本号、拿不到发布资产清单，会用**固定名直链**（`releases/latest/download/NaiWaLauncher-Setup.exe`）兜底，不会因为读不到清单就不能更新
 - **免安装版**：下载新的 `NaiWaLauncher.exe` 替换自身后重启
 
 ## 账号
@@ -220,6 +223,34 @@ node scripts/export-source.mjs       # 导出 源代码/ 快照
 ```
 
 技术栈：Electron 38 + React 19 + TypeScript(strict) + Vite 7；`asar: false`（应用为明文目录，不加壳不混淆）；主进程与渲染进程通过 `preload` 暴露的 `window.naiwa` 通信，契约集中在 `src/shared/{types,ipc}.ts`。架构细节见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，杀毒误报说明见 [docs/AV-FALSE-POSITIVE.md](docs/AV-FALSE-POSITIVE.md)。
+
+### 自己编译这份源码：需要你自己准备的两个凭据
+
+这份源码里**没有内置任何凭据**（这是刻意的，避免把你的账号配置随源码一起发出去）。所以直接编译出来的版本会是「没内置 client id、没有内置 DeepL Key」的状态，表现为：
+
+| 功能 | 没有凭据时的表现 | 怎么补 |
+|---|---|---|
+| 微软正版登录 | 设置 → 账号里 client id 为空，点登录会提示需要填写 | 自己申请一个 Azure 应用（公共客户端、允许设备代码流），把 id 填到设置页，或用下面的环境变量 |
+| 模组/详情翻译 | 只走两个免费接口（uapis.cn / suapi.net），可用但可能被限流 | 填自己的 DeepL Key（设置 → 其它 → DeepL API Key），或按下面方式注入 |
+
+两种注入方式（**编译/打包时**生效，二选一）：
+
+1. **环境变量**（最简单）：`NAIWA_MS_CLIENT_ID` 与 `NAIWA_DEEPL_API_KEY`
+   ```powershell
+   $env:NAIWA_MS_CLIENT_ID="你的-azure-client-id"
+   $env:NAIWA_DEEPL_API_KEY="你的-deepl-key:fx"
+   node scripts/build-app.mjs
+   ```
+2. **本地文件**：在仓库根目录建 `.ms-client-id`（已被 `.gitignore` 忽略，也不会进 `源代码/` 快照），第一行放 client id，第二行放 `DEEPL_KEY=...`；`scripts/build-app.mjs` 会在 `tsc` 之后把这两个值注入到编译产物里。
+
+> 注意：编译产物 `dist-electron/main/core/settings.js` 里是占位符，**每次重新编译都要经过 `build-app.mjs` 才会注入**；直接 `tsc` 出来的产物里凭据是空的。
+
+### 用到网络/官方接口的功能：说明与注意事项
+
+- **微软正版皮肤与披风**（皮肤页 → 微软正版皮肤）：靠 Mojang 官方接口读写，**必须先登录正版账号**。上传皮肤只接受 **64×64 或 64×32 的 PNG**，且皮肤需要账号已拥有 Java 版；换披风只能从**你账号已拥有**的披风里选，没拥有会导致 403（界面会给可读原因）。登录过期时会提示重新登录。
+- **关于页的「最新新闻」**：从 Minecraft 官网抓最新一篇文章并机器翻译成中文。官网改版或网络/翻译服务不可用时，**这一块会自动不显示**（不会报错、不影响页面其它内容），下次进入会重试。
+- **联机的联机模组推荐 / 服务端安装**：需要能访问 Modrinth 与麦块社区接口；接口不可用时会显示「查不到/未知」而不是给出错误结论。
+- **从 GitHub 下载的一切**（游戏、Java、更新、GitHub 加速下载）：会按设置的加速节点依次尝试；全部失败才落原始地址，所以「全网都连不上 GitHub」时仍可能失败。
 
 ## 打包产物
 

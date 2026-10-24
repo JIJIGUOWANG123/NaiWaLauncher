@@ -7,6 +7,7 @@ import { createTask, type TaskHandle } from "../core/events";
 import { downloadFile, fetchJson } from "../core/http";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
+import { githubUrlCandidates } from "../net/github";
 import { installDirName, writeSourceRecord } from "./vendor";
 import { mt } from "../core/i18n";
 
@@ -131,15 +132,16 @@ async function findJdkRoot(dir: string): Promise<string | undefined> {
 }
 
 /**
- * 下载通道：API 给的 downloadUrl 指向 github.com/releases，在国内经常不可达且只有 ~250KB/s；
- * BellSoft 自家 CDN 是同一份文件（实测 1.1MB/s），优先用它，失败再退回 GitHub。
+ * 下载通道：API 给的 downloadUrl 指向 github.com/releases，在国内经常不可达且只有 ~250KB/s。
+ * 顺序：BellSoft 自家 CDN（同一份文件，实测 1.1MB/s）→ GitHub 加速节点 → GitHub 原始直链。
+ * GitHub 那条走 githubUrlCandidates：非 GitHub 地址它会原样返回，所以这里不必自己判断。
  */
-function downloadChannels(release: BellSwRelease): string[] {
+async function downloadChannels(release: BellSwRelease): Promise<string[]> {
   const urls: string[] = [];
   if (release.downloadUrl.includes("github.com/bell-sw/Liberica/releases/download/")) {
     urls.push(`https://download.bell-sw.com/java/${release.version}/${release.filename}`);
   }
-  urls.push(release.downloadUrl);
+  urls.push(...(await githubUrlCandidates(release.downloadUrl)));
   return [...new Set(urls)];
 }
 
@@ -150,7 +152,7 @@ async function downloadZip(
   signal?: AbortSignal,
 ): Promise<void> {
   let lastError: unknown;
-  for (const url of downloadChannels(release)) {
+  for (const url of await downloadChannels(release)) {
     try {
       const got = await downloadFile(url, zipPath, { task, expectedSha1: release.sha1, label: release.filename, signal });
       log.info(`JDK 压缩包来自 ${new URL(url).host}：${got.bytes} 字节 (reused=${got.reused})`);

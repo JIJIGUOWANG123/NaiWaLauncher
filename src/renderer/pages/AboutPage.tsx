@@ -10,6 +10,7 @@ import brandMinekuai from "../assets/brand/minekuai.png";
 import brandQq from "../assets/brand/qq.png";
 import brandModrinth from "../assets/brand/modrinth.png";
 import brandCurseforge from "../assets/brand/curseforge.png";
+import brandMinecraft from "../assets/brand/minecraft.png";
 import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
@@ -31,6 +32,7 @@ import {
   IconRefresh,
   IconRocket,
   IconSearch,
+  IconSkin,
   IconSliders,
   IconUser,
   IconWifi,
@@ -69,6 +71,10 @@ const CAPABILITIES = [
   { capKey: "diagnose", Icon: IconAlert, titleKey: "pages.about.capability.diagnose", descKey: "pages.about.capability.diagnoseDesc" },
   { capKey: "languages", Icon: IconBook, titleKey: "pages.about.capability.languages", descKey: "pages.about.capability.languagesDesc" },
   { capKey: "updateMode", Icon: IconRefresh, titleKey: "pages.about.capability.updateMode", descKey: "pages.about.capability.updateModeDesc" },
+  // 0.4.2 新增的三张能力卡：皮肤 / 开服 / 账号
+  { capKey: "skin", Icon: IconSkin, titleKey: "pages.about.capability.skin", descKey: "pages.about.capability.skinDesc" },
+  { capKey: "servers", Icon: IconRocket, titleKey: "pages.about.capability.servers", descKey: "pages.about.capability.serversDesc" },
+  { capKey: "accounts", Icon: IconUser, titleKey: "pages.about.capability.accounts", descKey: "pages.about.capability.accountsDesc" },
 ];
 
 /** 外部站点常量（MODRINTH / CURSEFORGE 就是模组那两个官网）。 */
@@ -77,6 +83,8 @@ const CURSEFORGE_URL = "https://www.curseforge.com/minecraft";
 const MIRROR_URL = "https://bmclapi2.bangbang93.com/";
 /** 麦块社区（模组/插件的中文搜索源之一）。 */
 const MINEKUAI_URL = "https://bbs.minekuai.com/";
+/** 游戏官网（关于页「最新新闻」也从这个站抓）。 */
+const MINECRAFT_URL = "https://www.minecraft.net/zh-hans";
 
 /** 致谢卡片：image 走本地 png（品牌 logo / 头像），Icon 走组件库里的实心图标。 */
 type ThanksEntry = {
@@ -98,6 +106,7 @@ const THANKS: ThanksEntry[] = [
   { key: "project", titleKey: "about.link.project", hintKey: "pages.about.thanks.projectHint", Icon: IconGithub, url: PROJECT_URL },
   { key: "feedback", titleKey: "about.link.feedback", hintKey: "about.link.feedbackHint", Icon: IconGithub, url: FEEDBACK_URL },
   { key: "qq", titleKey: "about.link.qq", hintKey: "about.link.qqHint", image: brandQq, url: QQ_GROUP_URL },
+  { key: "minecraft", titleKey: "pages.about.thanks.minecraft", hintKey: "pages.about.thanks.minecraftHint", image: brandMinecraft, url: MINECRAFT_URL },
   { key: "modrinth", titleKey: "about.link.modrinth", hintKey: "pages.about.thanks.modrinthHint", image: brandModrinth, url: MODRINTH_URL },
   { key: "curseforge", titleKey: "about.link.curseforge", hintKey: "pages.about.thanks.curseforgeHint", image: brandCurseforge, url: CURSEFORGE_URL },
   { key: "mirror", titleKey: "about.link.mirror", hintKey: "about.link.mirrorHint", image: brandBmclapi, url: MIRROR_URL },
@@ -157,6 +166,9 @@ export function AboutPage() {
   const version = info?.version ?? "0.1.5";
   // 只显示「当前发行版本」的更新内容：历史版本去仓库的 CHANGELOG.md 看，避免程序里的日志越滚越长
   const changelog = useAsync(() => api.app.changelog(1), []);
+  // 最新新闻：主进程抓 minecraft.net 并译成中文；离线/失败时 data 为 null，整块不渲染
+  const news = useAsync(() => api.news.latest(), []);
+  const latestNews = news.data;
   // 发布说明只展示前 3 行，避免长文档把首屏顶开。
   const updateNotes = (update?.notes ?? "")
     .split("\n")
@@ -328,6 +340,36 @@ export function AboutPage() {
               {tr("upd.autoHint")}
             </p>
           ) : null}
+        </section>
+      ) : null}
+
+      {latestNews ? (
+        <section className="about-news" data-about-news>
+          {latestNews.image ? (
+            <img className="about-news-thumb" src={latestNews.image} alt="" loading="lazy" />
+          ) : null}
+          <div className="about-news-body">
+            <span className="about-news-kicker">{tr("pages.about.news.kicker")}</span>
+            <strong className="about-news-title" data-about-news-title>
+              {latestNews.title}
+            </strong>
+            {latestNews.summary ? <p className="about-news-summary">{latestNews.summary}</p> : null}
+            <div className="about-news-foot">
+              {latestNews.publishedAt ? (
+                <span className="about-news-date">{latestNews.publishedAt.slice(0, 10)}</span>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                data-about-news-link
+                title={latestNews.url}
+                onClick={() => void open(latestNews.url, latestNews.title)}
+              >
+                {tr("pages.about.news.read")}
+                <IconChevronRight size={14} />
+              </button>
+            </div>
+          </div>
         </section>
       ) : null}
 

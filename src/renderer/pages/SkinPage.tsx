@@ -2,16 +2,17 @@ import {
   useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent,
 } from "react";
 import type { Account, LocalCape, LocalSkin, SkinApplyResult } from "../../shared/types";
+import type { MojangCapeEntry, MojangProfile, MojangVariant } from "../../shared/ipc";
 import { api } from "../lib/api";
 import { useT } from "../lib/i18n";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
 import { ConfirmDialog } from "../components/Modal";
-import { Select } from "../components/Form";
+import { Select, TextInput } from "../components/Form";
 import { EmptyState, ErrorState, SkeletonCards } from "../components/State";
 import { SkinDoll, skinImageUrl, type CapeTexture, type SkinTexture } from "../components/SkinDoll";
-import { IconChevronDown, IconLink, IconPlus, IconRefresh, IconTrash } from "../components/icons";
+import { IconCheck, IconChevronDown, IconLink, IconPlus, IconRefresh, IconTrash } from "../components/icons";
 
 const LITTLESKIN_URL = "https://littleskin.cn/";
 /** 第三方账号是只读预览：皮肤由皮肤站托管，启动器里不选中、不上传、不本地应用。 */
@@ -48,6 +49,22 @@ type PreviewTexture = SkinTexture & { source: "account" | "local" };
 /** 只收 PNG：主进程按 PNG 头解析尺寸，别的格式必然打不开。 */
 function isPng(file: File): boolean {
   return /\.png$/i.test(file.name);
+}
+
+/** 官方档案里的当前皮肤：优先 state=ACTIVE，拿不到就退回第一张（与主进程的取法一致）。 */
+function activeMojangSkin(profile: MojangProfile | null) {
+  if (!profile) return null;
+  return profile.skins.find((item) => item.state === "ACTIVE") ?? profile.skins[0] ?? null;
+}
+
+/** 官方档案里的当前披风：同样优先 state=ACTIVE。 */
+function activeMojangCape(capes: MojangCapeEntry[]) {
+  return capes.find((item) => item.state === "ACTIVE") ?? null;
+}
+
+/** 披风显示名：Mojang 只给部分披风 alias，没有就退回 id 前 8 位。 */
+function capeLabel(cape: MojangCapeEntry): string {
+  return cape.alias ?? cape.id;
 }
 
 /**
@@ -87,6 +104,20 @@ export function SkinPage() {
   const [capeTab, setCapeTab] = useState<CapeTab>("saved");
   const capeInputRef = useRef<HTMLInputElement | null>(null);
 
+  // 微软正版：官方档案（皮肤 + 披风）直接来自 Mojang 接口，上传/换披风都落到账号上。
+  const [mojangProfile, setMojangProfile] = useState<MojangProfile | null>(null);
+  const [mojangLoading, setMojangLoading] = useState(false);
+  const [mojangVariant, setMojangVariant] = useState<MojangVariant>("classic");
+  const [mojangUrl, setMojangUrl] = useState("");
+  /** 正在进行的操作：upload / url / reload / refresh。 */
+  const [mojangBusy, setMojangBusy] = useState<"" | "upload" | "url" | "refresh">("");
+  /** 正在切换的披风 id（null = 没有披风操作在跑）。 */
+  const [mojangCapeBusy, setMojangCapeBusy] = useState<string | null>(null);
+  /** 当前披风缩略图加载失败 → 换成占位块。 */
+  const [mojangCapeBroken, setMojangCapeBroken] = useState(false);
+  /** 列表里缩略图加载失败的披风 id（贴图 CDN 偶尔 404，失败给占位而不是破图）。 */
+  const [mojangCapeBrokenIds, setMojangCapeBrokenIds] = useState<string[]>([]);
+
   // 默认账号：设置里选中的那个，没有就取第一个；页面上仍可切换。
   useEffect(() => {
     if (accountId) return;
@@ -107,6 +138,38 @@ export function SkinPage() {
     () => accounts.find((item) => item.id === accountId) ?? null,
     [accountId, accounts],
   );
+
+  /** 当前选中的账号是不是微软正版：只有它才有官方皮肤/披风接口。 */
+  const microsoftAccount = account?.type === "microsoft" ? account : null;
+
+  /** 读官方档案；失败只 toast（profile.error 也已经带可读文案），不弹阻塞框。 */
+  const loadMojang = useCallback(async (id: string) => {
+    if (!id) {
+      setMojangProfile(null);
+      return;
+    }
+    setMojangLoading(true);
+    try {
+      const profile = await api.mojang.profile(id);
+      setMojangProfile(profile);
+      // 披风贴图换了，之前的「加载失败」标记要一起清掉
+      setMojangCapeBroken(false);
+      setMojangCapeBrokenIds([]);
+      const active = activeMojangSkin(profile);
+      if (active) setMojangVariant(active.variant);
+      if (profile?.error) push(tr("pages.skins.loadFailed", { error: profile.error }), "error");
+    } catch (err: unknown) {
+      setMojangProfile(null);
+      push(errorMessage(err), "error");
+    } finally {
+      setMojangLoading(false);
+    }
+  }, [push, tr]);
+
+  useEffect(() => {
+    setMojangProfile(null);
+    if (microsoftAccount) void loadMojang(microsoftAccount.id);
+  }, [loadMojang, microsoftAccount?.id]);
 
   const load = useCallback(async () => {
     if (!accountId) {
@@ -424,6 +487,126 @@ export function SkinPage() {
   const openLittleSkin = () => openSite(LITTLESKIN_URL, "LittleSkin");
   const openMcstat = () => openSite(MCSTAT_URL, "mcstat");
 
+  // ---------------------------------------------------------------- 微软正版：官方皮肤与披风
+
+  const mojangCapes = useMemo<MojangCapeEntry[]>(() => mojangProfile?.capes ?? [], [mojangProfile]);
+  const mojangActiveCape = useMemo(() => activeMojangCape(mojangCapes), [mojangCapes]);
+  /** 官方当前皮肤 → 复用页面既有的 CSS 3D 小人（SkinDoll）。 */
+  const mojangTexture = useMemo<SkinTexture | null>(() => {
+    const skin = activeMojangSkin(mojangProfile);
+    return skin ? { url: skin.url, model: skin.variant, height: 64, label: "mojang" } : null;
+  }, [mojangProfile]);
+  const mojangCapeTexture = useMemo<CapeTexture | null>(
+    () => (mojangActiveCape
+      ? { url: mojangActiveCape.url, source: "account", label: capeLabel(mojangActiveCape) }
+      : null),
+    [mojangActiveCape],
+  );
+  const mojangActiveSkin = useMemo(() => activeMojangSkin(mojangProfile), [mojangProfile]);
+  const mojangLocked = microsoftAccount === null;
+
+  /** 选本地 PNG（走主进程的文件框）→ 按所选模型上传到 Mojang。 */
+  const uploadMojangFromFile = async () => {
+    if (!microsoftAccount) {
+      push(tr("pages.skins.lockedHint"), "info");
+      return;
+    }
+    let filePath: string | null = null;
+    try {
+      filePath = await api.accounts.pickSkinFile();
+    } catch (err: unknown) {
+      push(errorMessage(err), "error");
+      return;
+    }
+    // 取消选择不是错误，什么也不做
+    if (!filePath) return;
+    setMojangBusy("upload");
+    try {
+      const result = await api.mojang.upload({ accountId: microsoftAccount.id, filePath, variant: mojangVariant });
+      if (!result.ok) {
+        push(tr("pages.skins.uploadFailed", { error: result.error ?? "" }), "error");
+        return;
+      }
+      push(tr("pages.skins.uploadOk"), "success");
+      await loadMojang(microsoftAccount.id);
+    } catch (err: unknown) {
+      push(errorMessage(err), "error");
+    } finally {
+      setMojangBusy("");
+    }
+  };
+
+  /** 用图片直链设置（官方 JSON 方式）。 */
+  const uploadMojangFromUrl = async () => {
+    if (!microsoftAccount) {
+      push(tr("pages.skins.lockedHint"), "info");
+      return;
+    }
+    const url = mojangUrl.trim();
+    if (!url) {
+      push(tr("pages.skins.urlLabel"), "info");
+      return;
+    }
+    setMojangBusy("url");
+    try {
+      const result = await api.mojang.upload({ accountId: microsoftAccount.id, url, variant: mojangVariant });
+      if (!result.ok) {
+        push(tr("pages.skins.uploadFailed", { error: result.error ?? "" }), "error");
+        return;
+      }
+      push(tr("pages.skins.urlOk"), "success");
+      setMojangUrl("");
+      await loadMojang(microsoftAccount.id);
+    } catch (err: unknown) {
+      push(errorMessage(err), "error");
+    } finally {
+      setMojangBusy("");
+    }
+  };
+
+  /** 刷新披风列表（GET /minecraft/profile/capes）：只替换披风，皮肤预览保持不动。 */
+  const refreshMojangCapes = async () => {
+    if (!microsoftAccount) {
+      push(tr("pages.skins.lockedHint"), "info");
+      return;
+    }
+    setMojangBusy("refresh");
+    try {
+      const list = await api.mojang.capes(microsoftAccount.id);
+      setMojangProfile((prev) => (prev ? { ...prev, capes: list } : prev));
+      push(tr("pages.skins.refreshed"), "success");
+    } catch (err: unknown) {
+      push(tr("pages.skins.capeFailed", { error: errorMessage(err) }), "error");
+    } finally {
+      setMojangBusy("");
+    }
+  };
+
+  /** 应用/移除披风：成功后重读档案，让「使用中」高亮跟着官方状态走。 */
+  const applyMojangCape = async (capeId: string | null) => {
+    if (!microsoftAccount) return;
+    const target = capeId === null ? null : mojangCapes.find((item) => item.id === capeId) ?? null;
+    setMojangCapeBusy(capeId ?? "__remove__");
+    try {
+      const result = await api.mojang.setCape({ accountId: microsoftAccount.id, capeId });
+      if (!result.ok) {
+        push(tr("pages.skins.capeFailed", { error: result.error ?? "" }), "error");
+        return;
+      }
+      push(
+        capeId === null
+          ? tr("pages.skins.capeRemoved")
+          : tr("pages.skins.capeApplied", { name: target ? capeLabel(target) : capeId }),
+        "success",
+      );
+      await loadMojang(microsoftAccount.id);
+    } catch (err: unknown) {
+      push(tr("pages.skins.capeFailed", { error: errorMessage(err) }), "error");
+    } finally {
+      setMojangCapeBusy(null);
+    }
+  };
+
   const renderCard = (skin: LocalSkin) => (
     <div
       key={skin.fileName}
@@ -648,6 +831,207 @@ export function SkinPage() {
           ) : null}
         </section>
       </div>
+
+      {/* 微软正版：官方档案里的皮肤与披风（账号在 Mojang 那边，进游戏即生效） */}
+      <section
+        className={`panel skin-mojang ${mojangLocked ? "is-locked" : ""}`.trim()}
+        data-mojang-skin={mojangProfile?.name ?? "none"}
+        data-mojang-locked={mojangLocked ? "true" : undefined}
+      >
+        <div className="panel-head">
+          <h2 className="panel-title">{tr("pages.skins.title")}</h2>
+          <span className="panel-count">
+            {mojangLocked
+              ? tr("pages.skins.lockedTitle")
+              : mojangLoading
+                ? tr("pages.skins.loading")
+                : tr("pages.skins.capeCount", { count: mojangCapes.length })}
+          </span>
+        </div>
+
+        {mojangLocked ? (
+          <p className="skin-account-hint" data-mojang-login-hint>{tr("pages.skins.lockedHint")}</p>
+        ) : (
+          <>
+            <div className="skin-mojang-body">
+              <div className="skin-mojang-preview">
+                <span className="skin-name" data-mojang-skin-name>{mojangProfile?.name ?? account?.name ?? ""}</span>
+                <SkinDoll texture={mojangTexture} cape={mojangCapeTexture} emptyHint={tr("pages.skins.noSkin")} />
+                <span className="badge skin-mojang-variant" data-mojang-variant={mojangActiveSkin?.variant ?? "none"}>
+                  {mojangActiveSkin?.variant === "slim" ? tr("pages.skins.variantSlim") : tr("pages.skins.variantClassic")}
+                </span>
+              </div>
+
+              {/* 上传：本地 PNG（multipart）为主，图片直链（JSON）作为备用通道 */}
+              <div className="skin-mojang-actions" data-mojang-upload>
+                <div className="skin-mojang-row">
+                  <Select
+                    value={mojangVariant}
+                    options={[
+                      { value: "classic", label: tr("pages.skins.variantClassic") },
+                      { value: "slim", label: tr("pages.skins.variantSlim") },
+                    ]}
+                    onChange={(value) => setMojangVariant(value === "slim" ? "slim" : "classic")}
+                    ariaLabel={tr("pages.skins.variantHint")}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    data-action="mojang-skin-upload"
+                    data-mojang-upload-file
+                    onClick={() => void uploadMojangFromFile()}
+                    disabled={mojangBusy === "upload"}
+                  >
+                    <IconPlus size={16} />
+                    {mojangBusy === "upload" ? tr("pages.skins.uploading") : tr("pages.skins.pickPng")}
+                  </button>
+                </div>
+                <p className="skin-account-hint">{tr("pages.skins.variantHint")}</p>
+                <div className="skin-mojang-row">
+                  <TextInput
+                    className="skin-mojang-url"
+                    data-mojang-url
+                    value={mojangUrl}
+                    onChange={(event) => setMojangUrl(event.target.value)}
+                    placeholder={tr("pages.skins.urlPlaceholder")}
+                    aria-label={tr("pages.skins.urlLabel")}
+                    spellCheck={false}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    data-action="mojang-skin-upload"
+                    data-mojang-upload-url
+                    onClick={() => void uploadMojangFromUrl()}
+                    disabled={mojangBusy === "url"}
+                  >
+                    <IconLink size={14} />
+                    {tr("pages.skins.urlApply")}
+                  </button>
+                </div>
+                <div className="skin-mojang-row">
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    data-action="mojang-skin-reload"
+                    onClick={() => {
+                      if (microsoftAccount) void loadMojang(microsoftAccount.id);
+                    }}
+                    disabled={mojangLoading}
+                  >
+                    <IconRefresh size={14} />
+                    {mojangLoading ? tr("pages.skins.loading") : tr("pages.skins.reload")}
+                  </button>
+                  <span className="skin-account-hint">{tr("pages.skins.sub")}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="skin-mojang-capes" data-mojang-cape-list>
+              <div className="panel-head">
+                <h3 className="panel-title">{tr("pages.skins.capes")}</h3>
+                <div className="skin-mojang-cape-tools">
+                  <span className="panel-count">{tr("pages.skins.capeCount", { count: mojangCapes.length })}</span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    data-action="mojang-cape-refresh"
+                    onClick={() => void refreshMojangCapes()}
+                    disabled={mojangBusy === "refresh"}
+                  >
+                    <IconRefresh size={14} />
+                    {mojangBusy === "refresh" ? tr("pages.skins.refreshing") : tr("pages.skins.refresh")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    data-action="mojang-cape-remove"
+                    onClick={() => void applyMojangCape(null)}
+                    disabled={mojangActiveCape === null || mojangCapeBusy !== null}
+                    title={tr("pages.skins.capeRemove")}
+                  >
+                    <IconTrash size={14} />
+                    {tr("pages.skins.capeRemove")}
+                  </button>
+                </div>
+              </div>
+
+              <div className="skin-cape-current">
+                {mojangCapeTexture && !mojangCapeBroken ? (
+                  <img
+                    className="skin-cape-thumb"
+                    src={mojangCapeTexture.url}
+                    alt=""
+                    width={66}
+                    height={33}
+                    onError={() => setMojangCapeBroken(true)}
+                  />
+                ) : (
+                  <span className="skin-cape-thumb skin-cape-thumb-empty" data-skin-cape-empty aria-hidden="true" />
+                )}
+                <div className="skin-cape-current-text">
+                  <span className="skin-cape-name" data-mojang-cape-current>
+                    {mojangActiveCape ? capeLabel(mojangActiveCape) : tr("pages.skins.noCape")}
+                  </span>
+                  <p className="skin-account-hint">{tr("pages.skins.currentCape")}</p>
+                </div>
+              </div>
+
+              {mojangCapes.length === 0 ? (
+                <EmptyState title={tr("pages.skins.capeEmpty")} hint={tr("pages.skins.capeEmptyHint")} />
+              ) : (
+                <div className="skin-grid skin-cape-grid" data-mojang-cape-grid>
+                  {mojangCapes.map((cape) => {
+                    const active = cape.id === mojangActiveCape?.id;
+                    const busy = mojangCapeBusy === cape.id;
+                    const broken = mojangCapeBrokenIds.includes(cape.id);
+                    return (
+                      <div
+                        key={cape.id}
+                        className={`skin-card ${active ? "is-active" : ""}`.trim()}
+                        data-mojang-cape={cape.id}
+                        data-mojang-cape-active={active ? "true" : "false"}
+                        data-mojang-cape-state={cape.state}
+                      >
+                        <div className="skin-card-main">
+                          {broken ? (
+                            <span className="skin-cape-thumb skin-cape-thumb-empty" title={tr("pages.skins.capeImageFailed")} aria-hidden="true" />
+                          ) : (
+                            <img
+                              className="skin-cape-thumb"
+                              src={cape.url}
+                              alt=""
+                              width={64}
+                              height={32}
+                              onError={() => setMojangCapeBrokenIds((prev) => (prev.includes(cape.id) ? prev : [...prev, cape.id]))}
+                            />
+                          )}
+                          <span className="skin-card-name">{capeLabel(cape)}</span>
+                          <span className="skin-card-meta">{cape.alias ? cape.id.slice(0, 8) : cape.state || "—"}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className={`skin-card-apply ${active ? "is-active" : ""}`.trim()}
+                          data-action="mojang-cape-apply"
+                          onClick={() => void applyMojangCape(cape.id)}
+                          disabled={active || busy || mojangCapeBusy !== null}
+                        >
+                          {active ? <IconCheck size={14} /> : null}
+                          {active
+                            ? tr("pages.skins.inUse")
+                            : busy
+                              ? tr("pages.skins.capeApplying")
+                              : tr("pages.skins.capeApply")}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </section>
 
       <section className="panel skin-capes" data-skin-capes>
         <div className="panel-head">

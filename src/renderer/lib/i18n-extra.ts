@@ -762,7 +762,7 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
 
   // ---- GitHub 加速下载（「其它」页顶部） ----
   "pages.otherSettings.githubTitle": D("GitHub 加速下载", "GitHub accelerated download", "GitHub 高速ダウンロード"),
-  "pages.otherSettings.githubCount": D("4 个节点", "4 nodes", "4 ノード"),
+  "pages.otherSettings.githubCount": D("7 个节点", "7 nodes", "7 ノード"),
   "pages.otherSettings.githubUrlLabel": D("GitHub 地址", "GitHub URL", "GitHub の URL"),
   "pages.otherSettings.githubUrlHint": D(
     "粘贴 github.com 的 release 直链或任意文件地址：走加速节点下载，非 GitHub 地址直接下。",
@@ -1037,9 +1037,9 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
   ),
   "pages.about.capability.github": D("GitHub 加速下载", "GitHub download accelerator", "GitHub ダウンロード高速化"),
   "pages.about.capability.githubDesc": D(
-    "粘贴 GitHub 地址即可加速下载，四个节点自动测速或手动锁定，文件默认存到启动器根目录的 DL，进度在「管理」页看。",
-    "Paste a GitHub link and it downloads through an accelerator — four nodes are speed-tested automatically or you pin one by hand. Files land in the DL folder next to the launcher and progress shows on the Manage page.",
-    "GitHub の URL を貼るだけで高速化して取得します。4つのノードを自動で速度測定するか手動で固定でき、ファイルは既定でランチャー直下の DL に保存され、進捗は「管理」ページで確認できます。",
+    "粘贴 GitHub 地址即可加速下载，七个节点自动测速或手动锁定（其中 3 个节点也能代理 GitHub API，检查更新与下载会优先用它们），文件默认存到启动器根目录的 DL，进度在「管理」页看。",
+    "Paste a GitHub link and it downloads through an accelerator — seven nodes are speed-tested automatically or you pin one by hand (three of them also proxy the GitHub API, so update checks and downloads try those first). Files land in the DL folder next to the launcher and progress shows on the Manage page.",
+    "GitHub の URL を貼るだけで高速化して取得します。7つのノードを自動で速度測定するか手動で固定でき（うち3つは GitHub API も中継するため、更新確認とダウンロードはそれらを優先します）、ファイルは既定でランチャー直下の DL に保存され、進捗は「管理」ページで確認できます。",
   ),
   "pages.about.capability.diagnose": D("启动失败诊断", "Launch failure diagnosis", "起動失敗の診断"),
   "pages.about.capability.diagnoseDesc": D(
@@ -1495,4 +1495,99 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
     "This project is already installing into that instance",
     "このプロジェクトはそのインスタンスにインストール中です",
   ),
+  // ---- 模组详情（0.4.2）：简介与完整介绍的中英切换 ----
+  "pages.modDetail.translating": D("正在翻译…", "Translating…", "翻訳中…"),
+  "pages.modDetail.showSource": D("原文", "Original", "原文"),
+  "pages.modDetail.showTranslated": D("译文", "Translated", "訳文"),
+  // ---- 关于页改版（0.4.2）：能力卡文案调整 + 三张新卡 + 最新新闻 ----
+  // 覆盖 i18n.ts 里的旧文案：加载器从「三种」改为「五种」（LoaderKind 的全部取值）
+  "about.capability.fabric": D("支持五种主流加载器", "Five mainstream loaders", "主要5種のローダーに対応"),
+  "about.capability.fabricDesc": D(
+    "Fabric / Quilt / Forge / NeoForge / LiteLoader 全覆盖，一键安装并自动补齐对应版本的依赖库。",
+    "Fabric / Quilt / Forge / NeoForge / LiteLoader are all covered — one-click install, with the matching libraries fetched for you.",
+    "Fabric / Quilt / Forge / NeoForge / LiteLoader をすべて網羅。ワンクリックで導入し、必要なライブラリも自動でそろえます。",
+  ),
+  // 覆盖 i18n.ts 里的旧文案：不再只认 BellSoft 一家
+  "about.capability.java": D("JDK 版本自动匹配", "Automatic JDK matching", "JDK バージョンの自動マッチング"),
+  "about.capability.javaDesc": D(
+    "按游戏版本自动选 Java 主版本，本机没装就自动下载（BellSoft / Adoptium / 清华 TUNA / Zulu / Oracle 多源测速）。",
+    "Picks the right Java major version for the game version and downloads it when missing (BellSoft / Adoptium / Tsinghua TUNA / Zulu / Oracle, fastest source wins).",
+    "ゲームのバージョンに合う Java メジャーバージョンを自動で選び、無ければ自動取得します（BellSoft / Adoptium / 清華 TUNA / Zulu / Oracle を速度計測して選択）。",
+  ),
+  "pages.about.capability.skin": D("皮肤系统", "Skin system", "スキンシステム"),
+  "pages.about.capability.skinDesc": D(
+    "本地皮肤库支持导入 PNG 并应用到实例（写入 CustomSkinLoader 的本地皮肤目录）；正版账号还能直接用官方皮肤与披风。",
+    "A local skin library: import PNGs and apply them to an instance (written into CustomSkinLoader's local skin folder). Premium accounts also get their official skin and cape.",
+    "ローカルスキンライブラリで PNG を取り込み、インスタンスに適用（CustomSkinLoader のローカルスキンフォルダーへ書き込み）。正規アカウントなら公式スキンとマントもそのまま使えます。",
+  ),
+  "pages.about.capability.servers": D("开服能力", "Server hosting", "サーバー構築"),
+  "pages.about.capability.serversDesc": D(
+    "一键下载服务端核心（Paper / Purpur / Folia / Fabric / Forge / NeoForge / Arclight 等），自动写配置与 EULA、把插件与模组装进对应目录，并带启动与实时日志。",
+    "One-click server cores (Paper / Purpur / Folia / Fabric / Forge / NeoForge / Arclight and more), with config and EULA written for you, plugins and mods dropped into the right folders, plus startup and live logs.",
+    "サーバーコアをワンクリックで取得（Paper / Purpur / Folia / Fabric / Forge / NeoForge / Arclight など）。設定と EULA を自動生成し、プラグインと MOD を所定のフォルダーへ配置。起動とリアルタイムログも備えます。",
+  ),
+  "pages.about.capability.accounts": D("账号登录", "Account sign-in", "アカウントログイン"),
+  "pages.about.capability.accountsDesc": D(
+    "微软正版登录（设备码）与离线账号并存，支持多账号一键切换；正版账号可拉取皮肤与披风。",
+    "Microsoft premium sign-in via device code plus offline accounts, with one-click switching between them; premium accounts can pull their skin and cape.",
+    "Microsoft の正規ログイン（デバイスコード）とオフラインアカウントを併用でき、ワンクリックで切り替え。正規アカウントはスキンとマントを取得できます。",
+  ),
+  "pages.about.thanks.minecraft": D("Minecraft 官网", "Minecraft website", "Minecraft 公式サイト"),
+  "pages.about.thanks.minecraftHint": D("游戏官网 · 新闻与公告", "Official site · news and announcements", "公式サイト · ニュースとお知らせ"),
+  "pages.about.news.kicker": D("最新新闻", "Latest news", "最新ニュース"),
+  "pages.about.news.read": D("阅读全文", "Read more", "全文を読む"),
+  // ---- 皮肤页：微软正版皮肤与披风（0.4.2） ----
+  "pages.skins.title": D("微软正版皮肤", "Microsoft premium skin", "Microsoft 正規スキン"),
+  "pages.skins.sub": D(
+    "皮肤与披风直接存到 Mojang 账号上，进游戏就生效（不需要 CustomSkinLoader）。",
+    "The skin and cape are stored on the Mojang account itself and apply in-game (no CustomSkinLoader needed).",
+    "スキンとマントは Mojang アカウントに直接保存され、ゲーム内ですぐ反映されます（CustomSkinLoader は不要）。",
+  ),
+  "pages.skins.lockedTitle": D("还没有微软正版账号", "No Microsoft premium account yet", "Microsoft の正規アカウントがまだありません"),
+  "pages.skins.lockedHint": D(
+    "先到「账号」页用微软账号登录，这里就能读取官方皮肤、上传新皮肤并切换披风。",
+    "Sign in with a Microsoft account on the Accounts page, then you can read the official skin, upload a new one and switch capes here.",
+    "先に「アカウント」ページで Microsoft アカウントにサインインすると、公式スキンの取得・アップロード・マントの切り替えができます。",
+  ),
+  "pages.skins.loading": D("正在读取官方档案…", "Loading the official profile…", "公式プロフィールを読み込み中…"),
+  "pages.skins.reload": D("重新读取", "Reload", "再読み込み"),
+  "pages.skins.loadFailed": D("读取官方档案失败：{error}", "Could not read the official profile: {error}", "公式プロフィールの取得に失敗しました：{error}"),
+  "pages.skins.variantClassic": D("经典（Steve）", "Classic (Steve)", "クラシック（Steve）"),
+  "pages.skins.variantSlim": D("纤细（Alex）", "Slim (Alex)", "スリム（Alex）"),
+  "pages.skins.variantHint": D(
+    "经典 = 手臂 4 像素宽（Steve），纤细 = 手臂 3 像素宽（Alex）",
+    "Classic = 4px-wide arms (Steve), Slim = 3px-wide arms (Alex)",
+    "クラシック＝腕の幅 4 ピクセル（Steve）、スリム＝3 ピクセル（Alex）",
+  ),
+  "pages.skins.noSkin": D("该账号还没有皮肤（游戏里显示默认皮肤）", "This account has no skin yet (the default skin is shown in-game)", "このアカウントにはまだスキンがありません（ゲーム内では既定のスキンが表示されます）"),
+  "pages.skins.uploading": D("上传中…", "Uploading…", "アップロード中…"),
+  "pages.skins.pickPng": D("选择本地 PNG", "Choose a local PNG", "ローカルの PNG を選択"),
+  "pages.skins.uploadOk": D("皮肤已上传，游戏里会显示新皮肤", "Skin uploaded — the game will show the new skin", "スキンをアップロードしました。ゲーム内で新しいスキンが表示されます"),
+  "pages.skins.uploadFailed": D("上传失败：{error}", "Upload failed: {error}", "アップロードに失敗しました：{error}"),
+  "pages.skins.urlLabel": D("或填写 PNG 直链", "Or paste a PNG URL", "または PNG の直リンクを入力"),
+  "pages.skins.urlPlaceholder": D("https://…/skin.png", "https://…/skin.png", "https://…/skin.png"),
+  "pages.skins.urlApply": D("用 URL 设置", "Set from URL", "URL から設定"),
+  "pages.skins.urlOk": D("已用图片直链设置皮肤", "Skin set from the image URL", "画像の直リンクからスキンを設定しました"),
+  "pages.skins.refresh": D("刷新披风列表", "Refresh capes", "マント一覧を更新"),
+  "pages.skins.refreshing": D("刷新中…", "Refreshing…", "更新中…"),
+  "pages.skins.refreshed": D("披风列表已刷新", "Cape list refreshed", "マント一覧を更新しました"),
+  "pages.skins.capes": D("披风", "Capes", "マント"),
+  "pages.skins.currentCape": D("当前披风", "Current cape", "現在のマント"),
+  "pages.skins.noCape": D("当前没有披风", "No cape equipped", "マントは装備されていません"),
+  "pages.skins.capeApply": D("应用", "Apply", "適用"),
+  "pages.skins.capeApplying": D("应用中…", "Applying…", "適用中…"),
+  "pages.skins.capeApplied": D("已应用披风：{name}", "Cape applied: {name}", "マントを適用しました：{name}"),
+  "pages.skins.capeRemove": D("移除披风", "Remove cape", "マントを外す"),
+  "pages.skins.capeRemoved": D("已移除披风", "Cape removed", "マントを外しました"),
+  "pages.skins.capeFailed": D("操作失败：{error}", "Failed: {error}", "操作に失敗しました：{error}"),
+  "pages.skins.capeEmpty": D("该账号还没有可用的披风", "This account has no capes yet", "このアカウントには利用できるマントがありません"),
+  "pages.skins.capeEmptyHint": D(
+    "披风由 Mojang 活动发放（迁移、MineCon、活动礼包等）；拿到披风后点「刷新披风列表」。",
+    "Capes come from Mojang events (migration, MineCon, event bundles…); press Refresh capes once you have one.",
+    "マントは Mojang のイベント（移行、MineCon、イベント特典など）で付与されます。入手後に「マント一覧を更新」を押してください。",
+  ),
+  "pages.skins.inUse": D("使用中", "In use", "使用中"),
+  "pages.skins.capeCount": D("{count} 件", "{count} capes", "{count} 件"),
+  "pages.skins.capeImageFailed": D("缩略图加载失败", "Thumbnail failed to load", "サムネイルの読み込みに失敗"),
 };
+

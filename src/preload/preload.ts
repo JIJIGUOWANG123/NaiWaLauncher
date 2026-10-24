@@ -23,6 +23,9 @@ const api: NaiwaApi = {
     exportLaunchDiagnosis: (instanceId, logPath) => invoke(IPC.gameExportDiagnosis, instanceId, logPath),
     openExternal: (url) => invoke(IPC.openExternal, url),
   },
+  news: {
+    latest: () => invoke(IPC.newsLatest),
+  },
   settings: {
     get: () => invoke(IPC.settingsGet),
     update: (patch) => invoke(IPC.settingsUpdate, patch),
@@ -155,6 +158,12 @@ const api: NaiwaApi = {
     applyToInstance: (instanceId, accountId) => invoke(IPC.skinsLocalApply, instanceId, accountId),
     ensureMod: (instanceId) => invoke(IPC.skinsLocalEnsureMod, instanceId),
     pathForFile: (file) => webUtils.getPathForFile(file),
+  },
+  mojang: {
+    profile: (accountId) => invoke(IPC.mojangProfile, accountId),
+    upload: (req) => invoke(IPC.mojangUpload, req),
+    capes: (accountId) => invoke(IPC.mojangCapes, accountId),
+    setCape: (req) => invoke(IPC.mojangSetCape, req),
   },
   servers: {
     cores: () => invoke(IPC.serversCores),

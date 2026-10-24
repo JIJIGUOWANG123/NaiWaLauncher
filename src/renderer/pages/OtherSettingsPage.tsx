@@ -99,12 +99,18 @@ export function OtherSettingsPage() {
   );
 }
 
-/** 四个节点的展示名（与主进程的 GITHUB_NODES 一一对应）：还没测出耗时时下拉也得有得选。 */
+/**
+ * 七个节点的展示名（与主进程的 GITHUB_NODES 一一对应，id 类型由 GithubAcceleratorProbe 约束，
+ * 少一个或多一个 tsc 都会报错）：还没测出耗时时下拉也得有得选。
+ */
 const GITHUB_NODE_LABELS: Array<{ id: GithubAcceleratorProbe["id"]; label: string }> = [
   { id: "ghf", label: "ghf.无名氏.top" },
   { id: "padao", label: "gh.padao.fun" },
   { id: "ghfast", label: "ghfast.top" },
   { id: "cnxiaobai", label: "github.cnxiaobai.com" },
+  { id: "tangbai", label: "git.tangbai.cc" },
+  { id: "chenc", label: "github.chenc.dev" },
+  { id: "xyz", label: "30006000.xyz" },
 ];
 
 /** GitHub 加速下载：把一条直链丢进「管理」页的下载列表，顺带管节点与保存目录。 */
@@ -161,10 +167,12 @@ function GithubCard({ settings }: { settings: Settings }) {
     { value: "auto", label: tr("pages.otherSettings.githubNodeAuto") },
     ...GITHUB_NODE_LABELS.map((node) => {
       const probe = probes.find((item) => item.id === node.id);
+      // 能代理 api.github.com 的节点打个 API 标：只有它们能用于检查更新（下载文件不看这个）
+      const apiTag = probe?.apiProxy ? " · API" : "";
       const suffix = !probe
         ? ""
         : probe.ok
-          ? " · " + String(probe.latencyMs ?? 0) + " ms"
+          ? " · " + String(probe.latencyMs ?? 0) + " ms" + apiTag
           : " · " + tr("pages.otherSettings.githubNodeFailed");
       return { value: node.id as string, label: node.label + suffix };
     }),

@@ -250,7 +250,8 @@ async function rawTitles(query) {
   const detail = await mods.getModDetail("modrinth", "sodium");
   console.log(`  summary=${clip(detail.summary, 40)}`);
   console.log(`  summaryZh=${clip(detail.summaryZh, 40)} · translated=${detail.translated} · bodyZh=${clip(detail.bodyZh, 10)} · ${Date.now() - started}ms · HTTP ${translate.translateRequestCount() - before} 次`);
-  ok(!!detail.summaryZh && detail.translated === true && !detail.bodyZh, "详情写 summaryZh 且 translated=true");
+  // 0.4.2 起正文也会翻（bodyZh），旧断言 !detail.bodyZh 已过期：只要求摘要翻译到位且标记 translated。
+  ok(!!detail.summaryZh && detail.translated === true, "详情写 summaryZh 且 translated=true");
 
   console.log("===== 9) 真实：translateMods=false → 0 请求 =====");
   const originalGet = settingsMod.getSettings;

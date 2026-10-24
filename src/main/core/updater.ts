@@ -109,7 +109,7 @@ export function canSelfUpdate(): boolean {
 }
 
 /**
- * 生成候选下载地址：四个 GitHub 加速节点在前（按设置顺序：auto 先测速排序，固定节点优先），
+ * 生成候选下载地址：七个 GitHub 加速节点在前（按设置顺序：auto 先测速排序，固定节点优先），
  * 原始地址最后兜底。非 GitHub 地址只有它自己。
  */
 async function downloadCandidates(url: string): Promise<string[]> {

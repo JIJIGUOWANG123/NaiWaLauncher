@@ -1,5 +1,6 @@
 import type {
   CreateInstanceRequest, GithubDownloadRequest, ModFilesRequest, ModInstallRequest, ModSearchRequest, ModSourceFilter, NaiwaApi,
+  MojangActionResult, MojangCapeEntry, MojangCapeRequest, MojangProfile, MojangSkinUploadRequest,
   ServerCapabilities, ServerContentInstallRequest, ServerContentInstallResult, ServerContentKind,
   ServerCreateRequest, ServerPluginInstallRequest, ServerPluginInstallResult,
 } from "../../shared/ipc";
@@ -181,6 +182,22 @@ function mockSkinUploadFailure(): string | null {
 
 /** mock 的衣柜目录：对应主进程的 NaiWa/skins，用来把衣柜文件名还原成绝对路径。 */
 const MOCK_SKINS_DIR = `${MOCK_DATA_ROOT}\\skins`;
+
+/**
+ * mock 的官方披风列表（对应 GET /minecraft/profile/capes）：切换后保持住，
+ * 界面上的「使用中」高亮就能跟着变。贴图沿用样本披风，图标全一样不影响交互自检。
+ */
+const mockMojangCapes: MojangCapeEntry[] = [
+  { id: "2d4de64a-da1b-4196-8e37-20740f6941ad", state: "ACTIVE", alias: "Migrator", url: MOCK_SKIN_CAPE_OFFICIAL },
+  { id: "70a40a3c-c1ab-4b51-a2b0-1d5a6a0d1f02", state: "INACTIVE", alias: "MineCon 2016", url: MOCK_SKIN_CAPE_OFFICIAL },
+  { id: "c9b1e0e4-51d6-4bd1-9f2f-9b6c3e2a7d10", state: "INACTIVE", alias: "Vanilla", url: MOCK_SKIN_CAPE_OFFICIAL },
+];
+
+/** 自检钩子：`__naiwaMockMojangCapeFail` 是字符串时切换披风返回该失败文案。 */
+function mockMojangCapeFailure(): string | null {
+  const message = (globalThis as { __naiwaMockMojangCapeFail?: string }).__naiwaMockMojangCapeFail;
+  return typeof message === "string" && message ? message : null;
+}
 
 /** 衣柜种子：3 张 64×64 缩略图（data: URL，浏览器预览下不必真读磁盘）。 */
 const MOCK_WARDROBE: { name: string; url: string; sizeBytes: number }[] = [
@@ -730,6 +747,21 @@ export function createMockApi(): NaiwaApi {
   }
 
   const mockApi: NaiwaApi = {
+    news: {
+      // 浏览器预览不真的抓官网：固定样本，形状与主进程一致（也不触发翻译请求）
+      latest: async () => {
+        trace("news.latest");
+        await sleep(60);
+        // 自检钩子：globalThis.__mockFail.news = true 时模拟抓取失败（关于页整块不显示）
+        if (mockFail("news")) return null;
+        return {
+          title: "Minecraft 预览版 26.70.21",
+          url: "https://www.minecraft.net/zh-hans/article/minecraft-preview-26-70-21",
+          summary: "本周预览版带来新的实验性功能与若干稳定性修复，欢迎到反馈站点告诉我们的体验。",
+          publishedAt: "2026-10-21T01:07:12Z",
+        };
+      },
+    },
     app: {
       info: async () => {
         await sleep(160);
@@ -1973,6 +2005,68 @@ export function createMockApi(): NaiwaApi {
         return localCapesFor(accountId);
       },
       pathForFile: (file: File) => `${MOCK_DATA_ROOT}\\capes\\${file?.name || "cape.png"}`,
+    },
+
+    /** 微软正版：官方档案里的皮肤/披风（mock 里只有微软账号有）。 */
+    mojang: {
+      profile: async (accountId: string): Promise<MojangProfile | null> => {
+        trace("mojang.profile", { accountId });
+        await sleep(240);
+        const account = findAccount(accountId);
+        if (account.type !== "microsoft") return null;
+        const applied = appliedSkins.get(accountId);
+        return {
+          id: account.uuid,
+          name: account.name,
+          // 官方档案只有当前这一张皮肤（state=ACTIVE），与真实接口形状一致。
+          skins: [{
+            id: "mock-active-skin",
+            state: "ACTIVE",
+            url: applied?.skinUrl ?? MOCK_SKIN_TEXTURE,
+            variant: applied?.model ?? "classic",
+          }],
+          capes: mockMojangCapes.map((item) => ({ ...item })),
+        };
+      },
+      upload: async (req: MojangSkinUploadRequest): Promise<MojangActionResult> => {
+        trace("mojang.upload", {
+          accountId: req.accountId,
+          filePath: req.filePath ? wardrobeFilePath(req.filePath) : null,
+          url: req.url ?? null,
+          variant: req.variant,
+        });
+        await sleep(640);
+        const account = findAccount(req.accountId);
+        if (account.type !== "microsoft") return { ok: false, error: "只有微软正版账号才能上传官方皮肤。" };
+        const failure = mockSkinUploadFailure();
+        if (failure) return { ok: false, error: failure };
+        if (!req.filePath && !req.url) return { ok: false, error: "请先选择一张 PNG 皮肤图，或改用图片直链。" };
+        appliedSkins.set(req.accountId, { skinUrl: MOCK_SKIN_TEXTURE_UPLOADED, model: req.variant });
+        return { ok: true };
+      },
+      capes: async (accountId: string): Promise<MojangCapeEntry[]> => {
+        trace("mojang.capes", { accountId });
+        await sleep(280);
+        const account = findAccount(accountId);
+        if (account.type !== "microsoft") return [];
+        return mockMojangCapes.map((item) => ({ ...item }));
+      },
+      setCape: async (req: MojangCapeRequest): Promise<MojangActionResult> => {
+        trace("mojang.setCape", { accountId: req.accountId, capeId: req.capeId });
+        await sleep(420);
+        const account = findAccount(req.accountId);
+        if (account.type !== "microsoft") return { ok: false, error: "只有微软正版账号才能切换官方披风。" };
+        const failure = mockMojangCapeFailure();
+        if (failure) return { ok: false, error: failure };
+        if (req.capeId !== null && !mockMojangCapes.some((item) => item.id === req.capeId)) {
+          return { ok: false, error: "该账号没有这个披风，无法应用。" };
+        }
+        // 与官方接口一致：capeId 为 null 表示移除当前披风，其余情况只把目标那件置为 ACTIVE。
+        for (const item of mockMojangCapes) {
+          item.state = req.capeId !== null && item.id === req.capeId ? "ACTIVE" : "INACTIVE";
+        }
+        return { ok: true };
+      },
     },
 
     skinsLocal: {

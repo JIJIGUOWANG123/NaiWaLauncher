@@ -115,7 +115,7 @@ export interface Settings {
   /** Wallpaper Engine 壁纸目录；留空表示自动探测 Steam 库。 */
   wallpaperEngineDir: string;
   /** GitHub 加速节点：auto = 自动测速选最快；其余为固定节点。 */
-  githubAccelerator: "auto" | "ghf" | "padao" | "ghfast" | "cnxiaobai";
+  githubAccelerator: "auto" | "ghf" | "padao" | "ghfast" | "cnxiaobai" | "tangbai" | "chenc" | "xyz";
   /** GitHub 下载文件的保存目录；留空表示 <启动器根目录>\DL。 */
   githubDownloadDir: string;
   /** 背景音乐文件名（NaiWa/music 下），空串表示不播放。 */
@@ -340,12 +340,14 @@ export interface ApiBackground {
 /** 一个可下载的 JDK 版本。 */
 /** GitHub 加速节点探测结果（耗时越低越优先）。 */
 export interface GithubAcceleratorProbe {
-  id: "ghf" | "padao" | "ghfast" | "cnxiaobai";
+  id: "ghf" | "padao" | "ghfast" | "cnxiaobai" | "tangbai" | "chenc" | "xyz";
   label: string;
   base: string;
   /** 探测耗时（毫秒），失败为 null。 */
   latencyMs: number | null;
   ok: boolean;
+  /** 能否代理 api.github.com（检查更新走这条）：能代理的节点优先用于更新检查。 */
+  apiProxy?: boolean;
 }
 
 /** 本地 Wallpaper Engine 壁纸（Steam 创意工坊 431960 下的项目）。 */
@@ -560,7 +562,13 @@ export interface ModDetail {
   summaryZh?: string;
   /** 完整介绍（Markdown 原文）。 */
   body: string;
+  /** 完整介绍的中文译文（分段翻译，可为空；为空时界面显示原文）。 */
   bodyZh?: string;
+  /**
+   * 正文译文还在后台翻（详情页没等它）：界面显示原文并标「正在翻译…」，
+   * 稍后重新取详情就会带上 bodyZh。为假或没有该字段表示不需要翻译、已译好或翻不出来。
+   */
+  translatePending?: boolean;
   author: string;
   downloads: number;
   followers?: number;

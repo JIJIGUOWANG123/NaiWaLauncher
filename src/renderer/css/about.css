@@ -101,6 +101,75 @@
   align-self: flex-start;
 }
 
+/* 关于页「最新新闻」：Hero 下方一条横向卡片；拿不到新闻时整块不渲染，所以这里不留占位样式 */
+.about-news {
+  display: flex;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+  background-color: rgb(var(--surface-rgb) / calc(0.9 * var(--ui-opacity, 1)));
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, transparent), color-mix(in srgb, var(--shadow-color) 6%, transparent));
+  box-shadow: var(--shadow-soft);
+}
+
+.about-news-thumb {
+  width: 132px;
+  height: 82px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background-color: var(--accent-soft);
+}
+
+.about-news-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.about-news-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+
+.about-news-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-strong);
+}
+
+.about-news-summary {
+  /* 摘要固定两行，长摘要省略号收尾，避免把首屏顶开 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.about-news-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.about-news-date {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
 /* 能力卡片：两列 / 三列自适应 */
 .about-cards {
   display: grid;

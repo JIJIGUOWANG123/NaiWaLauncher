@@ -619,6 +619,16 @@ export function ModsPage() {
   /** 弹窗里要显示哪几组：模组两组、插件只有服务端、其它只有实例。 */
   const targetGroups = useMemo(() => targetGroupsOf(kind), [kind]);
   const showsServerGroup = targetGroups.includes("server");
+  /**
+   * 卡片按钮要直接落的那个目标：选中的服务端（本类型支持服务端时）优先，其次当前实例。
+   * null = 还没选目标，卡片按钮回到「打开「安装到…」弹窗」。
+   */
+  const installTarget: { kind: "instance" | "server"; name: string } | null =
+    serverKindOk && serverTarget && pluginServer
+      ? { kind: "server", name: pluginServer.meta.name }
+      : !serverTarget && kind !== "plugin" && currentInstance
+        ? { kind: "instance", name: currentInstance.name }
+        : null;
   /** 卡片安装按钮文案：选过目标就显示目标名，没选就是「安装到实例 / 安装到服务端」。 */
   const installTargetLabel = kind === "plugin"
     ? (pluginServer
@@ -1318,6 +1328,28 @@ export function ModsPage() {
   };
 
   /**
+   * 卡片安装按钮：已经有目标就直接装到它上面（实例走 installContent 队列、服务端走
+   * runServerInstall），只有还没选目标时才打开「安装到…」弹窗。
+   * 换目标仍走侧栏「安装目标」下拉或弹窗，两条路写回同一份 currentInstance / serverId。
+   */
+  const installFromCard = async (mod: ModSearchResult) => {
+    if (installTarget === null) {
+      setTargetModal({ mod, file: null });
+      return;
+    }
+    if (installTarget.kind === "server") {
+      await installToServer(mod, null);
+      return;
+    }
+    if (currentInstance) await installContent(mod, currentInstance, null);
+  };
+
+  /** 卡片按钮 title：有目标就说明会装到哪；没目标就说明点了是去选目标（被门禁拦住时先给原因）。 */
+  const installTargetTitle = serverBlockHint ?? (installTarget
+    ? tr("pages.mods.installToNamed", { name: installTarget.name })
+    : tr("pages.mods.chooseInstallTarget"));
+
+  /**
    * 整合包：不需要选实例，入队后由主进程新建实例（名字取整合包名）。
    * 每个整合包是独立条目，互不阻塞；新建实例本身不写别人正在写的目录。
    */
@@ -1922,8 +1954,8 @@ export function ModsPage() {
                           {creating ? phaseText(cardEntry as InstallEntry) : tr("pages.mods.installAndCreate")}
                         </button>
                       ) : (
-                        /* 安装入口：统一开「安装到…」弹窗，实例 / 服务端在弹窗里分组选。
-                           没选过目标也能点（弹窗里挑一个就装），不是禁用死。 */
+                        /* 安装入口：已有目标（实例 / 服务端）就直接装，不弹窗；
+                           还没选目标时才打开「安装到…」弹窗让它成为选择入口。 */
                         <button
                           type="button"
                           className={`btn btn-sm ${pluginBusyKey === key ? "btn-ghost" : "btn-primary"}`.trim()}
@@ -1932,18 +1964,17 @@ export function ModsPage() {
                           data-plugin-install={key}
                           data-server-install={key}
                           data-target-kind={targetKind}
-                          data-target-name={targetKind === "server"
-                            ? pluginServer?.meta.name
-                            : currentInstance?.name}
+                          data-target-name={installTarget?.name}
+                          data-install-direct={installTarget ? "1" : "0"}
                           data-server-blocked={serverTarget && serverBlocked ? "1" : undefined}
-                          aria-haspopup="dialog"
-                          aria-expanded={targetModal !== null && keyOf(targetModal.mod) === key}
+                          aria-haspopup={installTarget === null ? "dialog" : undefined}
+                          aria-expanded={installTarget === null && targetModal !== null && keyOf(targetModal.mod) === key}
                           disabled={pluginBusyKey === key}
-                          title={serverTarget && serverBlockHint ? serverBlockHint : installTargetLabel}
-                          onClick={() => setTargetModal({ mod, file: null })}
+                          title={installTargetTitle}
+                          onClick={() => void installFromCard(mod)}
                         >
                           {pluginBusyKey === key ? tr("pages.mods.installing") : installTargetLabel}
-                          <IconChevronDown size={14} />
+                          {installTarget === null ? <IconChevronDown size={14} /> : null}
                         </button>
                       )}
 
@@ -2001,8 +2032,8 @@ export function ModsPage() {
               setPackConfirm(selected);
               return;
             }
-            // 其余类型统一开「安装到…」弹窗：实例 / 服务端都在弹窗里选，
-            // 没选过目标也能点（弹窗里挑一个就装），不再用禁用态拦人。
+            // 详情面板保留「安装到…」弹窗：它既是没目标时的选择入口，也是换目标的入口
+            // （卡片上已有目标就直接装，不再给换目标的机会）。
             setTargetModal({ mod: selected, file: sortedFiles[0] ?? null });
           }}
           targetKind={targetKind}

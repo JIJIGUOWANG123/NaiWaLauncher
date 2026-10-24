@@ -4,6 +4,7 @@ import { access, mkdir, readdir } from "node:fs/promises";
 import { IPC } from "../../shared/ipc";
 import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest, TeraHostOptions, TeraStatus,
+  MojangActionResult, MojangCapeEntry, MojangCapeRequest, MojangProfile, MojangSkinUploadRequest,
 } from "../../shared/ipc";
 import type { Account, ApiBackground, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledJava, InstalledModInfo, LanAddress, ChangelogSection, JavaRelease, JavaSourceId, JavaSourceProbe, GithubAcceleratorProbe, WallpaperEntry, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
@@ -11,6 +12,7 @@ import { getSettings, updateSettings } from "../core/settings";
 import { syncTray } from "../tray";
 import { checkAppUpdates } from "../core/updates";
 import { getChangelog } from "../core/changelog";
+import { getLatestNews } from "../core/news";
 import { installUpdate } from "../core/updater";
 import { isPortListening, listLanAddresses, probeTcp } from "../net/index";
 import { natfrpCreate, natfrpNodes, natfrpStart, natfrpStatus, natfrpStop, natfrpTunnels, natfrpUser } from "../net/natfrp";
@@ -19,6 +21,7 @@ import { createOffline, listAccounts, removeAccount, setActiveAccount } from "..
 import { beginDeviceCode, pollDeviceCode } from "../auth/microsoft";
 import { loginYggdrasil, validateYggdrasilAccount } from "../auth/yggdrasil";
 import { addToWardrobe, getSkin, listSkinProfiles, listWardrobe, pickSkinFile, removeFromWardrobe, resetSkin, selectProfile, uploadSkin } from "../auth/skin";
+import { getMojangProfile, listMojangCapes, setMojangCape, uploadMojangSkin } from "../auth/mojangProfile";
 import {
   applyToInstance, ensureMod, importLocalSkins, listLocalSkins, removeLocalSkin, selectLocalSkin,
 } from "../skins/local";
@@ -32,7 +35,7 @@ import { installLoader, listLoaderVersions } from "../loaders/index";
 import { installJava, listInstalledJava, listJavaReleases, listJavaSources } from "../java/index";
 import { resolveJavaHome, uninstallJava } from "../java/uninstall";
 import { githubDownloadDir, probeAccelerators, startGithubDownload } from "../net/github";
-import type { GithubDownloadRequest, LaunchDiagnosisExport } from "../../shared/ipc";
+import type { GithubDownloadRequest, LaunchDiagnosisExport, NewsItem } from "../../shared/ipc";
 import { contentDirForInstance } from "../mods/install";
 import { listMapEntries } from "../mods/minekuai";
 import { checkUpdates, getModDependencies, getModDetail, installMod, installed, listInstalledContent, listInstalledMods, installModpack, listCategories, listFilterOptions, listModFiles, remove as removeMod, searchMods, update as updateMod } from "../mods/index";
@@ -157,6 +160,8 @@ export function registerIpc(): void {
   handle<void>(IPC.appInstallUpdate, (url?: string) => installUpdate(url));
   // 导出到系统目录后的「打开所在文件夹」：shell.showItemInFolder 不受启动器根目录守卫限制
   handle<ChangelogSection[]>(IPC.appChangelog, (limit?: number) => getChangelog(limit));
+  // 关于页「最新新闻」：主进程抓 minecraft.net 最新一篇并译成中文；抓不到返回 null（界面整块不显示）
+  handle<NewsItem | null>(IPC.newsLatest, () => getLatestNews());
   handle<void>(IPC.appReveal, (target: string) => {
     if (!target) throw new Error(mt("core.path.empty"));
     shell.showItemInFolder(resolve(target));
@@ -248,6 +253,11 @@ export function registerIpc(): void {
   handle<void>(IPC.skinsRemoveFromWardrobe, (name: string) => removeFromWardrobe(name));
   handle<SkinProfile[]>(IPC.skinsProfiles, (id: string) => listSkinProfiles(id));
   handle<void>(IPC.skinsSelectProfile, (id: string, profileId: string) => selectProfile(id, profileId));
+  // 微软正版（官方接口）：读档案/皮肤、上传皮肤、披风列表与切换
+  handle<MojangProfile | null>(IPC.mojangProfile, (id: string) => getMojangProfile(id));
+  handle<MojangActionResult>(IPC.mojangUpload, (req: MojangSkinUploadRequest) => uploadMojangSkin(req));
+  handle<MojangCapeEntry[]>(IPC.mojangCapes, (id: string) => listMojangCapes(id));
+  handle<MojangActionResult>(IPC.mojangSetCape, (req: MojangCapeRequest) => setMojangCape(req));
   // 本地皮肤库（与账号解耦）：官方内置只读 + 用户导入，选中后写进实例的 CustomSkinLoader 本地皮肤目录
   handle<LocalSkin[]>(IPC.skinsLocalList, (accountId?: string) => listLocalSkins(accountId));
   handle<LocalSkin[]>(IPC.skinsLocalSelect, (accountId: string, fileName: string | null) =>

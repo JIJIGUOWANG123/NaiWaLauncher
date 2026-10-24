@@ -31,7 +31,7 @@ for (const d of dirs) {
 
 const ignore = [
   "node_modules/", "backup/", "dist/", "dist-electron/", "release/", ".tools/", ".scratch/",
-  ".minecraft/", "NaiWa/", "*.log", "Thumbs.db", ".DS_Store", "",
+  ".minecraft/", "NaiWa/", "*.log", "Thumbs.db", ".DS_Store", ".ms-client-id", "",
 ].join("\n");
 writeFileSync(join(out, ".gitignore"), ignore, "utf8");
 

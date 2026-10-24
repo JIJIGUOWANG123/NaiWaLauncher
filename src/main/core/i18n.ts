@@ -876,6 +876,38 @@ export const DICT: Record<string, Entry> = {
   "launch.diag.reportAdvice": D("建议：{text}", "Advice: {text}", "対処：{text}"),
   "launch.diag.reportMods": D("可能相关的模组：{list}", "Possibly related mods: {list}", "関連していそうな Mod：{list}"),
   "launch.diag.reportLog": D("本次启动日志：{path}", "Launch log: {path}", "今回の起動ログ：{path}"),
+
+  // ---- 微软正版皮肤 / 披风（auth/mojangProfile.ts） ----
+  "auth.mojang.noAccount": D("找不到账号：{id}", "Account not found: {id}", "アカウントが見つかりません：{id}"),
+  "auth.mojang.notPremium": D("只有微软正版账号才能改官方皮肤与披风", "Only Microsoft premium accounts can change the official skin and cape", "公式スキンとマントを変更できるのは Microsoft の正規アカウントのみです"),
+  "auth.mojang.expired": D("登录已过期，请重新登录该账号", "The session has expired — sign in to this account again", "ログインの有効期限が切れました。このアカウントで再度ログインしてください"),
+  "auth.mojang.forbidden": D("该账号没有权限执行这个操作（例如未拥有这个披风）", "This account is not allowed to do that (for example it does not own this cape)", "このアカウントにはこの操作の権限がありません（例：このマントを所有していない）"),
+  "auth.mojang.blocked": D(
+    "Mojang 边缘节点挡住了这次请求（403），改用「上传本地 PNG」的方式设置皮肤即可",
+    "Mojang's edge node blocked this request (403) — set the skin by uploading a local PNG instead",
+    "Mojang のエッジノードがこのリクエストを遮断しました（403）。ローカルの PNG をアップロードする方法をお使いください",
+  ),
+  "auth.mojang.noProfile": D(
+    "该账号还没有 Minecraft 档案（没买游戏或还没创建角色）",
+    "This account has no Minecraft profile yet (the game is not owned, or no profile has been created)",
+    "このアカウントにはまだ Minecraft プロフィールがありません（ゲーム未購入、またはプロフィール未作成）",
+  ),
+  "auth.mojang.rateLimited": D("请求太频繁，Mojang 限流了（429），请过一会儿再试", "Too many requests — Mojang is rate limiting (429). Try again in a moment.", "リクエストが多すぎます。Mojang のレート制限（429）です。しばらくしてからお試しください"),
+  "auth.mojang.failed": D("Mojang 接口返回异常：HTTP {status}{detail}", "Unexpected Mojang API response: HTTP {status}{detail}", "Mojang API の応答が異常です：HTTP {status}{detail}"),
+  "auth.mojang.capeNotOwned": D("该账号没有这个披风，无法应用", "This account does not own that cape, so it cannot be applied", "このアカウントはそのマントを所有していないため適用できません"),
+  "auth.mojang.capeMissing": D("要应用的披风 id 不能为空", "The cape id to apply cannot be empty", "適用するマント ID は空にできません"),
+  "auth.mojang.uploadRejected": D("Mojang 不接受这张皮肤图（需要 64×64 或 64×32 的 PNG）", "Mojang rejected this skin image (a 64×64 or 64×32 PNG is required)", "Mojang がこのスキン画像を受け付けません（64×64 または 64×32 の PNG が必要）"),
+  "auth.mojang.noFile": D("请先选择一张 PNG 皮肤图，或改用图片直链", "Pick a PNG skin file first, or use an image URL", "先に PNG スキンを選択するか、画像の直リンクを使用してください"),
+  "auth.mojang.readFailed": D("无法读取皮肤文件：{path} · {error}", "Could not read the skin file: {path} · {error}", "スキンファイルを読み込めません：{path} · {error}"),
+  "auth.mojang.emptyFile": D("{file} 是空文件", "{file} is an empty file", "{file} は空のファイルです"),
+  "auth.mojang.tooLarge": D("{file} 有 {actual} KB，超过上传上限 {max} KB", "{file} is {actual} KB, above the {max} KB upload limit", "{file} は {actual} KB で、アップロード上限 {max} KB を超えています"),
+  "auth.mojang.notPng": D("{file} 不是 PNG 图片", "{file} is not a PNG image", "{file} は PNG 画像ではありません"),
+  "auth.mojang.badSize": D(
+    "{file} 的尺寸是 {width}×{height}：Mojang 只接受 64×64 或 64×32",
+    "{file} is {width}×{height}: Mojang only accepts 64×64 or 64×32",
+    "{file} のサイズは {width}×{height} です。Mojang は 64×64 または 64×32 のみ受け付けます",
+  ),
+  "auth.mojang.badUrl": D("皮肤直链必须是 http(s) 地址：{url}", "The skin URL must be http(s): {url}", "スキンの直リンクは http(s) である必要があります：{url}"),
 };
 
 /** 当前界面语言：settings 可能随时改，所以每次现读内存值（getSettings 已是内存快照，不读盘）。 */

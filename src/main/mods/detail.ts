@@ -1,6 +1,6 @@
 // 模组详情：Modrinth 走官方 /v2/project；CurseForge 有 Key 走 /v1/mods（外加独立的描述接口），
 // 无 Key 用 cfwidget 的只读项目数据拼装。两个来源都拿不到的字段一律留空，绝不用推测值填充，
-// 中文只在 settings.translateMods 时由 translate.ts 实时补（摘要），正文太长不翻。
+// 中文只在 settings.translateMods 时由 translate.ts 实时补：摘要一条请求，正文分段翻（有块数/时间上限）。
 import type { ModDetail, ModProviderId, SideSupport } from "../../shared/types";
 import { logger } from "../core/logger";
 import { getSettings } from "../core/settings";
@@ -9,7 +9,7 @@ import { splitGameVersions } from "./curseforge";
 import {
   apiJson, canonicalLoader, httpStatusOf, jsonArray, jsonNumber, jsonObject, jsonString, jsonStringArray, messageOf,
 } from "./provider";
-import { translateText } from "./translate";
+import { containsCjk, translateMarkdownBody, translateText } from "./translate";
 import { mt } from "../core/i18n";
 
 const log = logger("mods");
@@ -25,8 +25,20 @@ const CACHE_TTL_MS = 5 * 60_000;
 const CACHE_MAX_ENTRIES = 32;
 const cache = new Map<string, { at: number; value: ModDetail }>();
 
+/**
+ * 正文译文按 provider:projectId 单独缓存：详情缓存 5 分钟就过期重取，
+ * 但正文几千字符翻一次很贵，同一篇在本进程内只翻一次。
+ */
+const bodyZhCache = new Map<string, string>();
+/** 在飞的正文翻译：详情页反复点开同一篇时共用一轮请求。 */
+const bodyJobs = new Map<string, Promise<string | undefined>>();
+/** 详情页最多等正文这么久，超时先给原文（translateState=pending），后台翻完再补。 */
+const BODY_WAIT_MS = 8_000;
+
 export function clearDetailCache(): void {
   cache.clear();
+  bodyZhCache.clear();
+  bodyJobs.clear();
 }
 
 function remember(key: string, value: ModDetail): void {
@@ -47,7 +59,7 @@ export async function getModDetail(provider: ModProviderId, projectId: string): 
   if (!id) throw new Error(mt("mods.missingProjectId"));
   const key = `${provider}:${id.toLowerCase()}`;
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return patchPendingBody(key, hit.value);
 
   let value: ModDetail;
   switch (provider) {
@@ -65,19 +77,26 @@ export async function getModDetail(provider: ModProviderId, projectId: string): 
     default:
       throw new Error(mt("mods.unknownProvider", { provider: String(provider) }));
   }
-  value = await withChineseSummary(value);
+  value = await withChineseTranslation(key, value);
   remember(key, value);
   return value;
 }
 
 /**
- * 摘要译文写 summaryZh（body 全文太长不翻），只有真的拿到译文才把 translated 置真。
- * 翻译失败或被限流只留空，详情照常返回。
+ * 中文补全：摘要写 summaryZh，正文写 bodyZh。只有真的拿到译文才把 translated 置真；
+ * 翻译失败或被限流只留空（界面显示原文，不提示失败），详情照常返回，绝不阻断详情页。
  */
-async function withChineseSummary(detail: ModDetail): Promise<ModDetail> {
+async function withChineseTranslation(key: string, detail: ModDetail): Promise<ModDetail> {
   if (!getSettings().translateMods) return detail;
+  const translated = await withChineseSummary(detail);
+  return withChineseBody(key, translated);
+}
+
+/** 摘要只翻前 SUMMARY_CHARS 个字符：详情页的 summary 偶尔是整段自述。 */
+async function withChineseSummary(detail: ModDetail): Promise<ModDetail> {
+  if (detail.summaryZh) return detail;
   const summary = detail.summary.slice(0, SUMMARY_CHARS).trim();
-  if (!summary) return detail;
+  if (!summary || containsCjk(summary)) return detail;
   try {
     const zh = (await translateText(summary, "zh-CN"))?.trim();
     if (!zh || zh === summary) return detail;
@@ -85,6 +104,74 @@ async function withChineseSummary(detail: ModDetail): Promise<ModDetail> {
   } catch (err) {
     log.warn(`详情摘要翻译失败（留空）：${detail.projectId} · ${messageOf(err)}`);
     return detail;
+  }
+}
+
+/**
+ * 正文译文：先查进程内缓存，再按 provider:projectId 复用在飞任务；
+ * 最多等 BODY_WAIT_MS，超时返回原文 + translatePending（界面显示「正在翻译…」），后台翻完再补进两份缓存。
+ */
+async function withChineseBody(key: string, detail: ModDetail): Promise<ModDetail> {
+  if (detail.bodyZh) return detail;
+  const body = String(detail.body ?? "");
+  // 正文本身就是中文（或空）就没有翻译的必要
+  if (!body.trim() || containsCjk(body)) return detail;
+
+  const cached = bodyZhCache.get(key);
+  if (cached) return { ...detail, bodyZh: cached, translated: true };
+
+  const outcome = await waitFor(startBodyTranslation(key, body), BODY_WAIT_MS);
+  if (!outcome.done) return { ...detail, translatePending: true };
+  // 翻不出来（服务失败/限流/超限）就直接留空：界面显示原文，不额外提示
+  return outcome.value ? { ...detail, bodyZh: outcome.value, translated: true } : detail;
+}
+
+/** 在飞的正文翻译（同一篇只发一轮请求）；成功才进缓存，失败留给 translate.ts 的负缓存管 5 分钟。 */
+function startBodyTranslation(key: string, body: string): Promise<string | undefined> {
+  const running = bodyJobs.get(key);
+  if (running) return running;
+  const job = translateMarkdownBody(body, "zh-CN")
+    .then((result) => {
+      const text = result.translated > 0 ? result.text : "";
+      log.info(
+        `正文翻译：${result.blocks} 块 / 成功 ${result.translated} / 失败 ${result.failed} / 跳过 ${result.skipped} / 超限 ${result.overLimit} · ${result.elapsedMs}ms`,
+      );
+      if (!text || text === body) return undefined;
+      bodyZhCache.set(key, text);
+      const entry = cache.get(key);
+      if (entry) entry.value = { ...entry.value, bodyZh: text, translatePending: undefined, translated: true };
+      return text;
+    })
+    .catch((err: unknown) => {
+      log.warn(`详情正文翻译失败（显示原文）：${key} · ${messageOf(err)}`);
+      return undefined;
+    })
+    .finally(() => bodyJobs.delete(key));
+  bodyJobs.set(key, job);
+  return job;
+}
+
+/** 详情缓存命中时把后台已经翻好的正文补上，避免界面一直停在「正在翻译…」。 */
+function patchPendingBody(key: string, value: ModDetail): ModDetail {
+  if (!value.translatePending) return value;
+  const zh = bodyZhCache.get(key);
+  if (!zh) return value;
+  const patched: ModDetail = { ...value, bodyZh: zh, translatePending: undefined, translated: true };
+  const entry = cache.get(key);
+  if (entry) entry.value = patched;
+  return patched;
+}
+
+/** 等一个 promise，超时就返回 done=false（定时器一定要清掉，否则进程退不出去）。 */
+async function waitFor<T>(promise: Promise<T>, ms: number): Promise<{ done: boolean; value?: T }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<{ done: false }>((resolve) => {
+    timer = setTimeout(() => resolve({ done: false }), ms);
+  });
+  try {
+    return await Promise.race([promise.then((value) => ({ done: true as const, value })), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 

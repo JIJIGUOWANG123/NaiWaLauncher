@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ModProviderId } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatCount, formatDate } from "../lib/format";
@@ -107,8 +107,18 @@ export function ModDetailPanel({
   const detail = useAsync(() => api.mods.detail(provider, projectId), [provider, projectId]);
   const data = detail.data;
   const sourceUrl = data?.sourceUrl ?? "";
+  /** 「简介 / 完整介绍」各自记住看原文还是译文：默认译文，没有译文时自然显示原文。 */
+  const [summaryLang, setSummaryLang] = useState<"zh" | "src">("zh");
+  const [bodyLang, setBodyLang] = useState<"zh" | "src">("zh");
+  /** 正文译文还在后台翻：详情页先显示原文并标「正在翻译…」，翻好后重取一次。 */
+  const pendingBody = data?.translatePending === true;
+  const [polls, setPolls] = useState(0);
   /** 详情自带译名优先，其次用搜索结果里的译名；都没有就保持原文。 */
   const zhTitle = data?.titleZh ?? titleZh;
+  /** 简介译文：详情里的 summaryZh 优先，其次用搜索结果带过来的那份。 */
+  const summaryZhText = data?.summaryZh || summaryZh || "";
+  /** 完整介绍译文：后台翻完之前为空，此时两处都显示原文。 */
+  const bodyZhText = data?.bodyZh ?? "";
   /**
    * 服务端目标下的「这个内容支不支持服务端」：unsupported 直接禁用按钮，
    * unknown / 没标注只提示（作者没写不代表一定不行）；实例目标不看这个字段。
@@ -117,6 +127,23 @@ export function ModDetailPanel({
   const sideUnsupported = targetKind === "server" && serverSide === "unsupported";
   const sideUnknown = targetKind === "server" && (serverSide === "unknown" || serverSide === undefined);
   const sideRequired = targetKind === "server" && serverSide === "required";
+
+  // 换项目就回到「默认看译文」，避免上一个模组的选择带到这一个
+  useEffect(() => {
+    setSummaryLang("zh");
+    setBodyLang("zh");
+    setPolls(0);
+  }, [provider, projectId]);
+
+  // 后台翻完的正文要重取一次详情才能看到；最多补取 3 次，翻不出来就一直显示原文
+  useEffect(() => {
+    if (!pendingBody || polls >= 3) return;
+    const timer = setTimeout(() => {
+      setPolls((count) => count + 1);
+      detail.reload();
+    }, 4_000);
+    return () => clearTimeout(timer);
+  }, [pendingBody, polls, detail.reload]);
 
   const openHome = async () => {
     if (!sourceUrl) return;
@@ -224,14 +251,82 @@ export function ModDetailPanel({
           </div>
 
           <section className="mod-detail-section">
-            <span className="field-label">{tr("pages.modDetail.summary")}</span>
-            <p className="mod-detail-summary" data-mod-detail-summary>{summaryZh ?? data.summaryZh ?? data.summary}</p>
+            <div className="mod-detail-tag-row">
+              <span className="field-label">{tr("pages.modDetail.summary")}</span>
+              {summaryZhText ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    data-action="summary-lang-zh"
+                    aria-pressed={summaryLang === "zh"}
+                    onClick={() => setSummaryLang("zh")}
+                  >
+                    {tr("pages.modDetail.showTranslated")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    data-action="summary-lang-src"
+                    aria-pressed={summaryLang === "src"}
+                    onClick={() => setSummaryLang("src")}
+                  >
+                    {tr("pages.modDetail.showSource")}
+                  </button>
+                </>
+              ) : null}
+            </div>
+            {pendingBody ? (
+              /* 轻量占位：只提示这一块在翻，面板其余部分照常可用 */
+              <span className="hint-inline" data-detail-translating="summary">{tr("pages.modDetail.translating")}</span>
+            ) : null}
+            <p
+              className="mod-detail-summary"
+              data-mod-detail-summary
+              data-detail-lang={summaryZhText && summaryLang === "zh" ? "zh" : "src"}
+            >
+              {summaryZhText && summaryLang === "zh" ? summaryZhText : data.summary}
+            </p>
           </section>
 
           <section className="mod-detail-section">
-            <span className="field-label">{tr("pages.modDetail.fullDescription")}</span>
-            {/* 纯文本渲染：保留换行，不注入 HTML，避免介绍里的标签变成可执行内容。 */}
-            <div className="mod-detail-body" data-mod-detail-body>{data.body}</div>
+            <div className="mod-detail-tag-row">
+              <span className="field-label">{tr("pages.modDetail.fullDescription")}</span>
+              {bodyZhText ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    data-action="body-lang-zh"
+                    aria-pressed={bodyLang === "zh"}
+                    onClick={() => setBodyLang("zh")}
+                  >
+                    {tr("pages.modDetail.showTranslated")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    data-action="body-lang-src"
+                    aria-pressed={bodyLang === "src"}
+                    onClick={() => setBodyLang("src")}
+                  >
+                    {tr("pages.modDetail.showSource")}
+                  </button>
+                </>
+              ) : null}
+            </div>
+            {pendingBody ? (
+              <span className="hint-inline" data-detail-translating="body">{tr("pages.modDetail.translating")}</span>
+            ) : null}
+            {/* 纯文本渲染：保留换行，不注入 HTML，避免介绍里的标签变成可执行内容。
+                正文很长，滚动容器仍由 .mod-detail-body 负责（max-height + overflow-y）。 */}
+            <div
+              className="mod-detail-body"
+              data-mod-detail-body
+              data-detail-lang={bodyZhText && bodyLang === "zh" ? "zh" : "src"}
+            >
+              {bodyZhText && bodyLang === "zh" ? bodyZhText : data.body}
+            </div>
           </section>
 
           <section className="mod-detail-section">

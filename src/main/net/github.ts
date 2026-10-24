@@ -24,22 +24,35 @@ export interface GithubNode {
   base: string;
 }
 
+/** 启动器自己的仓库：检查更新要走的 API 路径就是它的 releases/latest。 */
+export const LAUNCHER_REPO = "JIJIGUOWANG123/NaiWaLauncher";
+
 /**
- * 四个实测可用的加速节点，用法是「前缀 + 完整 GitHub 地址」。
- * 中文域名靠 new URL() 归一化（Node 会转成 punycode），不要手拼字符串后直接 fetch。
+ * 七个加速节点，用法是「前缀 + 完整 GitHub 地址」。
+ * base 一律过 new URL() 归一化（中文域名会被 Node 转成 punycode），不要手拼字符串后直接 fetch；
+ * label 保留可读域名，用户一眼能对上。
  */
 export const GITHUB_NODES: GithubNode[] = [
-  { id: "ghf", label: "ghf.无名氏.top", base: "https://ghf.无名氏.top/" },
-  { id: "padao", label: "gh.padao.fun", base: "https://gh.padao.fun/" },
-  { id: "ghfast", label: "ghfast.top", base: "https://ghfast.top/" },
-  { id: "cnxiaobai", label: "github.cnxiaobai.com", base: "https://github.cnxiaobai.com/" },
+  { id: "ghf", label: "ghf.无名氏.top", base: normalizeBase("https://ghf.无名氏.top/") },
+  { id: "padao", label: "gh.padao.fun", base: normalizeBase("https://gh.padao.fun/") },
+  { id: "ghfast", label: "ghfast.top", base: normalizeBase("https://ghfast.top/") },
+  { id: "cnxiaobai", label: "github.cnxiaobai.com", base: normalizeBase("https://github.cnxiaobai.com/") },
+  { id: "tangbai", label: "git.tangbai.cc", base: normalizeBase("https://git.tangbai.cc/") },
+  { id: "chenc", label: "github.chenc.dev", base: normalizeBase("https://github.chenc.dev/") },
+  { id: "xyz", label: "30006000.xyz", base: normalizeBase("https://30006000.xyz/") },
 ];
 
 /** 测速目标：一个几十字节的 raw 文件，只等到响应头就够。 */
 const PROBE_URL = "https://raw.githubusercontent.com/octocat/Hello-World/master/README";
+/**
+ * 「能不能代理 api.github.com」的探测目标：必须走 releases/latest 这样的真实 API 路径。
+ * 实测节点对 api 的支持是按路径的（rate_limit / users 回 403，releases 却 200），
+ * 换个路径会得出错误的可用性结论。
+ */
+const API_PROBE_URL = "https://api.github.com/repos/" + LAUNCHER_REPO + "/releases/latest";
 const PROBE_TIMEOUT_MS = 5_000;
 const PROBE_ATTEMPTS = 2;
-/** 测速结果缓存：auto 解析地址时复用，不必每下一个文件就把八个请求重打一遍。 */
+/** 测速结果缓存：auto 解析地址时复用，不必每下一个文件就把整轮请求（7 节点 × 2 次 + 7 个 api 探测）重打一遍。 */
 const PROBE_TTL_MS = 5 * 60 * 1000;
 const USER_AGENT = "NaiWaLauncher/0.1 (naiwa)";
 /** 文件名冲突时最多试到 (999)。 */
@@ -67,6 +80,29 @@ export function isGithubUrl(url: string): boolean {
   }
 }
 
+/** 这个节点能不能代理 api.github.com：要拿到 200 的 release JSON 且带 assets（否则给不出资产清单）。 */
+async function probeApiProxy(node: GithubNode): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  try {
+    const res = await fetch(accelerate(node.base, API_PROBE_URL), {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: { "user-agent": USER_AGENT, accept: "application/vnd.github+json, application/json" },
+    });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => undefined);
+      return false;
+    }
+    const body = (await res.json().catch(() => null)) as { assets?: unknown } | null;
+    return Array.isArray(body?.assets);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** 单次探测：拿到响应头就算耗时，正文直接丢弃（测速不该把文件读完）。 */
 async function measure(url: string): Promise<number | null> {
   const controller = new AbortController();
@@ -88,22 +124,28 @@ async function measure(url: string): Promise<number | null> {
   }
 }
 
-/** 一个节点测两次取最快：一次抖动不该决定它「不可用」。 */
+/** 一个节点测两次取最快：一次抖动不该决定它「不可用」；api 代理能力与测速并行探测。 */
 async function probeNode(node: GithubNode): Promise<GithubAcceleratorProbe> {
   const target = accelerate(node.base, PROBE_URL);
+  const apiProbe = probeApiProxy(node);
   let best: number | null = null;
   for (let attempt = 0; attempt < PROBE_ATTEMPTS; attempt += 1) {
     const latency = await measure(target);
     if (latency !== null && (best === null || latency < best)) best = latency;
   }
-  return { id: node.id, label: node.label, base: normalizeBase(node.base), latencyMs: best, ok: best !== null };
+  const apiProxy = await apiProbe;
+  return { id: node.id, label: node.label, base: normalizeBase(node.base), latencyMs: best, ok: best !== null, apiProxy };
 }
 
-/** 四个节点各测 2 次（5s 超时），返回真实耗时；结果同时进缓存供 auto 选节点。 */
+/** 七个节点各测 2 次（5s 超时、并发），返回真实耗时与 api 代理能力；结果同时进缓存供 auto 选节点。 */
 export async function probeAccelerators(): Promise<GithubAcceleratorProbe[]> {
   const results = await Promise.all(GITHUB_NODES.map((node) => probeNode(node)));
   probeCache = { at: Date.now(), list: results };
-  log.info(`节点测速：${results.map((item) => `${item.id}=${item.ok ? `${item.latencyMs}ms` : "失败"}`).join(" ")}`);
+  log.info(
+    `节点测速：${results
+      .map((item) => `${item.id}=${item.ok ? `${item.latencyMs}ms` : "失败"}${item.apiProxy ? "(api)" : ""}`)
+      .join(" ")}`,
+  );
   return results;
 }
 
@@ -149,6 +191,18 @@ async function orderedNodes(): Promise<GithubNode[]> {
   return [primary, ...ranked, ...rest];
 }
 
+/**
+ * api 优先顺序：能代理 api.github.com 的节点排前面（组内仍按耗时），
+ * 代理不了 api 的节点照样能下载文件，只是不该浪费检查更新的时间在它们身上。
+ */
+async function orderedNodesForApi(): Promise<GithubNode[]> {
+  const base = await orderedNodes();
+  const probes = await cachedProbes();
+  const canApi = new Set(probes.filter((item) => item.apiProxy === true).map((item) => item.id));
+  if (canApi.size === 0) return base;
+  return [...base.filter((node) => canApi.has(node.id)), ...base.filter((node) => !canApi.has(node.id))];
+}
+
 /** 加速候选地址（不含原地址）：auto 按测速排序，固定节点优先。 */
 export async function githubAcceleratedCandidates(url: string, limit?: number): Promise<string[]> {
   if (!isGithubUrl(url)) return [];
@@ -157,12 +211,12 @@ export async function githubAcceleratedCandidates(url: string, limit?: number): 
 }
 
 /**
- * 按设置顺序给出节点前缀。
- * 给 api.github.com 这类不在 isGithubUrl 白名单里的地址用：四个节点本身就是「前缀 + 原地址」，
- * 具体能不能代理某个 github 子域由节点自己决定，代理不了的那次只会失败并继续走后面的通道。
+ * 按「能代理 api 的优先」给出节点前缀。
+ * 给 api.github.com 这类不在 isGithubUrl 白名单里的地址用：七个节点本身就是「前缀 + 原地址」，
+ * 具体能不能代理某个 github 子域由节点自己决定（实测按路径不同），代理不了的那次只会失败并继续走后面的通道。
  */
 export async function githubAcceleratedPrefixes(limit?: number): Promise<string[]> {
-  const list = (await orderedNodes()).map((node) => normalizeBase(node.base));
+  const list = (await orderedNodesForApi()).map((node) => normalizeBase(node.base));
   return typeof limit === "number" ? list.slice(0, Math.max(0, limit)) : list;
 }
 

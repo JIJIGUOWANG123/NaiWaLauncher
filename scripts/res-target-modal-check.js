@@ -88,8 +88,9 @@ say("");
 say("=== 4) 安装入口（ModsPage.tsx:" + lineOf(mods, "data-install-target={key}") + "） ===");
 const cardBtn = mods.slice(mods.indexOf("data-install-target={key}"));
 const cardBtnBlock = cardBtn.slice(0, cardBtn.indexOf("</button>"));
-ok(/aria-haspopup="dialog"/.test(cardBtnBlock), "卡片按钮 aria-haspopup=dialog（开弹窗，不是行内菜单）");
-ok(/onClick=\{\(\) => setTargetModal\(\{ mod, file: null \}\)\}/.test(cardBtnBlock), "卡片按钮点击 = 打开弹窗");
+// 0.4.2(D) 起：有目标就直接装，没目标才弹窗（详见 scripts/res-target-direct-check.js）。
+ok(/aria-haspopup=\{installTarget === null \? "dialog" : undefined\}/.test(cardBtnBlock), "卡片按钮只在没目标时 aria-haspopup=dialog（有目标直装，不是行内菜单）");
+ok(/onClick=\{\(\) => void installFromCard\(mod\)\}/.test(cardBtnBlock), "卡片按钮点击 = installFromCard（有目标直装 / 没目标开弹窗）");
 ok(!/disabled=\{[^}]*noInstance[^}]*\}/.test(cardBtnBlock) && /disabled=\{pluginBusyKey === key\}/.test(cardBtnBlock), "卡片按钮只在安装中禁用（没选目标也能点）");
 ok(/installTargetLabel/.test(cardBtnBlock), "卡片按钮文案来自 installTargetLabel");
 ok(/tr\("pages\.mods\.installToNamed", \{ name: pluginServer\.meta\.name \}\)/s.test(mods) && /tr\("pages\.mods\.installToNamed", \{ name: currentInstance\.name \}\)/s.test(mods), "选中目标后按钮显示目标名（installToNamed）");

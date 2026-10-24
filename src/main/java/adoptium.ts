@@ -13,16 +13,17 @@
 // TUNA 镜像目录（fancyindex）：
 //   https://mirrors.tuna.tsinghua.edu.cn/Adoptium/{feature}/jdk/x64/windows/
 //   里的文件名与上面的 package.name 完全一致，所以只换下载地址，清单仍然只有一份。
-import { createHash } from "node:crypto";
-import { createReadStream, existsSync } from "node:fs";
-import { mkdir, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import AdmZip from "adm-zip";
 import type { InstalledJava, JavaRelease } from "../../shared/types";
-import { createTask, type TaskHandle } from "../core/events";
-import { downloadFile, fetchJson, fetchText } from "../core/http";
+import { createTask } from "../core/events";
+import { fetchJson, fetchText } from "../core/http";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
+import { githubUrlCandidates } from "../net/github";
+import { downloadVerified } from "./zipinstall";
 import { installDirName, writeSourceRecord, type ManagedSource } from "./vendor";
 import { mt } from "../core/i18n";
 
@@ -128,48 +129,6 @@ export async function listReleases(majors: number[] = ADOPTIUM_MAJORS, source: A
   return settled.filter((item): item is JavaRelease => item !== undefined).sort((a, b) => a.major - b.major);
 }
 
-async function sha256Of(path: string): Promise<string> {
-  const hash = createHash("sha256");
-  for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
-  return hash.digest("hex");
-}
-
-/**
- * 下载并校验：优先 sha256（Adoptium 给的是 sha256），没有哈希就按大小。
- * downloadFile 只支持 expectedSha1，所以哈希在这里自己算；不匹配先删再重下一次。
- */
-async function downloadVerified(
-  release: JavaRelease,
-  zipPath: string,
-  task: TaskHandle,
-  signal?: AbortSignal,
-): Promise<void> {
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    await downloadFile(release.downloadUrl, zipPath, { task, label: release.fileName, signal });
-    const size = (await stat(zipPath)).size;
-    const expectedSize = release.sizeBytes && release.sizeBytes > 0 ? release.sizeBytes : 0;
-    if (release.sha256) {
-      const actual = (await sha256Of(zipPath)).toLowerCase();
-      if (actual === release.sha256.toLowerCase()) return;
-      await rm(zipPath, { force: true });
-      if (attempt >= 2) {
-        throw new Error(mt("java.adoptium.checksumFailed", { expected: release.sha256, actual }));
-      }
-      log.warn("JDK 压缩包 sha256 不一致，重下一次：" + release.fileName);
-      continue;
-    }
-    if (expectedSize > 0 && size !== expectedSize) {
-      await rm(zipPath, { force: true });
-      if (attempt >= 2) {
-        throw new Error(mt("java.adoptium.sizeFailed", { expected: expectedSize, actual: size }));
-      }
-      log.warn("JDK 压缩包大小不一致，重下一次：" + release.fileName);
-      continue;
-    }
-    return;
-  }
-}
-
 /** TUNA 目录页里确实有这个名字才下载：镜像可能比官方慢半拍，先给可读错误。 */
 async function assertTunaHas(major: number, fileName: string): Promise<void> {
   const dirUrl = TUNA_BASE + "/" + major + "/jdk/x64/windows/";
@@ -269,7 +228,12 @@ export async function install(
   try {
     task.update({ stage: mt("java.stage.download"), percent: 0 });
     if (vendorSource === "tuna") await assertTunaHas(major, release.fileName);
-    await downloadVerified(release, zipPath, task, signal);
+    // Adoptium 的下载地址是 GitHub Releases（github.com/adoptium/temurinXX-binaries/releases/download/…），
+    // 所以走 githubUrlCandidates 的候选链：加速节点按设置/测速排在前，原始直链最后兜底。
+    // TUNA 是清华镜像、不是 GitHub，githubUrlCandidates 会原样返回它自己。
+    const urls = await githubUrlCandidates(release.downloadUrl);
+    log.info("JDK 下载候选（" + urls.length + " 条）：" + urls.join(" → "));
+    await downloadVerified(release, zipPath, task, signal, urls);
 
     task.update({ stage: mt("java.stage.extract") });
     const tmp = join(paths.downloads, "unpack", "jdk-" + Date.now());
