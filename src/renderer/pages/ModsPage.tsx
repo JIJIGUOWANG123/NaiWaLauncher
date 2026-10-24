@@ -21,7 +21,7 @@ import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
 import { ModDetailPanel } from "../components/ModDetailPanel";
 import { ModDepsDialog, type DepsChoice } from "../components/ModDepsDialog";
-import { ConfirmDialog, Modal } from "../components/Modal";
+import { Modal } from "../components/Modal";
 import { MatchTag, ReleaseTypeTag } from "../components/Badges";
 import { Select } from "../components/Form";
 import { EmptyState, ErrorState, SkeletonRows } from "../components/State";
@@ -472,8 +472,6 @@ export function ModsPage() {
   } | null>(null);
   /** 第二步「挑版本」空列表/失败时已经自动退回过的那一个目标：同一个目标只退一次。 */
   const versionFallbackRef = useRef("");
-  /** 整合包「安装并创建实例」的确认弹窗（进行中的条目在 installs 队列里）。 */
-  const [packConfirm, setPackConfirm] = useState<ModSearchResult | null>(null);
   /** 下载记录快照：进度按记录自己的重试参数对回条目，谁的进度显示在谁身上。 */
   const [downloadJobs, setDownloadJobs] = useState<DownloadJob[]>([]);
   const [favorites, setFavorites] = useState<string[]>(() => readFavorites());
@@ -504,7 +502,8 @@ export function ModsPage() {
   /** 面板与文件列表只有后端支持的类型才会打开。 */
   const detailKind: ModContentKind = isBackendKind(kind) ? kind : "mod";
   const noInstance = instances.length === 0;
-  const curseforgeReady = Boolean((settings?.curseforgeApiKey ?? "").trim());
+  // CurseForge 无 Key 时走 MCIM 镜像，所以它永远可选（noKey 保留为常量 false，不再置灰/拦搜索）
+  const curseforgeReady = true;
   const noKey = source === "curseforge" && !curseforgeReady;
   /** 当前来源支持的二级类型（数据包仍是 disabled 占位）。 */
   const kindTabs = useMemo(() => kindsForSource(source), [source]);
@@ -1425,7 +1424,6 @@ export function ModsPage() {
    * 每个整合包是独立条目，互不阻塞；新建实例本身不写别人正在写的目录。
    */
   const installModpackAndCreate = (mod: ModSearchResult, fileId?: string) => {
-    setPackConfirm(null);
     setTargetModal(null);
     enqueueInstall({
       key: installKeyOf(mod.provider, mod.projectId, fileId ?? null, ""),
@@ -1736,7 +1734,8 @@ export function ModsPage() {
           </>
 
           <div className="aside-block">
-            {/* 目标：实例与服务端同在一个选择器里（服务端分组对光影/资源包/整合包置灰）。 */}
+            {/* 目标：实例与服务端同在一个选择器里（服务端分组对光影/资源包/整合包置灰）。
+                整合包不选目标：它总是新建实例，这里直接禁用并说明原因。 */}
             <span className="field-label">{tr("pages.mods.targetLabel")}</span>
             <div
               className="select-wrap"
@@ -1744,11 +1743,15 @@ export function ModsPage() {
               data-plugin-server-select
               data-target-kind={targetKind}
               data-target-id={serverTarget ? serverId : currentInstance?.id ?? ""}
+              data-target-disabled={isModpack ? "1" : undefined}
             >
               <select
                 className="input select"
                 value={targetValue}
+                disabled={isModpack}
+                title={isModpack ? tr("pages.mods.modpackTargetDisabled") : undefined}
                 aria-label={tr("pages.mods.targetLabel")}
+                aria-disabled={isModpack || undefined}
                 onChange={(event) => {
                   const value = event.target.value;
                   if (value.startsWith("server:")) {
@@ -2019,8 +2022,9 @@ export function ModsPage() {
                           type="button"
                           className="btn btn-sm btn-primary"
                           data-modpack-install={key}
+                          data-install-modpack-new="1"
                           disabled={creating}
-                          onClick={() => setPackConfirm(mod)}
+                          onClick={() => void installModpackAndCreate(mod)}
                         >
                           {creating ? phaseText(cardEntry as InstallEntry) : tr("pages.mods.installAndCreate")}
                         </button>
@@ -2099,9 +2103,9 @@ export function ModsPage() {
           installLabel={selectedGrade ? tr("pages.mods.reinstall") : tr(KIND_INSTALL_LABEL_KEY[detailKind])}
           onClose={() => setSelected(null)}
           onInstall={() => {
-            // 整合包：新建实例，不需要选目标。
+            // 整合包：新建实例，不需要选目标（也不弹确认框，和卡片按钮同一套「安装并创建实例」）。
             if (detailKind === "modpack") {
-              setPackConfirm(selected);
+              void installModpackAndCreate(selected);
               return;
             }
             // 详情面板保留「安装到…」弹窗：它既是没目标时的选择入口，也是换目标的入口
@@ -2515,17 +2519,6 @@ export function ModsPage() {
         </Modal>
       ) : null}
 
-      <ConfirmDialog
-        open={packConfirm !== null}
-        title={tr("pages.mods.modpackConfirmTitle")}
-        confirmText={tr("pages.mods.installAndCreate")}
-        busy={false}
-        message={packConfirm ? tr("pages.mods.modpackInstallHint", { name: titleOf(packConfirm) }) : ""}
-        onCancel={() => setPackConfirm(null)}
-        onConfirm={() => {
-          if (packConfirm) void installModpackAndCreate(packConfirm);
-        }}
-      />
     </section>
   );
 }

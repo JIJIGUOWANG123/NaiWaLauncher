@@ -1647,5 +1647,160 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
     "Open the original page in your browser: {url}",
     "ブラウザーで配布ページを開く：{url}",
   ),
+  // ---- 0.4.5 B：整合包不选目标 / 关于页五个启动器 / 去掉「推荐：」前缀 ----
+  "pages.mods.modpackTargetDisabled": D(
+    "整合包会新建实例，不需要目标",
+    "A modpack creates a new instance — no target needed",
+    "MOD パックは新しいインスタンスを作成するため、ターゲットは不要です",
+  ),
+  // 同名 key 覆盖 i18n.ts 里的「推荐：Steamcommunity 302」（DICT 合并时本文件在后）
+  "about.link.steam302": D("Steamcommunity 302", "Steamcommunity 302", "Steamcommunity 302"),
+  "pages.about.thanks.launcherHint": D("同类启动器", "Similar launcher", "同類のランチャー"),
+  "pages.about.thanks.molaunch": D("MoLaunch", "MoLaunch", "MoLaunch"),
+  "pages.about.thanks.xmcl": D("XMCL", "XMCL", "XMCL"),
+  "pages.about.thanks.axlmc": D("AxlMC", "AxlMC", "AxlMC"),
+  "pages.about.thanks.oaoi": D("Oaoi", "Oaoi", "Oaoi"),
+  "pages.about.thanks.bakaxl": D("Bakaxl", "Bakaxl", "Bakaxl"),
+
+  // ---- 0.4.5 A：CurseForge 接入 MCIM 镜像，无 Key 也可用 ----
+  // 同名 key 覆盖 i18n.ts 里的「需要官方 API Key」与「需自备 Key」文案（DICT 合并时本文件在后）
+  "settings.needsApiKey": D(
+    "可不填 Key（社区镜像）",
+    "API key optional (community mirror)",
+    "API キー不要（コミュニティミラー）",
+  ),
+  "settings.apiKeyHint": D(
+    "可不填 Key（走社区镜像），填了则走官方接口；仅保存在本地",
+    "Leave it empty to use the community mirror, or paste a key from console.curseforge.com to use the official API; stored locally only",
+    "空欄ならコミュニティミラーを使用し、入力すると公式 API を使います（console.curseforge.com で取得）。ローカルにのみ保存されます",
+  ),
+
+  // ---- 娱乐页（0.4.5 C）：每日人品 + 每日一言 ----
+  // nav.* 也放在这里：i18n.ts 的 DICT 会合并本文件，同样生效，不必动主字典
+  "nav.fun": D("娱乐", "Fun", "お楽しみ"),
+  "pages.fun.title": D("娱乐", "Fun", "お楽しみ"),
+  "pages.fun.subtitle": D(
+    "每日人品与每日一言，纯属乐子：数字按日期加本机种子算出来，不改游戏里的任何东西。",
+    "A daily luck number and a daily quote — pure fun. The number comes from the date plus a local seed and changes nothing in the game.",
+    "今日の運勢と今日の一言。あくまでお楽しみです。数値は日付とローカルの種から計算され、ゲームには影響しません。",
+  ),
+  "pages.fun.fortuneTitle": D("今日人品", "Today's luck", "今日の運勢"),
+  "pages.fun.fortuneSub": D(
+    "同一天点多少次都是这个数，第二天自动换一个",
+    "Clicking again the same day returns the same number; it changes tomorrow",
+    "同じ日なら何度引いても同じ値。翌日になると変わります",
+  ),
+  "pages.fun.roll": D("获取今日人品", "Roll today's luck", "今日の運勢を占う"),
+  "pages.fun.rollAgain": D("再点一次还是这个数", "Click again — same number", "もう一度押しても同じ値です"),
+  "pages.fun.fortuneRange": D("1–100 之间的整数", "An integer from 1 to 100", "1〜100 の整数"),
+  "pages.fun.fortuneStored": D("记录日期 {date}", "Stored for {date}", "記録日 {date}"),
+  "pages.fun.sayingTitle": D("每日一言", "Daily saying", "今日の一言"),
+  "pages.fun.sayingSub": D(
+    "点一下卡片就抽一句，接口地址可以在设置页里改",
+    "Tap the card to draw a line; the endpoint can be changed in Settings",
+    "カードをタップすると一言を引きます。URL は設定で変更できます",
+  ),
+  "pages.fun.sayingInitial": D("点我抽一句", "Tap me for a line", "タップして一言を引く"),
+  "pages.fun.sayingAgain": D("再点一下换一句", "Tap again for another", "もう一度タップで引き直し"),
+  "pages.fun.sayingLoading": D("抽取中…", "Drawing…", "抽選中…"),
+  "pages.fun.sayingFallback": D(
+    "一时没抽到，先送你一句：愿你在方块世界里挖到什么都是宝贝。",
+    "Couldn't fetch one — here's a line instead: may everything you dig up be treasure.",
+    "取得できませんでした。代わりにひとこと：掘り当てるものすべてが宝物でありますように。",
+  ),
+  "pages.fun.sayingFrom": D("接口：{url}", "Endpoint: {url}", "エンドポイント：{url}"),
+  // 100 条反馈 = 基调（tone 1–10）× 修饰（mood 1–10）：两段各自互不相同，拼接后 100 条必然互不相同
+  "pages.fun.feedback": D("{tone}，{mood}。", "{tone} — {mood}.", "{tone}：{mood}。"),
+  "pages.fun.tone.1": D("欧气爆棚", "Cosmic luck", "神引き"),
+  "pages.fun.tone.2": D("鸿运当头", "Hot streak", "絶好調"),
+  "pages.fun.tone.3": D("福星高照", "Star-aligned", "星の加護"),
+  "pages.fun.tone.4": D("顺风顺水", "Smooth sailing", "順風満帆"),
+  "pages.fun.tone.5": D("四平八稳", "Steady as she goes", "堅実そのもの"),
+  "pages.fun.tone.6": D("不温不火", "Lukewarm at best", "可もなく不可もなく"),
+  "pages.fun.tone.7": D("小有波折", "A few bumps", "小さな波乱"),
+  "pages.fun.tone.8": D("略显坎坷", "Rough patch", "起伏あり"),
+  "pages.fun.tone.9": D("诸事多磨", "Grind mode", "試練の時"),
+  "pages.fun.tone.10": D("水逆当头", "Mercury in retrograde", "逆行中"),
+  "pages.fun.mood.1": D("适合开个新档", "a good day to start a new world", "新しいワールドを始めるのに向いた日"),
+  "pages.fun.mood.2": D("适合整理箱子", "a good day to sort your chests", "チェストの整理に向いた日"),
+  "pages.fun.mood.3": D("适合下矿挖矿", "a good day to go mining", "採掘に向いた日"),
+  "pages.fun.mood.4": D("适合修红石", "a good day to fix that redstone", "レッドストーンを直すのに向いた日"),
+  "pages.fun.mood.5": D("适合探下界", "a good day to poke around the Nether", "ネザーを覗くのに向いた日"),
+  "pages.fun.mood.6": D("适合钓鱼", "a good day to go fishing", "釣りに向いた日"),
+  "pages.fun.mood.7": D("适合跑图看风景", "a good day to wander and enjoy the view", "景色を見に散策するのに向いた日"),
+  "pages.fun.mood.8": D("适合打怪练手", "a good day to fight some mobs", "モブと戦うのに向いた日"),
+  "pages.fun.mood.9": D("适合和朋友联机", "a good day to play with friends", "フレンドと遊ぶのに向いた日"),
+  "pages.fun.mood.10": D("适合早点收工睡觉", "a good day to log off early and sleep", "早めに切り上げて寝るのに向いた日"),
+  // 运势小结：按 20 一档，同一档共用一句
+  "pages.fun.luck.1": D(
+    "运势低谷：今天别做大决定，多挖两格就回家。",
+    "Low ebb: skip the big decisions today — dig a couple of blocks and head home.",
+    "低調な日：大きな決断は避けて、少し掘って帰りましょう。",
+  ),
+  "pages.fun.luck.2": D(
+    "运势偏弱：重要的事往后放一放更省心。",
+    "A bit weak: pushing important things back makes the day easier.",
+    "やや弱め：大事なことは後に回すと楽になります。",
+  ),
+  "pages.fun.luck.3": D(
+    "运势平稳：按原计划走不会出错。",
+    "Steady: sticking to the plan will not let you down.",
+    "安定：予定通りに進めれば問題ありません。",
+  ),
+  "pages.fun.luck.4": D(
+    "运势不错：想试的新种子今天就开吧。",
+    "Pretty good: start that new seed today.",
+    "好調：新しいシードは今日始めましょう。",
+  ),
+  "pages.fun.luck.5": D(
+    "运势极佳：手气正好，放手去做。",
+    "Excellent: luck is with you — go for it.",
+    "絶好調：運気は上々、思い切ってどうぞ。",
+  ),
+
+  // ---- 设置页「娱乐」块（0.4.5 C）：每日一言接口地址 ----
+  "settings.group.fun": D("娱乐", "Fun", "お楽しみ"),
+  "settings.sayingApi": D("每日一言 API 地址", "Daily saying endpoint", "今日の一言 API アドレス"),
+  "settings.sayingApiHint": D(
+    "留空就使用内置默认地址。返回 JSON 时自动取文字字段（text / saying / hitokoto / content / data.text / data / msg），不是 JSON 就显示原文前 200 字。",
+    "Leave empty to use the built-in default. JSON replies are read from the first matching text field (text / saying / hitokoto / content / data.text / data / msg); non-JSON replies show the first 200 characters.",
+    "空欄なら内蔵の既定アドレスを使います。JSON の場合はテキスト項目（text / saying / hitokoto / content / data.text / data / msg）を自動で取り出し、JSON でなければ生の応答の先頭 200 文字を表示します。",
+  ),
+  "settings.sayingApiPlaceholder": D("留空 = https://uapis.cn/api/v1/saying", "Empty = https://uapis.cn/api/v1/saying", "空欄 = https://uapis.cn/api/v1/saying"),
+  "settings.sayingApiDefault": D("内置默认 uapis.cn", "Built-in default", "内蔵の既定"),
+
+  // ---- 实例页「导入整合包压缩包」（0.4.5 D）：第三方启动器给的 zip 先识别再装 ----
+  "pages.instances.importPack": D("导入整合包压缩包…", "Import modpack archive…", "MOD パックのアーカイブを読み込む…"),
+  "pages.instances.importPackPicking": D("选择中…", "Choosing…", "選択中…"),
+  "pages.instances.importPackTitle": D("导入整合包压缩包", "Import a modpack archive", "MOD パックのアーカイブを読み込む"),
+  "pages.instances.importPackConfirm": D("开始安装", "Install", "インストール開始"),
+  "pages.instances.importPackInstalling": D("安装中…", "Installing…", "インストール中…"),
+  "pages.instances.importPackFormat": D("包格式", "Archive format", "アーカイブ形式"),
+  "pages.instances.importPackVersion": D("整合包版本", "Modpack version", "MOD パックのバージョン"),
+  "pages.instances.importPackVersionUnknown": D("未标注", "Not specified", "記載なし"),
+  "pages.instances.importPackMcVersion": D("游戏版本", "Minecraft version", "ゲームバージョン"),
+  "pages.instances.importPackLoader": D("加载器", "Loader", "ローダー"),
+  "pages.instances.importPackFiles": D("包内文件", "Declared files", "パック内のファイル"),
+  "pages.instances.importPackFileCount": D("{count} 个文件", "{count} files", "{count} ファイル"),
+  "pages.instances.importPackSize": D("压缩包大小", "Archive size", "アーカイブサイズ"),
+  "pages.instances.importPackInstanceName": D("实例名", "Instance name", "インスタンス名"),
+  "pages.instances.importPackInstanceNameHint": D("留空就用整合包自带的名字；重名会自动加后缀。", "Leave empty to use the modpack's own name; duplicates get a suffix.", "空欄なら MOD パック本来の名前を使います。重複時は自動で連番が付きます。"),
+  "pages.instances.importPackHint": D(
+    "点「开始安装」后会新建实例、装原版与加载器、把包内文件下载到 mods 并解压 overrides；下载进度在「管理」页查看。",
+    "After you click Install: a new instance is created, vanilla and the loader are installed, the declared files download into mods, and overrides are extracted. Download progress shows on the Manage page.",
+    "「インストール開始」で新しいインスタンスを作成し、バニラとローダーを導入、パック内ファイルを mods にダウンロードし overrides を展開します。進捗は「管理」ページで確認できます。",
+  ),
+  "pages.instances.importPackUnsupported": D("这个压缩包不是可识别的整合包", "This archive is not a recognizable modpack", "このアーカイブは識別可能な MOD パックではありません"),
+  "pages.instances.importPackDone": D(
+    "整合包 {name} 安装完成：文件 {done} 个 · overrides {overrides} 个",
+    "Modpack {name} installed: {done} files · {overrides} overrides",
+    "MOD パック {name} のインストール完了：ファイル {done} 件 · overrides {overrides} 件",
+  ),
+  "pages.instances.importPackProgress": D("下载进度见「管理」页", "Download progress is on the Manage page", "ダウンロードの進捗は「管理」ページに表示されます"),
+  "pages.instances.importPackPartial": D(
+    "有 {count} 个文件没下载成功：{list}；实例已建好，可稍后重装补齐",
+    "{count} files failed to download: {list}. The instance was created; reinstall later to complete it.",
+    "{count} 件のファイルをダウンロードできませんでした：{list}。インスタンスは作成済みです。後で再インストールして補完できます",
+  ),
 };
 

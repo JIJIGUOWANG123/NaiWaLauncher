@@ -1,14 +1,16 @@
 import { useMemo, useState } from "react";
+import type { ModpackZipInfo } from "../../shared/ipc";
 import type { InstanceMeta, ModContentKind } from "../../shared/types";
 import { api } from "../lib/api";
-import { formatRelative, instanceDiskUsage, instanceMemory, loaderLabel } from "../lib/format";
+import { formatBytes, formatRelative, instanceDiskUsage, instanceMemory, loaderLabel } from "../lib/format";
 import { iconSrc } from "../lib/appIcon";
 import { useT } from "../lib/i18n";
 import { useApp } from "../lib/store";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
 import { LoaderBadge } from "../components/Badges";
-import { ConfirmDialog } from "../components/Modal";
+import { ConfirmDialog, Modal } from "../components/Modal";
+import { Field, TextInput } from "../components/Form";
 import { CreateInstanceModal, EditInstanceModal } from "../components/InstanceModals";
 import { AnchoredMenu } from "../components/AnchoredMenu";
 import { InstanceDetailDrawer } from "../components/InstanceDetailDrawer";
@@ -41,6 +43,11 @@ export function InstancesPage() {
   const [exporting, setExporting] = useState<InstanceMeta | null>(null);
   const [busyExport, setBusyExport] = useState(false);
   const [importing, setImporting] = useState(false);
+  // 整合包压缩包：选包后先识别，把「这是什么包」摆给用户看，确认才真装。
+  const [pack, setPack] = useState<{ zipPath: string; info: ModpackZipInfo } | null>(null);
+  const [packName, setPackName] = useState("");
+  const [packPicking, setPackPicking] = useState(false);
+  const [packBusy, setPackBusy] = useState(false);
   // 只存 id：reloadInstances 之后抽屉拿到的永远是最新实例对象（加载器徽标随之更新）。
   const [managingId, setManagingId] = useState<string | null>(null);
   // 同理只存 id：存档抽屉要拿最新的实例对象。
@@ -146,6 +153,47 @@ export function InstancesPage() {
     }
   };
 
+  // 选包 + 识别：文件选择框由主进程弹，回来的是「这是什么整合包」的元信息。
+  const pickModpack = async () => {
+    setPackPicking(true);
+    try {
+      const result = await api.modpacks.inspectLocal();
+      if (result.canceled || !result.info || !result.zipPath) return;
+      if (!result.info.installable) {
+        push(result.info.reason ?? t("pages.instances.importPackUnsupported"), "error");
+        return;
+      }
+      setPackName(result.info.name);
+      setPack({ zipPath: result.zipPath, info: result.info });
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      setPackPicking(false);
+    }
+  };
+
+  const confirmModpack = async () => {
+    if (!pack) return;
+    setPackBusy(true);
+    try {
+      const result = await api.modpacks.installLocal(pack.zipPath, packName.trim() || undefined);
+      push(t("pages.instances.importPackDone", { name: result.name, done: result.downloaded, overrides: result.overridesExtracted }), "success");
+      push(t("pages.instances.importPackProgress"), "info");
+      if (result.failed.length > 0) {
+        push(t("pages.instances.importPackPartial", {
+          count: result.failed.length,
+          list: result.failed.slice(0, 3).map((item) => item.path).join("、"),
+        }), "info");
+      }
+      await reloadInstances();
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      setPackBusy(false);
+      setPack(null);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleting) return;
     setBusyDelete(true);
@@ -176,6 +224,17 @@ export function InstancesPage() {
           <button type="button" className="btn btn-ghost" onClick={() => void importArchive()} disabled={importing}>
             <IconDownload size={16} />
             {importing ? t("pages.instances.importing") : t("pages.instances.import")}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            data-import-modpack
+            onClick={() => void pickModpack()}
+            disabled={packPicking || packBusy}
+            title={t("pages.instances.importPackTitle")}
+          >
+            <IconPackage size={16} />
+            {packPicking ? t("pages.instances.importPackPicking") : t("pages.instances.importPack")}
           </button>
           <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
             <IconPlus size={16} />
@@ -347,6 +406,71 @@ export function InstancesPage() {
         onClose={() => setSavesId(null)}
         onLaunched={() => void reloadInstances()}
       />
+      {/* 整合包压缩包确认框：先把识别出的元信息摆出来，用户看清了再装 */}
+      <Modal
+        open={pack !== null}
+        title={t("pages.instances.importPackTitle")}
+        subtitle={pack?.zipPath ?? undefined}
+        width={560}
+        onClose={() => {
+          if (!packBusy) setPack(null);
+        }}
+        footer={
+          <>
+            <button type="button" className="btn btn-ghost" onClick={() => setPack(null)} disabled={packBusy}>
+              {t("pages.common.cancel")}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              data-import-modpack-confirm
+              onClick={() => void confirmModpack()}
+              disabled={packBusy}
+            >
+              {packBusy ? t("pages.instances.importPackInstalling") : t("pages.instances.importPackConfirm")}
+            </button>
+          </>
+        }
+      >
+        {pack ? (
+          <div data-import-modpack-info>
+            <div className="field">
+              <span className="field-label">{t("pages.instances.importPackFormat")}</span>
+              <span data-import-modpack-format>{pack.info.format}</span>
+            </div>
+            <div className="field">
+              <span className="field-label">{t("pages.instances.importPackVersion")}</span>
+              <span>{pack.info.version || t("pages.instances.importPackVersionUnknown")}</span>
+            </div>
+            <div className="field">
+              <span className="field-label">{t("pages.instances.importPackMcVersion")}</span>
+              <span>{pack.info.mcVersion}</span>
+            </div>
+            <div className="field">
+              <span className="field-label">{t("pages.instances.importPackLoader")}</span>
+              <span>{loaderLabel(pack.info.loader, t) + (pack.info.loaderVersion ? ` ${pack.info.loaderVersion}` : "")}</span>
+            </div>
+            <div className="field">
+              <span className="field-label">{t("pages.instances.importPackFiles")}</span>
+              <span>{t("pages.instances.importPackFileCount", { count: pack.info.fileCount })}</span>
+            </div>
+            <div className="field">
+              <span className="field-label">{t("pages.instances.importPackSize")}</span>
+              <span>{formatBytes(pack.info.sizeBytes)}</span>
+            </div>
+            <Field label={t("pages.instances.importPackInstanceName")} hint={t("pages.instances.importPackInstanceNameHint")}>
+              <TextInput
+                value={packName}
+                onChange={(event) => setPackName(event.target.value)}
+                placeholder={pack.info.name}
+                disabled={packBusy}
+              />
+            </Field>
+            <p className="field-hint">{t("pages.instances.importPackHint")}</p>
+          </div>
+        ) : null}
+      </Modal>
+
       <ConfirmDialog
         open={exporting !== null}
         title={t("pages.instances.exportDialogTitle")}

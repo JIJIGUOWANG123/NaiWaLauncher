@@ -61,10 +61,17 @@ export function SettingsPage() {
 
   const [wallpaperDraft, setWallpaperDraft] = useState("");
   const [savingWallpaper, setSavingWallpaper] = useState(false);
+  // 娱乐页「每日一言」接口地址：留空表示用内置默认（https://uapis.cn/api/v1/saying）
+  const [sayingDraft, setSayingDraft] = useState("");
+  const [savingSaying, setSavingSaying] = useState(false);
 
   useEffect(() => {
     if (settings) setWallpaperDraft(settings.wallpaperEngineDir);
   }, [settings?.wallpaperEngineDir]);
+
+  useEffect(() => {
+    if (settings) setSayingDraft(settings.sayingApiUrl);
+  }, [settings?.sayingApiUrl]);
 
   /** 打开本地目录（原关于页的两颗按钮搬到这里）：路径来自 AppInfo，接口仍是 api.app.openPath。 */
   const openDir = async (target: string | undefined, label: string) => {
@@ -89,6 +96,15 @@ export function SettingsPage() {
     } finally {
       setSavingWallpaper(false);
     }
+  };
+
+  /** 每日一言接口地址：留空即回到内置默认，写盘走 usePersist（带回读校验与 toast）。 */
+  const saveSayingApi = async () => {
+    const next = sayingDraft.trim();
+    if (next === (settings?.sayingApiUrl ?? "")) return;
+    setSavingSaying(true);
+    await persist({ sayingApiUrl: next }, tr("settings.sayingApi"));
+    setSavingSaying(false);
   };
 
   useEffect(() => {
@@ -306,6 +322,41 @@ export function SettingsPage() {
                 </button>
                 <button type="button" className="btn btn-primary" onClick={() => void saveKey()} disabled={savingKey}>
                   {savingKey ? tr("common.saving") : tr("common.save")}
+                </button>
+              </div>
+            </Field>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">{tr("settings.group.fun")}</h2>
+            <span className="panel-count">{tr("settings.sayingApiDefault")}</span>
+          </div>
+          <div className="form-grid">
+            <Field label={tr("settings.sayingApi")} hint={tr("settings.sayingApiHint")}>
+              <div className="key-row">
+                <TextInput
+                  value={sayingDraft}
+                  placeholder={tr("settings.sayingApiPlaceholder")}
+                  aria-label={tr("settings.sayingApi")}
+                  spellCheck={false}
+                  autoComplete="off"
+                  data-setting="saying-api"
+                  onChange={(event) => setSayingDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void saveSayingApi();
+                  }}
+                  onBlur={() => void saveSayingApi()}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  data-setting-save="saying-api"
+                  onClick={() => void saveSayingApi()}
+                  disabled={savingSaying}
+                >
+                  {savingSaying ? tr("common.saving") : tr("common.save")}
                 </button>
               </div>
             </Field>

@@ -695,6 +695,11 @@ export const DICT: Record<string, Entry> = {
 
   "mods.cfNoKeySearch": D("无 Key 模式下 CurseForge 不支持关键词搜索，请粘贴模组链接（curseforge.com/minecraft/mc-mods/xxx）或到设置填写 API Key", "Without an API key, CurseForge does not support keyword search — paste a mod link (curseforge.com/minecraft/mc-mods/xxx) or set an API key in settings", "API キーがない場合、CurseForge はキーワード検索に対応しません。MOD のリンク（curseforge.com/minecraft/mc-mods/xxx）を貼るか、設定で API キーを入力してください"),
   "mods.missingKey": D("请先在设置中填写 CurseForge API Key", "Enter the CurseForge API key in settings first", "先に設定で CurseForge の API キーを入力してください"),
+  "mods.mirrorFailed": D(
+    "CurseForge 社区镜像暂时不可用（{error}），请稍后重试",
+    "The CurseForge community mirror is unavailable right now ({error}). Please try again later.",
+    "CurseForge のコミュニティミラーが現在利用できません（{error}）。しばらくしてからもう一度お試しください",
+  ),
   "mods.keyRejected": D("CurseForge 拒绝了该 API Key，请到设置里检查或重新填写", "CurseForge rejected the API key — check or re-enter it in settings", "CurseForge が API キーを拒否しました。設定で確認するか再入力してください"),
   "mods.depVersionMismatch": D("前置 {dep} 指定的版本 {version} 不匹配 {mc} / {loader}，改按最优文件安装", "The version {version} required by {dep} does not match {mc} / {loader}; installing the best matching file instead", "前提 {dep} が指定するバージョン {version} は {mc} / {loader} に一致しないため、最適なファイルをインストールします"),
   "mods.depInstalled": D("已装上的前置：{list}；", "Dependencies already installed: {list}; ", "導入済みの前提：{list}；"),
@@ -908,6 +913,45 @@ export const DICT: Record<string, Entry> = {
     "{file} のサイズは {width}×{height} です。Mojang は 64×64 または 64×32 のみ受け付けます",
   ),
   "auth.mojang.badUrl": D("皮肤直链必须是 http(s) 地址：{url}", "The skin URL must be http(s): {url}", "スキンの直リンクは http(s) である必要があります：{url}"),
+
+  // ---- 娱乐页「每日一言」（0.4.5 C）：失败原因都给成人话，界面不弹框 ----
+  "fun.saying.badUrl": D("每日一言接口地址无效：{url}", "Invalid daily-saying endpoint: {url}", "一言 API の URL が不正です：{url}"),
+  "fun.saying.timeout": D("接口 {ms} ms 没有响应", "The endpoint did not respond within {ms} ms", "エンドポイントが {ms} ms 応答しませんでした"),
+  "fun.saying.http": D("接口返回 HTTP {status}", "The endpoint returned HTTP {status}", "エンドポイントが HTTP {status} を返しました"),
+  "fun.saying.empty": D("接口返回了空内容", "The endpoint returned an empty body", "エンドポイントの応答が空でした"),
+  "fun.saying.notJson": D("接口返回的不是 JSON，已直接显示原文", "The endpoint did not return JSON — showing the raw reply", "JSON ではないため、生の応答を表示しています"),
+  "fun.saying.noTextField": D("JSON 里没有常见文字字段，已直接显示原文", "The JSON had no known text field — showing the raw reply", "既知のテキスト項目が無いため、生の応答を表示しています"),
+  "fun.saying.network": D("网络错误：{error}", "Network error: {error}", "ネットワークエラー：{error}"),
+
+  // ---- 第三方启动器整合包压缩包（0.4.5 D）：识别、安装与失败原因 ----
+  "modpack.zip.dialogPick": D("选择整合包压缩包", "Choose a modpack archive", "MOD パックのアーカイブを選択"),
+  "modpack.zip.dialogFilter": D("整合包压缩包", "Modpack archive", "MOD パックのアーカイブ"),
+  "modpack.zip.missing": D("找不到这个文件：{path}", "This file does not exist: {path}", "このファイルが見つかりません：{path}"),
+  "modpack.zip.notFile": D("选中的不是文件：{path}", "The selection is not a file: {path}", "選択されたのはファイルではありません：{path}"),
+  "modpack.zip.notZip": D("{path} 不是有效的 zip 压缩包（{error}）", "{path} is not a valid zip archive ({error})", "{path} は有効な zip アーカイブではありません（{error}）"),
+  "modpack.zip.manifestUnreadable": D("读取 {file} 失败：{error}", "Could not read {file}: {error}", "{file} の読み取りに失敗しました：{error}"),
+  "modpack.zip.manifestBadJson": D("{file} 不是合法 JSON：{error}", "{file} is not valid JSON: {error}", "{file} が正しい JSON ではありません：{error}"),
+  "modpack.zip.manifestMissing": D("压缩包根目录缺少 {file}", "The archive root is missing {file}", "アーカイブのルートに {file} がありません"),
+  "modpack.zip.mcVersionMissing": D("{file} 里没有 minecraft.version：无法确定游戏版本", "{file} has no minecraft.version, so the game version is unknown", "{file} に minecraft.version がないため、ゲームバージョンを特定できません"),
+  "modpack.zip.loaderUnsupported": D("整合包声明的加载器 {loader} 暂不支持安装", "The loader {loader} declared by the modpack is not supported yet", "MOD パックが宣言しているローダー {loader} はまだ対応していません"),
+  "modpack.zip.emptyArchive": D("{file} 是空压缩包：里面没有任何整合包清单", "{file} is an empty archive with no modpack manifest", "{file} は空のアーカイブで、MOD パックのマニフェストがありません"),
+  "modpack.zip.unsupported": D(
+    "{file} 不是可识别的整合包压缩包（{entries} 个条目，根目录缺少 manifest.json / modrinth.index.json / mmc-pack.json / modpack.json）",
+    "{file} is not a recognizable modpack archive ({entries} entries; the root has no manifest.json / modrinth.index.json / mmc-pack.json / modpack.json)",
+    "{file} は識別可能な MOD パックのアーカイブではありません（{entries} 件、ルートに manifest.json / modrinth.index.json / mmc-pack.json / modpack.json がありません）",
+  ),
+  "modpack.zip.formatNotInstallable": D("这是 {format} 格式的整合包：已识别，但自动安装暂未支持", "This is a {format} modpack: recognized, but automatic installation is not supported yet", "{format} 形式の MOD パックです：認識はできましたが、自動インストールは未対応です"),
+  "modpack.zip.noSpace": D("磁盘空间不足：请清理后重试", "Not enough disk space — free some space and try again", "ディスク容量が不足しています。空きを作ってから再試行してください"),
+  "modpack.zip.installFailed": D("整合包安装失败：{reason}{kept}", "Modpack installation failed: {reason}{kept}", "MOD パックのインストールに失敗しました：{reason}{kept}"),
+  "modpack.zip.done": D("整合包 {name} 安装完成（{format}）：实例 {id} · 文件 {done}/{total} · overrides {overrides} 个", "Modpack {name} installed ({format}): instance {id} · files {done}/{total} · {overrides} overrides", "MOD パック {name} のインストール完了（{format}）：インスタンス {id} · ファイル {done}/{total} · overrides {overrides} 件"),
+  "modpack.zip.downloadLabel": D("下载整合包文件", "Downloading modpack files", "MOD パックのファイルをダウンロード中"),
+  "modpack.zip.stage.parseManifest": D("解析整合包清单", "Parsing modpack manifest", "MOD パックのマニフェストを解析中"),
+  "modpack.zip.stage.createInstance": D("创建实例 {name}", "Creating instance {name}", "インスタンス {name} を作成中"),
+  "modpack.zip.stage.resolveFiles": D("解析整合包文件 {done}/{total}", "Resolving modpack files {done}/{total}", "MOD パックのファイルを解決中 {done}/{total}"),
+  "modpack.zip.stage.downloadFiles": D("下载整合包文件 {done}/{total}", "Downloading modpack files {done}/{total}", "MOD パックのファイルをダウンロード中 {done}/{total}"),
+  "modpack.zip.stage.retryFiles": D("重试下载失败文件 {done}/{total}", "Retrying failed downloads {done}/{total}", "失敗したファイルを再試行中 {done}/{total}"),
+  "modpack.zip.retryLabel": D("重试下载整合包文件", "Retrying modpack downloads", "MOD パックのファイルを再試行中"),
+  "modpack.zip.stage.extractOverrides": D("解压 overrides", "Extracting overrides", "overrides を展開中"),
 };
 
 /** 当前界面语言：settings 可能随时改，所以每次现读内存值（getSettings 已是内存快照，不读盘）。 */

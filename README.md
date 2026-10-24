@@ -2,7 +2,7 @@
 
 <img src="logo.png" width="120" align="right" alt="NaiWa Launcher" />
 
-现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，界面内显示「奶娃启动器 / NaiWa Launcher」。当前版本 **0.4.4**。
+现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，界面内显示「奶娃启动器 / NaiWa Launcher」。当前版本 **0.4.5**。
 
 主开发者 **奶龙** ｜ 协助开发者 **小七** ｜ 工具提供 **DeepSeek**
 
@@ -34,7 +34,9 @@
 - **详情图集可点开大图**：滚轮缩放 1x–4x、放大后拖动平移、双击复位、← → 切换、Esc 关闭
 - **选中目标就直接装**：已选好实例/服务端时，点卡片按钮直接安装；没选才弹出「安装到…」
 - **详情自动翻译**：简介与完整介绍都会给中文译文，可切「译文 / 原文」；翻译不可用时直接显示原文，不报错
-- Modrinth 完整支持；CurseForge 支持「自备 Key」与「无 Key 粘贴链接」两种模式
+- Modrinth 完整支持；**CurseForge 不填 Key 也能用**（走社区镜像 MCIM：搜索 / 详情 / 文件 / 下载都可用），填了 Key 则走官方接口
+- **整合包一键建实例**：整合包不需要选安装目标，点一下就安装并新建实例；也可以直接导入**其他启动器给的整合包压缩包**（CurseForge / Modrinth / MultiMC / HMCL 格式）自动建实例
+- **娱乐页**（侧栏「设置」之后）：每日人品（1–100，按日期固定，第二天刷新）+ 每日一言（可自定义接口地址）
 - **前置依赖检查**：安装前解析必需前置（模组 / 光影包 / 资源包都查），已装的标「已安装」，缺失的可一键一并安装；光影按加载器规则补（Fabric/Quilt/NeoForge → Iris，Forge → Oculus）
 - **中文搜索与实时翻译**（DeepL → uapis.cn → suapi.net 自动主备切换）：输入中文先译英文再检索，结果标题/简介实时回译（7 天本地缓存，可关闭）
 
@@ -182,7 +184,7 @@
 | 微软正版 | 设备码登录。**需要自备 Azure 应用 client id**（重定向类型选「公共客户端」，API 权限勾选 `XboxLive.signin`），填在「账号 → 微软账号」里 |
 | 第三方（Yggdrasil） | 填 API 根地址（如 `https://littleskin.cn/api/yggdrasil`）登录，启动时注入 authlib-injector |
 
-> 项目不内置 CurseForge Key。
+> 项目不内置 CurseForge Key —— 现在也不需要：没有 Key 时会自动走社区镜像（MCIM），只有想用官方接口时才需要自己填。
 >
 > **关于微软登录**：内置公共 client id 为 `fd3e219a-6e6a-4188-8a39-e241f0e63324`（可在「账号」页替换：**留空即用内置，填了就完全不再使用内置**）。设备码 → XBL → XSTS 三段实测通过；Minecraft 服务端会校验 Azure 应用是否通过 **AppID 审批**（[申请页](https://help.minecraft.net/hc/en-us/articles/16254801392141)），未审批的应用在 `login_with_xbox` 返回 `403 Invalid app registration`。审批通过后无需改代码。
 >
@@ -267,7 +269,7 @@ node scripts/export-source.mjs       # 导出 源代码/ 快照
 ## 已知限制
 
 - 仅 Windows x64；未做代码签名，首次运行可能有 SmartScreen 提示（见 [docs/AV-FALSE-POSITIVE.md](docs/AV-FALSE-POSITIVE.md)）
-- 无 Key 模式的 CurseForge 只能按链接/ID 精确取项目，且没有哈希校验
+- 无 Key 模式的 CurseForge 走社区镜像，功能完整（搜索/详情/文件/下载与哈希校验都有）；镜像是社区服务，没有 SLA，失败时会给可读提示
 - 微软账号需自行完成 AppID 审批才能登录正版服
 - 切换「版本隔离」不会自动迁移已有模组目录
 - 单文件便携版首次启动需要解压，比安装版慢；追求最快启动请用安装版或 zip

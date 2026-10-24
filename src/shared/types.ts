@@ -91,6 +91,8 @@ export interface Settings {
   backgroundSource: "local" | "api" | "wallpaperEngine";
   /** 随机图 API 地址（返回图片本身，或返回含图片地址的 JSON）；空串表示未配置。 */
   backgroundApiUrl: string;
+  /** 娱乐页「每日一言」的接口地址；空串表示用内置默认（uapis.cn 的 saying 接口）。 */
+  sayingApiUrl: string;
   /** 背景总开关：关闭后任何来源都不渲染（API 也不会发请求）。 */
   backgroundEnabled: boolean;
   /** 三个来源各自的启用开关（关闭后即使 backgroundSource 指向它也不渲染）。 */

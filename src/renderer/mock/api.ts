@@ -762,6 +762,21 @@ export function createMockApi(): NaiwaApi {
         };
       },
     },
+    fun: {
+      // 娱乐页「每日一言」：浏览器预览没有主进程，也不该绕过 CSP 直连，
+      // 这里按「设置里的地址 > 内置默认」回一段样例，并把解析出的地址记进调用日志
+      // （自检据此断言设置页里填的地址在下次请求时真的生效）。
+      saying: async (url?: string) => {
+        const custom = (url ?? "").trim();
+        const target = custom || settings.sayingApiUrl.trim() || "https://uapis.cn/api/v1/saying";
+        trace("fun.saying", { url: target, custom });
+        await sleep(240);
+        // 自检钩子：globalThis.__mockFail.fun = true 时模拟网络失败（界面走兜底文案 + 可读提示）
+        if (mockFail("fun")) return { text: "", raw: "", url: target, error: "网络错误：预览模式的失败桩（__mockFail.fun）" };
+        const payload = { text: "预览模式的一句话：愿你挖到的每一块石头后面都有钻石。" };
+        return { text: payload.text, raw: JSON.stringify(payload), url: target };
+      },
+    },
     app: {
       info: async () => {
         await sleep(160);
@@ -1894,6 +1909,66 @@ export function createMockApi(): NaiwaApi {
         return {
           fileName: next.fileName,
           path: `${MOCK_GAME_ROOT}\\instances\\${instance.id}\\${DIR_BY_KIND[kind]}\\${next.fileName}`,
+        };
+      },
+    },
+
+
+    modpacks: {
+      inspectLocal: async (zipPath?: string) => {
+        trace("modpacks.inspectLocal", { zipPath: zipPath ?? null });
+        await sleep(260);
+        if (mockImportCancelled()) return { canceled: true, zipPath: null, info: null };
+        const path = zipPath ?? `${MOCK_ROOT}\\downloads\\All the Mods 10汉化版.zip`;
+        // 预览固定给一份 CurseForge 形态的元信息：真实链路按 zip 中央目录识别。
+        return {
+          canceled: false,
+          zipPath: path,
+          info: {
+            format: "curseforge" as const,
+            name: "All the Mods 10汉化版",
+            version: "1.0.0",
+            mcVersion: "1.21.1",
+            loader: "neoforge" as const,
+            loaderVersion: "21.1.133",
+            fileCount: 495,
+            overridesDir: "overrides",
+            sizeBytes: 255_194_044,
+            installable: true,
+          },
+        };
+      },
+      installLocal: async (zipPath: string, instanceName?: string) => {
+        trace("modpacks.installLocal", { zipPath, instanceName: instanceName ?? null });
+        if ((globalThis as { __naiwaMockFailModpack?: boolean }).__naiwaMockFailModpack) {
+          await sleep(240);
+          throw new Error("模拟安装失败：磁盘空间不足");
+        }
+        await simulateTask("mod", "安装整合包 All the Mods 10汉化版", "下载整合包文件", 96_000_000, 2600, 24);
+        const name = (instanceName ?? "").trim() || "All the Mods 10汉化版";
+        const created: InstanceMeta = {
+          id: `mock-zip-${Date.now().toString(36)}`,
+          name,
+          mcVersion: "1.21.1",
+          loader: "neoforge",
+          loaderVersion: "21.1.133",
+          versionId: "1.21.1-neoforge-21.1.133",
+          memoryMb: 6144,
+          extraJvmArgs: "",
+          createdAt: Date.now(),
+        };
+        instances = [created, ...instances];
+        await sleep(180);
+        return {
+          instanceId: created.id,
+          name: created.name,
+          mcVersion: created.mcVersion,
+          loader: created.loader,
+          loaderVersion: created.loaderVersion,
+          format: "curseforge" as const,
+          downloaded: 495,
+          failed: [],
+          overridesExtracted: 214,
         };
       },
     },

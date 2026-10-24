@@ -3,7 +3,7 @@ import { useApp, type PageId } from "../lib/store";
 import { useTasks } from "../lib/tasks";
 import { isMockApi } from "../lib/api";
 import { useT } from "../lib/i18n";
-import { IconDownload, IconInfo, IconInstances, IconJava, IconList, IconMods, IconPalette, IconRocket, IconSettings, IconSkin, IconSliders, IconUser, IconWifi, IconZap } from "./icons";
+import { IconDownload, IconInfo, IconInstances, IconJava, IconList, IconMessage, IconMods, IconPalette, IconRocket, IconSettings, IconSkin, IconSliders, IconUser, IconWifi, IconZap } from "./icons";
 
 interface NavItem {
   id: PageId;
@@ -27,6 +27,8 @@ const NAV: NavItem[] = [
   { id: "other", labelKey: "nav.other", Icon: IconSliders },
   { id: "about", labelKey: "nav.about", Icon: IconInfo },
   { id: "settings", labelKey: "nav.settings", Icon: IconSettings },
+  // 娱乐页固定在设置后面（0.4.5 C）：人品与一言都是乐子，别挡在正经入口前面
+  { id: "fun", labelKey: "nav.fun", Icon: IconMessage },
 ];
 
 export function Sidebar() {
@@ -43,6 +45,7 @@ export function Sidebar() {
             type="button"
             className={`nav-item ${page === item.id ? "active" : ""}`}
             aria-current={page === item.id ? "page" : undefined}
+            data-nav={item.id}
             onClick={() => navigate(item.id)}
           >
             <span className="nav-icon">

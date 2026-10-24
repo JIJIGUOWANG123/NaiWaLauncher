@@ -13,6 +13,11 @@ import brandQq from "../assets/brand/qq.png";
 import brandModrinth from "../assets/brand/modrinth.png";
 import brandCurseforge from "../assets/brand/curseforge.png";
 import brandMinecraft from "../assets/brand/minecraft.png";
+import brandMolaunch from "../assets/brand/molaunch.png";
+import brandXmcl from "../assets/brand/xmcl.png";
+import brandAxlmc from "../assets/brand/axlmc.png";
+import brandOaoi from "../assets/brand/oaoi.png";
+import brandBakaxl from "../assets/brand/bakaxl.png";
 import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
@@ -90,6 +95,12 @@ const MCMOD_URL = "https://www.mcmod.cn/";
 const MCBBS_URL = "https://www.mcbbs.co/";
 /** 游戏官网（关于页「最新新闻」也从这个站抓）。 */
 const MINECRAFT_URL = "https://www.minecraft.net/zh-hans";
+/** 同类启动器官网（0.4.5 新增的五个致谢条目，图标取各自站点的 ico）。 */
+const MOLAUNCH_URL = "https://molaunch.moiu.cn/";
+const XMCL_URL = "https://xmcl.app/zh/";
+const AXLMC_URL = "https://axlmc.org/";
+const OAOI_URL = "https://mc.oaoi.cn/";
+const BAKAXL_URL = "https://www.bakaxl.com/";
 
 /** 致谢卡片：image 走本地 png（品牌 logo / 头像），Icon 走组件库里的实心图标。 */
 type ThanksEntry = {
@@ -121,6 +132,12 @@ const THANKS: ThanksEntry[] = [
   { key: "steam302", titleKey: "about.link.steam302", hintKey: "about.link.steam302Hint", image: brandDogfight, url: RECOMMEND_URL },
   { key: "sakura", titleKey: "pages.about.team.sakura", hintKey: "pages.about.role.net", image: avatarSakura, url: SAKURA_FRP_URL },
   { key: "terracotta", titleKey: "pages.about.team.terracotta", hintKey: "pages.about.thanks.terracottaHint", Icon: IconGithub, url: TERRACOTTA_URL },
+  // 0.4.5：五个同类启动器，副标题统一「同类启动器」（三语见 i18n-extra.ts）。
+  { key: "molaunch", titleKey: "pages.about.thanks.molaunch", hintKey: "pages.about.thanks.launcherHint", image: brandMolaunch, url: MOLAUNCH_URL },
+  { key: "xmcl", titleKey: "pages.about.thanks.xmcl", hintKey: "pages.about.thanks.launcherHint", image: brandXmcl, url: XMCL_URL },
+  { key: "axlmc", titleKey: "pages.about.thanks.axlmc", hintKey: "pages.about.thanks.launcherHint", image: brandAxlmc, url: AXLMC_URL },
+  { key: "oaoi", titleKey: "pages.about.thanks.oaoi", hintKey: "pages.about.thanks.launcherHint", image: brandOaoi, url: OAOI_URL },
+  { key: "bakaxl", titleKey: "pages.about.thanks.bakaxl", hintKey: "pages.about.thanks.launcherHint", image: brandBakaxl, url: BAKAXL_URL },
 ];
 
 
@@ -397,87 +414,8 @@ export function AboutPage() {
         })}
       </div>
 
-      <section className="panel">
-        <div className="panel-head">
-          <h2 className="panel-title">{tr("about.linksTitle")}</h2>
-          <span className="panel-count">{tr("about.linksCount", { count: THANKS.length })}</span>
-        </div>
-        <ul className="about-thanks" data-about-thanks>
-          {THANKS.map((entry) => {
-            const Icon = entry.Icon;
-            const label = tr(entry.titleKey);
-            const hint = tr(entry.hintKey, { number: QQ_GROUP_NO });
-            const openLabel = tr("pages.about.thanksOpen", { label, hint });
-            return (
-              <li className="about-team-cell" key={entry.key}>
-                <button
-                  type="button"
-                  className="about-member about-thanks-card"
-                  data-about-link
-                  data-about-thanks-item={entry.key}
-                  data-about-thanks-url={entry.url}
-                  data-about-thanks-kind={entry.image ? "image" : "icon"}
-                  title={openLabel}
-                  aria-label={openLabel}
-                  onClick={() => void open(entry.url, label)}
-                >
-                  <span className="about-avatar" aria-hidden="true">
-                    {entry.image ? (
-                      <img src={entry.image} alt="" loading="lazy" />
-                    ) : Icon ? (
-                      <Icon size={22} />
-                    ) : (
-                      label.slice(0, 1)
-                    )}
-                  </span>
-                  <span className="about-member-text">
-                    <strong>{label}</strong>
-                    {hint ? <small>{hint}</small> : null}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
       <div className="about-columns">
-        {/* 核心团队在上、更新日志在下（原来是左右并排） */}
-        <section className="panel">
-          <div className="panel-head">
-            <h2 className="panel-title">{tr("about.teamTitle")}</h2>
-            <span className="panel-count">{tr("pages.about.teamHint")}</span>
-          </div>
-          <ul className="about-team" data-about-team>
-            {TEAM.map((member) => {
-              const label = member.nameKey ? tr(member.nameKey) : member.name;
-              const role = tr(member.roleKey);
-              const openLabel = tr("pages.about.teamOpen", { label, role });
-              return (
-                <li className="about-team-cell" key={member.name}>
-                  <button
-                    type="button"
-                    className="about-member"
-                    data-about-member
-                    data-about-url={member.url}
-                    title={openLabel}
-                    aria-label={openLabel}
-                    onClick={() => void open(member.url, label)}
-                  >
-                    <span className="about-avatar" aria-hidden="true">
-                      {member.avatar ? <img src={member.avatar} alt="" loading="lazy" /> : member.initial}
-                    </span>
-                    <span className="about-member-text">
-                      <strong>{label}</strong>
-                      <small>{role}</small>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-
+        {/* 0.4.5 板块顺序：更新日志在核心团队之前 */}
         <section className="panel">
           <div className="panel-head">
             <h2 className="panel-title">
@@ -528,7 +466,86 @@ export function AboutPage() {
           ))}
         </section>
 
+        {/* 核心团队 */}
+        <section className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">{tr("about.teamTitle")}</h2>
+            <span className="panel-count">{tr("pages.about.teamHint")}</span>
+          </div>
+          <ul className="about-team" data-about-team>
+            {TEAM.map((member) => {
+              const label = member.nameKey ? tr(member.nameKey) : member.name;
+              const role = tr(member.roleKey);
+              const openLabel = tr("pages.about.teamOpen", { label, role });
+              return (
+                <li className="about-team-cell" key={member.name}>
+                  <button
+                    type="button"
+                    className="about-member"
+                    data-about-member
+                    data-about-url={member.url}
+                    title={openLabel}
+                    aria-label={openLabel}
+                    onClick={() => void open(member.url, label)}
+                  >
+                    <span className="about-avatar" aria-hidden="true">
+                      {member.avatar ? <img src={member.avatar} alt="" loading="lazy" /> : member.initial}
+                    </span>
+                    <span className="about-member-text">
+                      <strong>{label}</strong>
+                      <small>{role}</small>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       </div>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2 className="panel-title">{tr("about.linksTitle")}</h2>
+          <span className="panel-count">{tr("about.linksCount", { count: THANKS.length })}</span>
+        </div>
+        <ul className="about-thanks" data-about-thanks>
+          {THANKS.map((entry) => {
+            const Icon = entry.Icon;
+            const label = tr(entry.titleKey);
+            const hint = tr(entry.hintKey, { number: QQ_GROUP_NO });
+            const openLabel = tr("pages.about.thanksOpen", { label, hint });
+            return (
+              <li className="about-team-cell" key={entry.key}>
+                <button
+                  type="button"
+                  className="about-member about-thanks-card"
+                  data-about-link
+                  data-about-thanks-item={entry.key}
+                  data-about-thanks-url={entry.url}
+                  data-about-thanks-kind={entry.image ? "image" : "icon"}
+                  title={openLabel}
+                  aria-label={openLabel}
+                  onClick={() => void open(entry.url, label)}
+                >
+                  <span className="about-avatar" aria-hidden="true">
+                    {entry.image ? (
+                      <img src={entry.image} alt="" loading="lazy" />
+                    ) : Icon ? (
+                      <Icon size={22} />
+                    ) : (
+                      label.slice(0, 1)
+                    )}
+                  </span>
+                  <span className="about-member-text">
+                    <strong>{label}</strong>
+                    {hint ? <small>{hint}</small> : null}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
       <p className="about-foot" data-about-foot>
         {tr("about.footer", { version })}

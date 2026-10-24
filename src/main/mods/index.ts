@@ -193,7 +193,7 @@ async function searchEverySource(
       label: sourceLabels().modrinth,
       run: () => modrinthProvider.search({ ...shared, provider: "modrinth", query: queryEn }),
     });
-    // 无 Key 的 CurseForge 只能按 id/slug 精确解析，且它的搜索接口只覆盖模组与整合包
+    // 有 Key 走官方、无 Key 走 MCIM 镜像，两种都能搜索；它的搜索端点只覆盖模组与整合包
     if (kind === "mod" && curseforgeSearchAvailable()) {
       jobs.push({
         label: sourceLabels().curseforge,
@@ -248,7 +248,7 @@ const RESOLUTION_OPTIONS = ["16x", "32x", "48x", "64x", "128x", "256x", "512x"];
 
 /**
  * 分类列表：多来源时合并去重（同 id 保留麦块的 count 与 Modrinth 的图标）。
- * CurseForge 的分类 id 体系与 Modrinth 不通用、且要 Key，这里不参与。
+ * CurseForge 的分类 id 体系与 Modrinth/麦块不通用，混进同一份筛选项会发出错误的 categoryId，这里不参与。
  */
 export async function listCategories(
   kind: ModContentKind,

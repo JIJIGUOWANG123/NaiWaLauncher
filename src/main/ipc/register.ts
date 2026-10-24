@@ -1,9 +1,9 @@
-import { app, BrowserWindow, clipboard, ipcMain, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
 import { join, relative, resolve } from "node:path";
 import { access, mkdir, readdir } from "node:fs/promises";
 import { IPC } from "../../shared/ipc";
 import type {
-  CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest, TeraHostOptions, TeraStatus,
+  CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModpackZipInspectResult, ModpackZipInstallResult, ModSearchRequest, TeraHostOptions, TeraStatus,
   MojangActionResult, MojangCapeEntry, MojangCapeRequest, MojangProfile, MojangSkinUploadRequest,
 } from "../../shared/ipc";
 import type { Account, ApiBackground, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledJava, InstalledModInfo, LanAddress, ChangelogSection, JavaRelease, JavaSourceId, JavaSourceProbe, GithubAcceleratorProbe, WallpaperEntry, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
@@ -35,9 +35,10 @@ import { installLoader, listLoaderVersions } from "../loaders/index";
 import { installJava, listInstalledJava, listJavaReleases, listJavaSources } from "../java/index";
 import { resolveJavaHome, uninstallJava } from "../java/uninstall";
 import { githubDownloadDir, probeAccelerators, startGithubDownload } from "../net/github";
-import type { GithubDownloadRequest, LaunchDiagnosisExport, NewsItem } from "../../shared/ipc";
+import type { FunSayingResult, GithubDownloadRequest, LaunchDiagnosisExport, NewsItem } from "../../shared/ipc";
 import { contentDirForInstance } from "../mods/install";
 import { listMapEntries } from "../mods/minekuai";
+import { inspectModpackZip, installModpackZip } from "../modpacks/localZip";
 import { checkUpdates, getModDependencies, getModDetail, installMod, installed, listInstalledContent, listInstalledMods, installModpack, listCategories, listFilterOptions, listModFiles, remove as removeMod, searchMods, update as updateMod } from "../mods/index";
 import {
   cancel as cancelDownloadJob, clearFinished as clearFinishedDownloads, hintNextJob, list as listDownloadJobs,
@@ -62,10 +63,86 @@ import {
   installServerContent, listServerContent, removeServerContent, serverSupports,
 } from "../servers/content";
 import { mt } from "../core/i18n";
+import { logger } from "../core/logger";
+import { systemFetch } from "../core/netfetch";
 
 const handle = <T>(channel: string, fn: (...args: any[]) => Promise<T> | T): void => {
   ipcMain.handle(channel, async (_event, ...args: any[]) => fn(...args));
 };
+
+const funLog = logger("fun");
+
+/** 娱乐页「每日一言」的内置默认接口：设置里 sayingApiUrl 留空时用它。 */
+const SAYING_DEFAULT_API = "https://uapis.cn/api/v1/saying";
+/** 一言是锦上添花：网络卡住时宁可早点回兜底文案，也不要让界面一直转圈。 */
+const SAYING_TIMEOUT_MS = 8_000;
+/** 原文只留这么长：够看懂，也不会把整页 HTML 塞进 IPC。 */
+const SAYING_RAW_LIMIT = 2_000;
+/** 依次尝试的文字字段：越常见的排越前，data.text 这种一层嵌套也在里面。 */
+const SAYING_TEXT_PATHS: string[][] = [
+  ["text"], ["saying"], ["hitokoto"], ["content"], ["data", "text"], ["data"], ["msg"],
+];
+
+/** 从接口返回的 JSON 里挑一句文字：按 SAYING_TEXT_PATHS 顺序取第一个非空字符串。 */
+function pickSayingText(json: unknown): string | null {
+  for (const path of SAYING_TEXT_PATHS) {
+    let value: unknown = json;
+    for (const key of path) {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        value = undefined;
+        break;
+      }
+      value = (value as Record<string, unknown>)[key];
+    }
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+/**
+ * 拉一句「每日一言」：显式地址 > 设置里的 sayingApiUrl > 内置默认。
+ * 所有失败都折成 FunSayingResult.error（界面显示兜底文案 + 这行提示），绝不抛给渲染层。
+ */
+async function fetchSaying(explicit?: string): Promise<FunSayingResult> {
+  const target = (explicit ?? "").trim() || getSettings().sayingApiUrl.trim() || SAYING_DEFAULT_API;
+  if (!/^https?:\/\//i.test(target)) {
+    return { text: "", raw: "", url: target, error: mt("fun.saying.badUrl", { url: target }) };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SAYING_TIMEOUT_MS);
+  funLog.info(`请求每日一言：${target}`);
+  try {
+    const res = await systemFetch(target, {
+      signal: controller.signal,
+      headers: { accept: "application/json, text/plain, */*" },
+      redirect: "follow",
+    });
+    if (!res.ok) return { text: "", raw: "", url: target, error: mt("fun.saying.http", { status: res.status }) };
+    const raw = await res.text();
+    const clipped = raw.slice(0, SAYING_RAW_LIMIT);
+    let parsed: unknown = null;
+    let isJson = true;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      isJson = false;
+    }
+    const picked = isJson ? pickSayingText(parsed) : null;
+    if (picked) return { text: picked, raw: clipped, url: target };
+    // JSON 里没有常见字段、或根本不是 JSON：退回原文前 200 字，并说明为什么
+    const fallbackText = raw.trim().slice(0, 200);
+    if (fallbackText) {
+      return { text: fallbackText, raw: clipped, url: target, error: isJson ? mt("fun.saying.noTextField") : mt("fun.saying.notJson") };
+    }
+    return { text: "", raw: clipped, url: target, error: mt("fun.saying.empty") };
+  } catch (err) {
+    if (controller.signal.aborted) return { text: "", raw: "", url: target, error: mt("fun.saying.timeout", { ms: SAYING_TIMEOUT_MS }) };
+    const message = err instanceof Error ? err.message : String(err);
+    return { text: "", raw: "", url: target, error: mt("fun.saying.network", { error: message.slice(0, 120) }) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** 背景除了静态图还支持视频（渲染层按扩展名决定用 img 还是 video；music/icons 仍只认图片/音频）。 */
 const BACKGROUND_EXT = /.(png|jpe?g|webp|gif|bmp|mp4|webm|ogv)$/i;
@@ -162,6 +239,8 @@ export function registerIpc(): void {
   handle<ChangelogSection[]>(IPC.appChangelog, (limit?: number) => getChangelog(limit));
   // 关于页「最新新闻」：主进程抓 minecraft.net 最新一篇并译成中文；抓不到返回 null（界面整块不显示）
   handle<NewsItem | null>(IPC.newsLatest, () => getLatestNews());
+  // 娱乐页「每日一言」：渲染层 CSP 只允许 self，跨域请求一律由主进程代发
+  handle<FunSayingResult>(IPC.funSaying, (url?: string) => fetchSaying(typeof url === "string" ? url : undefined));
   handle<void>(IPC.appReveal, (target: string) => {
     if (!target) throw new Error(mt("core.path.empty"));
     shell.showItemInFolder(resolve(target));
@@ -354,6 +433,23 @@ export function registerIpc(): void {
   handle(IPC.modsSearch, (req: ModSearchRequest) => searchMods(req));
   handle<{ instanceId: string; name: string }>(IPC.modsInstallModpack, (provider: ModProviderId, projectId: string, fileId?: string, instanceName?: string) =>
     runCancellable((signal) => installModpack(provider, projectId, fileId, instanceName, signal)),
+  );
+  // 第三方启动器给的整合包压缩包：先识别（不传路径就弹文件框）→ 用户确认 → 完整安装
+  handle<ModpackZipInspectResult>(IPC.modpacksInspectLocal, async (zipPath?: string) => {
+    let path = typeof zipPath === "string" ? zipPath.trim() : "";
+    if (!path) {
+      const picked = await dialog.showOpenDialog({
+        title: mt("modpack.zip.dialogPick"),
+        properties: ["openFile"],
+        filters: [{ name: mt("modpack.zip.dialogFilter"), extensions: ["zip"] }],
+      });
+      if (picked.canceled || picked.filePaths.length === 0) return { canceled: true, zipPath: null, info: null };
+      path = picked.filePaths[0];
+    }
+    return { canceled: false, zipPath: path, info: inspectModpackZip(path) };
+  });
+  handle<ModpackZipInstallResult>(IPC.modpacksInstallLocal, (zipPath: string, instanceName?: string) =>
+    runCancellable((signal) => installModpackZip(zipPath, { ...(instanceName?.trim() ? { instanceName } : {}), signal })),
   );
   handle<ModCategory[]>(IPC.modsCategories, (kind: ModContentKind, source: ModSourceFilter) => listCategories(kind, source));
   handle<ModFilterOptions>(IPC.modsFilterOptions, (kind: ModContentKind) => listFilterOptions(kind));

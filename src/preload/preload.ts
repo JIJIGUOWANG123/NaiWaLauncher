@@ -26,6 +26,9 @@ const api: NaiwaApi = {
   news: {
     latest: () => invoke(IPC.newsLatest),
   },
+  fun: {
+    saying: (url) => invoke(IPC.funSaying, url),
+  },
   settings: {
     get: () => invoke(IPC.settingsGet),
     update: (patch) => invoke(IPC.settingsUpdate, patch),
@@ -136,6 +139,10 @@ const api: NaiwaApi = {
     remove: (instanceId, fileName, kind) => invoke(IPC.modsRemove, instanceId, fileName, kind),
     update: (instanceId, fileName, kind) => invoke(IPC.modsUpdate, instanceId, fileName, kind),
     installedContent: (instanceId) => invoke(IPC.modsInstalledContent, instanceId),
+  },
+  modpacks: {
+    inspectLocal: (zipPath) => invoke(IPC.modpacksInspectLocal, zipPath),
+    installLocal: (zipPath, instanceName) => invoke(IPC.modpacksInstallLocal, zipPath, instanceName),
   },
   downloads: {
     list: () => invoke(IPC.downloadsList),

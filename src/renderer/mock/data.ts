@@ -38,6 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showSplash: true,
   backgroundSource: "local",
   backgroundApiUrl: "",
+  sayingApiUrl: "",
   githubAccelerator: "auto",
   githubDownloadDir: "",
   backgroundEnabled: true,

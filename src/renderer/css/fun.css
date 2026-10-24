@@ -1,0 +1,86 @@
+/* 娱乐页（0.4.5 C）：每日人品数字卡 + 每日一言卡 */
+/* 由 css/pages.css 顶部 @import 引入（main.tsx 的 css 列表不动，避免多人并行改同一处） */
+
+.fun-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.fun-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fun-number {
+  font-size: 62px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -1.5px;
+  background: var(--title-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.fun-feedback {
+  font-size: 14.5px;
+  color: var(--text-strong);
+}
+
+.fun-luck {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.fun-empty {
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+.fun-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  word-break: break-all;
+}
+
+.fun-error {
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+.fun-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fun-saying-draw {
+  display: block;
+  width: 100%;
+  min-height: 74px;
+  padding: 15px 17px;
+  border: 1px dashed var(--accent-tint);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-size: 15px;
+  line-height: 1.6;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.fun-saying-draw:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.fun-saying-draw:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}

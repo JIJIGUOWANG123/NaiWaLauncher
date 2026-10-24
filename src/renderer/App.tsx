@@ -19,6 +19,7 @@ import { LaunchSettingsPage } from "./pages/LaunchSettingsPage";
 import { OtherSettingsPage } from "./pages/OtherSettingsPage";
 import { AboutPage } from "./pages/AboutPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { FunPage } from "./pages/FunPage";
 import { api } from "./lib/api";
 import { iconSrc } from "./lib/appIcon";
 import { backgroundUrl, isVideoFile, mediaUrl, musicUrl } from "./lib/media";
@@ -449,6 +450,7 @@ function Shell() {
           {page === "other" ? <OtherSettingsPage /> : null}
           {page === "about" ? <AboutPage /> : null}
           {page === "settings" ? <SettingsPage /> : null}
+          {page === "fun" ? <FunPage /> : null}
         </main>
       </div>
 

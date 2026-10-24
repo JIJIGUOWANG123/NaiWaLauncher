@@ -25,6 +25,8 @@ export const IPC = {
   appChangelog: "app:changelog",
   /** 关于页「最新新闻」：主进程抓 minecraft.net 最新一篇（失败返回 null）。 */
   newsLatest: "news:latest",
+  /** 娱乐页「每日一言」：渲染层 CSP 只允许 self，跨域请求必须由主进程代发。 */
+  funSaying: "fun:saying",
   downloadsList: "downloads:list",
   downloadsResume: "downloads:resume",
   downloadsCancel: "downloads:cancel",
@@ -133,6 +135,9 @@ export const IPC = {
   modsInstallModpack: "mods:installModpack",
   modsCategories: "mods:categories",
   modsFilterOptions: "mods:filterOptions",
+  // 第三方启动器给的整合包压缩包（.zip）：先识别再看，确认后完整安装
+  modpacksInspectLocal: "modpacks:inspectLocal",
+  modpacksInstallLocal: "modpacks:installLocal",
   skinsLocalList: "skins:localList",
   skinsLocalSelect: "skins:localSelect",
   skinsLocalImport: "skins:localImport",
@@ -281,6 +286,57 @@ export interface GithubDownloadRequest {
   fileName?: string;
 }
 
+/** 整合包压缩包格式：前四种能识别，识别不出来就是 unsupported（带可读原因，不硬猜）。 */
+export type ModpackZipFormat = "curseforge" | "modrinth" | "multimc" | "hmcl" | "unsupported";
+
+/**
+ * 压缩包识别结果：只读 zip 中央目录得出的元信息，不解压整包。
+ * format 为 unsupported 或 installable 为 false 时 reason 一定有内容。
+ */
+export interface ModpackZipInfo {
+  format: ModpackZipFormat;
+  /** 整合包名（CurseForge 的 manifest.name / Modrinth 的 name）；识别不出来时退回压缩包文件名。 */
+  name: string;
+  /** 整合包版本号（manifest.version / versionId），可能是空串。 */
+  version: string;
+  mcVersion: string;
+  loader: LoaderKind;
+  loaderVersion?: string;
+  /** 压缩包声明的文件条目数（CurseForge files[]，Modrinth files[]；其它格式为 0）。 */
+  fileCount: number;
+  /** overrides 目录前缀（不含斜杠）；没有覆盖目录时为 null。 */
+  overridesDir: string | null;
+  /** 压缩包自身的字节数。 */
+  sizeBytes: number;
+  /** 能否走安装流程（MultiMC/HMCL 只识别，暂不安装）。 */
+  installable: boolean;
+  /** 识别失败或装不了的可读原因。 */
+  reason?: string;
+}
+
+/** 选包 + 识别的一步结果：用户在文件框里取消时 canceled 为 true，info 为 null。 */
+export interface ModpackZipInspectResult {
+  canceled: boolean;
+  zipPath: string | null;
+  info: ModpackZipInfo | null;
+}
+
+/** 压缩包安装结果：与在线整合包安装同形，另带识别出的格式。 */
+export interface ModpackZipInstallResult {
+  instanceId: string;
+  name: string;
+  mcVersion: string;
+  loader: LoaderKind;
+  loaderVersion?: string;
+  format: ModpackZipFormat;
+  /** 真正落盘成功的文件数。 */
+  downloaded: number;
+  /** 失败条目（含原因），安装不因单个失败整体中止。 */
+  failed: { path: string; reason: string }[];
+  /** overrides 解压出来的文件数（目录不计）。 */
+  overridesExtracted: number;
+}
+
 export interface ModInstallResult {
   fileName: string;
   path: string;
@@ -416,6 +472,21 @@ export interface NewsItem {
   publishedAt?: string;
 }
 
+/**
+ * 娱乐页「每日一言」的返回（fun:saying）。
+ * 请求与解析都在主进程做：渲染层只拿最终要显示的文字。
+ */
+export interface FunSayingResult {
+  /** 要显示的文字：JSON 里的文字字段，取不到就是原文前 200 字，彻底失败时为空串。 */
+  text: string;
+  /** 实际请求的地址（自定义 > 设置 > 内置默认），界面用它显示「接口：…」。 */
+  url: string;
+  /** 服务端原文（截断），自检与排错用。 */
+  raw: string;
+  /** 失败/降级的可读原因；正常取到文字时没有这个字段。 */
+  error?: string;
+}
+
 /** The surface exposed on window.naiwa by the preload script. */
 /** 官方档案里的一张皮肤：state 为 ACTIVE 的就是当前启用那张。 */
 export interface MojangSkinEntry {
@@ -505,6 +576,11 @@ export interface NaiwaApi {
   /** 关于页「最新新闻」：离线或抓取失败时返回 null（界面整块不显示）。 */
   news: {
     latest(): Promise<NewsItem | null>;
+  };
+  /** 娱乐页「每日一言」：请求由主进程代发（渲染层 CSP 只允许 self）。 */
+  fun: {
+    /** 地址缺省用设置里的 sayingApiUrl，再缺省用内置默认地址；失败也在返回值里，不抛异常。 */
+    saying(url?: string): Promise<FunSayingResult>;
   };
   settings: {
     get(): Promise<Settings>;
@@ -688,6 +764,13 @@ export interface NaiwaApi {
     update(instanceId: string, fileName: string, kind?: ModContentKind): Promise<{ fileName: string; path: string }>;
     /** 实例里已装内容的索引记录（资源页判断重复安装用；文件已被删除的记录不返回）。 */
     installedContent(instanceId: string): Promise<InstalledContentRef[]>;
+  };
+  /** 第三方启动器给的整合包压缩包：先识别（文件框由主进程弹），确认后安装。 */
+  modpacks: {
+    /** 不传 zipPath 时主进程弹文件选择框；只读中央目录，不整包解压。 */
+    inspectLocal(zipPath?: string): Promise<ModpackZipInspectResult>;
+    /** 建实例 → 装加载器 → 下载包内文件 → 解压 overrides；进度进「管理」页。 */
+    installLocal(zipPath: string, instanceName?: string): Promise<ModpackZipInstallResult>;
   };
   /** 服务端插件：装进「开服」里的某个服务端（<root>/servers/<id>/plugins），文件全部由主进程落盘。 */
   plugins: {

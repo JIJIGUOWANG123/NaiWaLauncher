@@ -268,7 +268,7 @@
   padding: 1px 6px;
 }
 
-/* 核心团队在上、更新日志在下：固定单列上下排（窄屏本来也是单列） */
+/* 更新日志在上、核心团队在下：固定单列上下排（窄屏本来也是单列） */
 .about-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
