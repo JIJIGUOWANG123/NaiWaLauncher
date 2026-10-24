@@ -110,6 +110,8 @@ const api: NaiwaApi = {
     sources: () => invoke(IPC.javaSources),
     installed: () => invoke(IPC.javaInstalled),
     install: (major, version, source) => invoke(IPC.javaInstall, major, version, source),
+    uninstall: (path) => invoke(IPC.javaUninstall, path),
+    revealHome: (path) => invoke(IPC.javaReveal, path),
   },
   github: {
     probe: () => invoke(IPC.githubProbe),

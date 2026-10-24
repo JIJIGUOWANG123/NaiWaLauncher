@@ -7,6 +7,7 @@ import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
 import { Field, TextInput } from "../components/Form";
 import { Modal } from "../components/Modal";
+import { OfflineLanNotice } from "../components/OfflineLanNotice";
 import { IconAlert, IconInfo, IconLink, IconRefresh } from "../components/icons";
 
 /** 主进程内部 500ms 轮询 /state，这里 700ms 读一次合并后的快照。 */
@@ -152,9 +153,13 @@ export function NetTeraTab() {
   const isException = state === "exception";
   const exceptionKey = status.exceptionType !== undefined && status.exceptionType >= 0 ? EXCEPTION_SUFFIX[status.exceptionType] : undefined;
   const stateText = tr("pages.netTera." + (STATE_SUFFIX[state] ?? "stateWaiting"));
+  // 房客判定：secondary 表示自己不是房主，guest-* 状态说明正在加入别人的房间。
+  const isGuest = status.secondary || state.startsWith("guest");
 
   return (
     <div className="net-tera" data-tera-tab>
+      <OfflineLanNotice side={isGuest ? "guest" : "host"} />
+
       <p className="net-tera-notice" data-tera-notice>
         <IconInfo size={16} />
         <span>{tr("pages.netTera.notice")}</span>

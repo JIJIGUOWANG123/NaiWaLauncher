@@ -104,6 +104,8 @@ export const IPC = {
   javaSources: "java:sources",
   javaInstalled: "java:installed",
   javaInstall: "java:install",
+  javaUninstall: "java:uninstall",
+  javaReveal: "java:reveal",
 
   githubProbe: "github:probe",
   githubDownload: "github:download",
@@ -472,6 +474,13 @@ export interface NaiwaApi {
     install(major: number, version: string, source?: JavaSourceId): Promise<InstalledJava>;
     /** 三个下载源的探测结果（耗时越低越优先）；「自动」按它挑源。 */
     sources(): Promise<JavaSourceProbe[]>;
+    /**
+     * 卸载启动器自己装的 JDK（path 传 javaw.exe 或 JDK 根目录都行，主进程会解析成根目录）。
+     * 只允许删 <dataRoot>/java 下的目录，系统安装的 JDK 一律拒绝；返回卸载后的已装列表。
+     */
+    uninstall(path: string): Promise<InstalledJava[]>;
+    /** 在资源管理器里打开某个 JDK 的根目录（系统安装的也可以，只读操作）。 */
+    revealHome(path: string): Promise<void>;
   };
   /** GitHub 加速下载：四个节点测速 + 直链下载（进度自动出现在「管理」页）。 */
   github: {

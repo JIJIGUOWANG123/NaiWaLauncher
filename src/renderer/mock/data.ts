@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
   curseforgeApiKey: "",
   modProvider: "modrinth",
   autoSwitchThresholdMs: 800,
+  updateMode: "manual",
   javaAutoDownload: true,
   javaDownloadSource: "auto",
   javaAutoMatch: true,

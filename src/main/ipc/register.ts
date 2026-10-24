@@ -5,7 +5,7 @@ import { IPC } from "../../shared/ipc";
 import type {
   CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest, TeraStatus,
 } from "../../shared/ipc";
-import type { Account, ApiBackground, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, ChangelogSection, JavaRelease, JavaSourceId, JavaSourceProbe, GithubAcceleratorProbe, WallpaperEntry, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
+import type { Account, ApiBackground, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledJava, InstalledModInfo, LanAddress, ChangelogSection, JavaRelease, JavaSourceId, JavaSourceProbe, GithubAcceleratorProbe, WallpaperEntry, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { syncTray } from "../tray";
@@ -30,6 +30,7 @@ import { exportInstance, importInstance } from "../minecraft/share";
 import { exportLaunchDiagnosis, launchInstance } from "../minecraft/launch";
 import { installLoader, listLoaderVersions } from "../loaders/index";
 import { installJava, listInstalledJava, listJavaReleases, listJavaSources } from "../java/index";
+import { resolveJavaHome, uninstallJava } from "../java/uninstall";
 import { githubDownloadDir, probeAccelerators, startGithubDownload } from "../net/github";
 import type { GithubDownloadRequest, LaunchDiagnosisExport } from "../../shared/ipc";
 import { contentDirForInstance } from "../mods/install";
@@ -313,6 +314,14 @@ export function registerIpc(): void {
   handle(IPC.javaInstall, (major: number, version: string, source?: JavaSourceId) => {
     hintNextJob({ kind: "java", detail: `JDK ${major}`, resume: JSON.stringify({ major, version }) });
     return runCancellable((signal) => installJava(major, version, source, signal));
+  });
+  // 卸载托管 JDK：主进程负责「只能在 <dataRoot>/java 之下」的安全守卫，渲染层只传路径
+  handle<InstalledJava[]>(IPC.javaUninstall, (path: string) => uninstallJava(path));
+  // 打开 JDK 根目录（系统安装的也允许，纯只读）：openPath 不套根目录守卫，所以直接 shell.openPath
+  handle<void>(IPC.javaReveal, async (path: string) => {
+    const home = await resolveJavaHome(path);
+    const error = await shell.openPath(home);
+    if (error) throw new Error(error);
   });
 
   // GitHub 加速：测速只读不落盘；下载走 downloads 的记录，进度直接进「管理」页

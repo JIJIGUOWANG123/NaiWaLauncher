@@ -16,8 +16,10 @@ export const BUILTIN_MICROSOFT_CLIENT_ID = "fd3e219a-6e6a-4188-8a39-e241f0e63324
 
 const SOURCE_IDS: DownloadSourceId[] = ["official", "bmclapi", "sjtu", "auto"];
 /** JDK 下载源（顺序即界面顺序）：auto 走测速，其余固定站点。 */
-const JAVA_SOURCES: JavaSourceId[] = ["auto", "bellsoft", "adoptium", "tuna", "zulu", "oracle", "dragonwell"];
+const JAVA_SOURCES: JavaSourceId[] = ["auto", "bellsoft", "adoptium", "tuna", "zulu", "oracle"];
 const CLOSE_ACTIONS: Array<"ask" | "tray" | "quit"> = ["ask", "tray", "quit"];
+/** 更新方式：manual 只手动检查（默认）；auto 打开程序时自动检查。 */
+const UPDATE_MODES: Array<"manual" | "auto"> = ["manual", "auto"];
 /** GitHub 加速节点（auto = 测速挑最快）。 */
 const GITHUB_ACCELERATORS: Array<"auto" | "ghf" | "padao" | "ghfast" | "cnxiaobai"> = ["auto", "ghf", "padao", "ghfast", "cnxiaobai"];
 /** 背景来源：本地文件 / 随机图 API / Steam 壁纸引擎。 */
@@ -50,6 +52,7 @@ export function defaults(): Settings {
     curseforgeApiKey: "",
     modProvider: "modrinth",
     autoSwitchThresholdMs: 1500,
+    updateMode: "manual",
     javaAutoDownload: true,
     javaDownloadSource: "auto",
     javaAutoMatch: true,
@@ -178,6 +181,7 @@ function normalize(raw: unknown, base: Settings): Settings {
     curseforgeApiKey: pickApiKey(src.curseforgeApiKey, base.curseforgeApiKey),
     modProvider: pickEnum(src.modProvider, PROVIDER_IDS, base.modProvider),
     autoSwitchThresholdMs: clampInt(src.autoSwitchThresholdMs, 100, 60_000, base.autoSwitchThresholdMs),
+    updateMode: pickEnum(src.updateMode, UPDATE_MODES, base.updateMode),
     javaAutoDownload: pickBool(src.javaAutoDownload, base.javaAutoDownload),
     javaDownloadSource: pickEnum(src.javaDownloadSource, JAVA_SOURCES, base.javaDownloadSource),
     javaAutoMatch: pickBool(src.javaAutoMatch, base.javaAutoMatch),

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { JavaSourceId, JavaVendorId } from "../../shared/types";
+import type { InstalledJava, JavaSourceId, JavaVendorId } from "../../shared/types";
 import { api } from "../lib/api";
 import { formatBytes } from "../lib/format";
 import { useT } from "../lib/i18n";
@@ -9,9 +9,10 @@ import { useToast } from "../components/Toast";
 import { LtsTag } from "../components/Badges";
 import { Segmented } from "../components/Form";
 import { EmptyState, ErrorState, SkeletonRows } from "../components/State";
+import { ConfirmDialog } from "../components/Modal";
 import { IconCheck, IconDownload, IconJava, IconRefresh } from "../components/icons";
 
-/** 七个下载源：auto 会先测速再挑最快的那个（Oracle JDK 因许可限制不参与 auto）。 */
+/** 六个下载源：auto 会先测速再挑最快的那个（Oracle JDK 因许可限制不参与 auto）。 */
 const SOURCE_TABS: Array<{ value: JavaSourceId; labelKey: string }> = [
   { value: "auto", labelKey: "pages.java.sourceAuto" },
   { value: "bellsoft", labelKey: "pages.java.sourceBellsoft" },
@@ -19,7 +20,6 @@ const SOURCE_TABS: Array<{ value: JavaSourceId; labelKey: string }> = [
   { value: "tuna", labelKey: "pages.java.sourceTuna" },
   { value: "zulu", labelKey: "pages.java.sourceZulu" },
   { value: "oracle", labelKey: "pages.java.sourceOracle" },
-  { value: "dragonwell", labelKey: "pages.java.sourceDragonwell" },
 ];
 
 const SOURCE_LABEL_KEY: Record<JavaSourceId, string> = {
@@ -29,8 +29,18 @@ const SOURCE_LABEL_KEY: Record<JavaSourceId, string> = {
   tuna: "pages.java.sourceTuna",
   zulu: "pages.java.sourceZulu",
   oracle: "pages.java.sourceOracle",
-  dragonwell: "pages.java.sourceDragonwell",
 };
+
+/** 列表里的 path 是 <home>\\bin\\javaw.exe：砍掉最后两段就是 JDK 根目录。 */
+function javaHomeOf(javawPath: string): string {
+  const parts = javawPath.replace(/\\/g, "/").split("/").filter((part) => part !== "");
+  return parts.slice(0, Math.max(1, parts.length - 2)).join("\\");
+}
+
+/** 路径比较：Windows 大小写不敏感。 */
+function normPath(value: string): string {
+  return value.replace(/\\/g, "/").toLowerCase();
+}
 
 /** 已装 JDK 的来源徽标：source 缺失（老记录）显示「未知」。 */
 const VENDOR_KEY: Record<JavaVendorId | "unknown", string> = {
@@ -47,7 +57,7 @@ const VENDOR_KEY: Record<JavaVendorId | "unknown", string> = {
 export function JavaPage() {
   const { push } = useToast();
   const t = useT();
-  const { settings, saveSettings } = useApp();
+  const { settings, saveSettings, info } = useApp();
   // 下载源存在设置里：切一次全局生效，下次进页面还是它。
   const source: JavaSourceId = settings?.javaDownloadSource ?? "auto";
 
@@ -63,6 +73,20 @@ export function JavaPage() {
   const [majorFilter, setMajorFilter] = useState("all");
   const [installingKey, setInstallingKey] = useState<string | null>(null);
   const [switchingSource, setSwitchingSource] = useState(false);
+  /** 待确认的卸载目标（含「有几个实例在用」的提示）与忙碌态。 */
+  const [uninstallTarget, setUninstallTarget] = useState<{ item: InstalledJava; home: string; usedBy: number } | null>(null);
+  const [uninstalling, setUninstalling] = useState(false);
+
+  /**
+   * 托管 JDK = 装在 <root>/NaiWa/java 下（与主进程 getPaths().java 一致）。
+   * 只有它们显示「卸载」；系统安装的 JDK 换成「打开目录」，绝不提供删除入口。
+   */
+  const managedRoot = useMemo(() => normPath(`${info?.rootDir ?? ""}/NaiWa/java`), [info?.rootDir]);
+  const isManaged = (item: InstalledJava): boolean => {
+    if (!info?.rootDir) return false;
+    const home = normPath(javaHomeOf(item.path));
+    return home !== managedRoot && home.startsWith(managedRoot + "/");
+  };
 
   const majors = useMemo(() => {
     const set = new Set<number>((releases.data ?? []).map((item) => item.major));
@@ -101,6 +125,48 @@ export function JavaPage() {
       ? t("pages.java.probeChosen", { parts: joined, label: bestProbe.label })
       : t("pages.java.probeFallback", { parts: joined });
   }, [bestProbe, probes.data]);
+
+  /** 点「卸载」：先数一数有多少实例指定了它，再弹确认。 */
+  const askUninstall = async (item: InstalledJava) => {
+    const home = javaHomeOf(item.path);
+    let usedBy = 0;
+    try {
+      const list = await api.instances.list();
+      const prefix = normPath(home) + "/";
+      usedBy = list.filter((instance) => {
+        const want = normPath(instance.javaPath ?? "");
+        return want !== "" && (want === normPath(home) || want.startsWith(prefix));
+      }).length;
+    } catch {
+      // 数不出来也不阻止卸载：确认框里不显示「被几个实例使用」那一条
+      usedBy = 0;
+    }
+    setUninstallTarget({ item, home, usedBy });
+  };
+
+  const confirmUninstall = async () => {
+    if (!uninstallTarget) return;
+    setUninstalling(true);
+    try {
+      await api.java.uninstall(uninstallTarget.item.path);
+      push(t("pages.java.uninstalledToast", { version: uninstallTarget.item.version }), "success");
+      setUninstallTarget(null);
+      installed.reload();
+    } catch (error: unknown) {
+      // 主进程给的是可读原因（系统 JDK / 被占用 / 其它删除错误）
+      push(errorMessage(error), "error");
+    } finally {
+      setUninstalling(false);
+    }
+  };
+
+  const openJavaDir = async (item: InstalledJava) => {
+    try {
+      await api.java.revealHome(item.path);
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    }
+  };
 
   const changeSource = async (next: JavaSourceId) => {
     if (next === source) return;
@@ -182,6 +248,29 @@ export function JavaPage() {
                   <p className="java-path" title={item.path}>{item.path}</p>
                 </div>
                 <span className="pill pill-done"><IconCheck size={13} />{t("pages.java.ready")}</span>
+                {/* 托管 JDK → 卸载；系统安装的 JDK → 只给「打开目录」，不提供删除入口 */}
+                {isManaged(item) ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    data-action="uninstall-java"
+                    data-java-path={item.path}
+                    onClick={() => void askUninstall(item)}
+                  >
+                    {t("pages.java.uninstall")}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    data-action="open-java-dir"
+                    data-java-path={item.path}
+                    title={t("pages.java.uninstallSystem")}
+                    onClick={() => void openJavaDir(item)}
+                  >
+                    {t("pages.java.openDir")}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -281,6 +370,27 @@ export function JavaPage() {
           </ul>
         ) : null}
       </div>
+
+      <ConfirmDialog
+        open={uninstallTarget !== null}
+        title={uninstallTarget ? t("pages.java.uninstallTitle", { major: String(uninstallTarget.item.major) }) : ""}
+        message={
+          uninstallTarget
+            ? t("pages.java.uninstallMessage", { path: uninstallTarget.home }) +
+              (uninstallTarget.usedBy > 0
+                ? " " + t("pages.java.uninstallUsedBy", { count: String(uninstallTarget.usedBy) })
+                : "")
+            : ""
+        }
+        confirmText={t("pages.java.uninstall")}
+        busyText={t("pages.java.uninstallBusy")}
+        danger
+        busy={uninstalling}
+        onCancel={() => {
+          if (!uninstalling) setUninstallTarget(null);
+        }}
+        onConfirm={() => void confirmUninstall()}
+      />
     </section>
   );
 }

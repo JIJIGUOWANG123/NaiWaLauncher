@@ -61,6 +61,8 @@ export interface Settings {
   modProvider: ModProviderId;
   /** Fall back to the mirror when the official source is slower than this many ms. */
   autoSwitchThresholdMs: number;
+  /** 更新方式：manual = 只手动检查（默认）；auto = 打开程序时自动检查有无新版本。 */
+  updateMode: "manual" | "auto";
   javaAutoDownload: boolean;
   /** JDK 下载源：auto = 自动测速挑最快，其余为固定站点。 */
   javaDownloadSource: JavaSourceId;
@@ -322,7 +324,7 @@ export interface LoaderVersionInfo {
 }
 
 /** JDK 下载源：auto = 自动测速挑最快；其余为具体站点。 */
-export type JavaSourceId = "auto" | "bellsoft" | "adoptium" | "tuna" | "zulu" | "oracle" | "dragonwell";
+export type JavaSourceId = "auto" | "bellsoft" | "adoptium" | "tuna" | "zulu" | "oracle";
 
 /** 具体（非 auto）的 JDK 来源，用来标记发行方与已安装来源。 */
 export type JavaVendorId = "bellsoft" | "adoptium" | "tuna" | "zulu" | "oracle" | "dragonwell" | "system";

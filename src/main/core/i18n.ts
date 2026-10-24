@@ -381,6 +381,12 @@ export const DICT: Record<string, Entry> = {
   "main.alreadyRunningTitle": D("已经有一个在运行", "Already running", "すでに起動しています"),
   "main.alreadyRunningMessage": D("奶娃启动器已经在运行，已为你切回原窗口。", "NaiWa Launcher is already running — switched back to the existing window.", "NaiWa ランチャーはすでに実行中です。既存のウィンドウに切り替えました。"),
   "main.gotIt": D("知道了", "Got it", "OK"),
+  "main.updateAvailableTitle": D("发现新版本", "Update available", "新しいバージョンがあります"),
+  "main.updateAvailableBody": D(
+    "奶娃启动器 {latest}（当前 {current}），到「关于」页可以更新。",
+    "NaiWa Launcher {latest} is available (current {current}); update it on the About page.",
+    "奶娃ランチャー {latest}（現在 {current}）が利用できます。「概要」ページから更新できます。",
+  ),
   "common.cancel": D("取消", "Cancel", "キャンセル"),
   "launch.badWorldName": D("非法存档名「{name}」：不能包含 / \\ : * ? \" < > | 或 .. 等路径成分", "Invalid world name \"{name}\": it cannot contain / \\ : * ? \" < > | or path parts such as ..", "不正なワールド名「{name}」：/ \\ : * ? \" < > | や .. などのパス要素は使用できません"),
   "net.natfrp.banned": D("樱花穿透账号不可用：{title}{reason}", "SakuraFrp account unavailable: {title}{reason}", "SakuraFrp アカウントを利用できません：{title}{reason}"),
@@ -567,6 +573,19 @@ export const DICT: Record<string, Entry> = {
   "core.batchDone": D("批量下载完成：成功 {ok}/{total} 个，失败 {failed} 个（首个：{first} · {error}）", "Batch download finished: {ok}/{total} succeeded, {failed} failed (first: {first} · {error})", "一括ダウンロード完了：成功 {ok}/{total}、失敗 {failed}（最初：{first} · {error}）"),
 
   "java.locate.vendorUnknown": D("未知（系统安装）", "Unknown (system install)", "不明（システムインストール）"),
+  "java.uninstall.missingPath": D("没有指定要卸载的 JDK 路径", "No JDK path was given to uninstall", "アンインストールする JDK のパスが指定されていません"),
+  "java.uninstall.notFound": D("找不到该 JDK 目录：{path}", "The JDK folder was not found: {path}", "JDK のフォルダーが見つかりません：{path}"),
+  "java.uninstall.system": D(
+    "这是系统安装的 JDK，请用系统卸载程序（启动器只管理 {root} 下的 JDK）",
+    "This JDK was installed by the system — use its own uninstaller (the launcher only manages JDKs under {root})",
+    "システムにインストールされた JDK です。付属のアンインストーラーを使用してください（ランチャーは {root} 配下の JDK のみ管理します）",
+  ),
+  "java.uninstall.inUse": D(
+    "该 Java 正在被游戏（或其它进程）使用，请先关闭它再卸载",
+    "This Java is in use by the game or another process — close it first, then uninstall",
+    "この Java はゲームなどが使用中です。終了してからアンインストールしてください",
+  ),
+  "java.uninstall.failed": D("删除 JDK 目录失败：{error}", "Failed to delete the JDK folder: {error}", "JDK フォルダーの削除に失敗しました：{error}"),
   "java.source.tuna": D("清华 TUNA 镜像", "Tsinghua TUNA mirror", "清華 TUNA ミラー"),
 
   "tray.tooltip": D("奶娃启动器 NaiWa Launcher", "NaiWa Launcher", "NaiWa ランチャー"),

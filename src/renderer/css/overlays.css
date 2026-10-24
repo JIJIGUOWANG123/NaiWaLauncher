@@ -334,3 +334,61 @@
 .toast-success { border-color: color-mix(in srgb, var(--ok) 45%, transparent); color: var(--ok); }
 .toast-error { border-color: color-mix(in srgb, var(--danger) 50%, transparent); color: var(--danger); }
 
+/* 淡出：先留在 DOM 里播完动画，ToastProvider 再卸载（300ms） */
+@keyframes toast-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-6px); }
+}
+
+.toast.toast-leaving {
+  animation: toast-out 300ms ease forwards;
+  pointer-events: none;
+}
+
+/* ---------- 右上角浮条（下载完成 / 失败） ---------- */
+
+.toast-stack-tr {
+  left: auto;
+  right: 18px;
+  transform: none;
+  align-items: flex-end;
+}
+
+/* 下载结果浮条：淡入 150ms / 停留约 3.5s（由 ToastProvider 计时）/ 淡出 300ms */
+.toast[data-dl-toast] {
+  border-radius: 12px;
+  animation: dl-toast-in 150ms ease both;
+}
+
+.toast[data-dl-toast].toast-leaving {
+  animation: dl-toast-out 300ms ease forwards;
+  pointer-events: none;
+}
+
+@keyframes dl-toast-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes dl-toast-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-6px); }
+}
+
+/* 尊重「减少动态效果」：去掉位移，只保留同样的淡入淡出 */
+@media (prefers-reduced-motion: reduce) {
+  .toast[data-dl-toast] { animation: dl-toast-fade-in 150ms linear both; }
+  .toast[data-dl-toast].toast-leaving { animation: dl-toast-fade-out 300ms linear forwards; }
+  .toast.toast-leaving { animation: dl-toast-fade-out 300ms linear forwards; }
+}
+
+@keyframes dl-toast-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dl-toast-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+

@@ -331,10 +331,9 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
   "pages.java.autoPicking": D("自动测速挑选中", "Picking the fastest source", "最速の配布元を選定中"),
   "pages.java.fromSource": D("来自 {label}", "From {label}", "{label} から取得"),
   "pages.java.probing": D("正在测速各下载源…", "Measuring download sources…", "各ダウンロード元を計測中…"),
-  // ---- Java 页：Zulu / Oracle / Dragonwell 三个新源 ----
+  // ---- Java 页：Zulu / Oracle 两个新源（vendorDragonwell 只是已装 JDK 的来源徽标） ----
   "pages.java.sourceZulu": D("Azul Zulu", "Azul Zulu", "Azul Zulu"),
   "pages.java.sourceOracle": D("Oracle JDK", "Oracle JDK", "Oracle JDK"),
-  "pages.java.sourceDragonwell": D("阿里巴巴 Dragonwell", "Alibaba Dragonwell", "Alibaba Dragonwell"),
   "pages.java.vendorZulu": D("Azul Zulu", "Azul Zulu", "Azul Zulu"),
   "pages.java.vendorOracle": D("Oracle", "Oracle", "Oracle"),
   "pages.java.vendorDragonwell": D("Dragonwell", "Dragonwell", "Dragonwell"),
@@ -370,6 +369,31 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
     "Java {version} 安装完成",
     "Java {version} installed",
     "Java {version} のインストールが完了しました",
+  ),
+  "pages.java.uninstall": D("卸载", "Uninstall", "アンインストール"),
+  "pages.java.uninstallTitle": D("卸载 Java {major}", "Uninstall Java {major}", "Java {major} をアンインストール"),
+  "pages.java.uninstallMessage": D(
+    "将删除目录 {path}，不可恢复。",
+    "This deletes the folder {path}. It cannot be undone.",
+    "フォルダー {path} を削除します。元に戻せません。",
+  ),
+  "pages.java.uninstallUsedBy": D(
+    "有 {count} 个实例指定了它，卸载后需要重新选择 Java。",
+    "{count} instance(s) point at this JDK — you will need to pick another Java afterwards.",
+    "{count} 個のインスタンスがこの JDK を指定しています。アンインストール後は Java を選び直してください。",
+  ),
+  "pages.java.uninstallBusy": D("正在卸载…", "Uninstalling…", "アンインストール中…"),
+  "pages.java.uninstalledToast": D("已卸载 Java {version}", "Java {version} uninstalled", "Java {version} をアンインストールしました"),
+  "pages.java.uninstallSystem": D(
+    "系统安装的 JDK 不受启动器管理，请用它自带的卸载程序",
+    "System-installed JDKs are not managed by the launcher — use their own uninstaller",
+    "システムにインストールされた JDK はランチャー管理外です。付属のアンインストーラーを使用してください",
+  ),
+  "pages.java.openDir": D("打开目录", "Open folder", "フォルダーを開く"),
+  "pages.java.openDirTitle": D(
+    "打开该 JDK 的根目录",
+    "Open this JDK's root folder",
+    "この JDK のルートフォルダーを開きます",
   ),
 
   // ---- 联机页 ----
@@ -440,6 +464,97 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
     "Not checked yet. Open the world in-game, then press the button above.",
     "まだ確認していません。ゲーム内でワールドを開いてから上のボタンを押してください。",
   ),
+
+  // ---- 联机页：OfflineLAN 提示（三种联机方式共用） ----
+  "pages.offlineLan.noInstanceTitle": D("先选一个实例", "Pick an instance first", "先にインスタンスを選んでください"),
+  "pages.offlineLan.noInstanceBody": D(
+    "离线联机该不该装 OfflineLAN，取决于实例的游戏版本与加载器；选好实例后这里会直接告诉你要不要装。",
+    "Whether you need OfflineLAN depends on the instance's game version and loader — pick one and this line tells you.",
+    "OfflineLAN が必要かどうかはインスタンスのバージョンとローダーで決まります。選ぶとここに表示します。",
+  ),
+  "pages.offlineLan.vanillaTitle": D(
+    "原版实例只能用正版账号联机",
+    "A vanilla instance can only play with a genuine account",
+    "バニラのインスタンスは正規アカウントでのみマルチプレイできます",
+  ),
+  "pages.offlineLan.vanillaBody": D(
+    "原版（Vanilla）没有跳过正版验证的能力：房主点「对局域网开放」后，服务器会校验正版账号，离线账号一连上就被踢。这不是启动器出问题。想让离线账号联机，请新建或改用 Fabric / Forge / NeoForge 实例，并在房主那台电脑上安装 OfflineLAN。",
+    "Vanilla cannot skip the online-mode check: once the host opens the world to LAN, the server verifies genuine accounts and kicks offline ones. Nothing is broken in the launcher. To let offline accounts join, create or switch to a Fabric / Forge / NeoForge instance and install OfflineLAN on the host's computer.",
+    "バニラには正規アカウントの検証を飛ばす機能がありません。ホストが「LAN に公開」するとサーバーが正規アカウントを確認し、オフラインアカウントは接続直後に切断されます。ランチャーの不具合ではありません。オフラインアカウントで遊ぶには Fabric / Forge / NeoForge のインスタンスを作成（または切り替え）、ホスト側の PC に OfflineLAN を入れてください。",
+  ),
+  "pages.offlineLan.missingTitle": D(
+    "服主需要安装 OfflineLAN",
+    "The host needs OfflineLAN installed",
+    "ホストに OfflineLAN が必要です",
+  ),
+  "pages.offlineLan.missingBody": D(
+    "没装 OfflineLAN 时，房主开的世界只认正版账号，离线好友会被挡在门外；装上它，离线账号才进得来。",
+    "Without OfflineLAN the host's world only accepts genuine accounts, so offline friends are locked out. Install it and offline accounts can join.",
+    "OfflineLAN が無いと、ホストのワールドは正規アカウントしか受け付けず、オフラインのフレンドは入れません。導入すればオフラインアカウントでも参加できます。",
+  ),
+  "pages.offlineLan.missingGuestHint": D(
+    "你是房客？这条提示是给房主的——让房主装就行，你这边不用装。",
+    "Joining as a guest? This one is for the host — ask them to install it; you don't need to.",
+    "ゲストとして参加する場合、これはホスト向けの案内です。ホストに入れてもらえばよく、あなた側には不要です。",
+  ),
+  "pages.offlineLan.guestMissingTitle": D(
+    "让房主安装 OfflineLAN",
+    "Ask the host to install OfflineLAN",
+    "ホストに OfflineLAN の導入を依頼してください",
+  ),
+  "pages.offlineLan.guestMissingBody": D(
+    "离线账号能不能进房由房主侧决定：房主装好 OfflineLAN 之后你再进房。",
+    "Whether your offline account can join is decided on the host side: install it there first, then join.",
+    "オフラインアカウントで参加できるかはホスト側で決まります。ホストが OfflineLAN を入れてから参加してください。",
+  ),
+  "pages.offlineLan.guestDoNotInstall": D(
+    "你这边装它不会让房间跳过验证，别白装。",
+    "Installing it on your side won't change the room's verification — don't bother.",
+    "あなた側に入れてもルームの検証は変わりません。導入は不要です。",
+  ),
+  "pages.offlineLan.guestHostHint": D(
+    "让房主确认已装 OfflineLAN，并且和房间版本一致。",
+    "Ask the host to confirm OfflineLAN is installed and matches the room version.",
+    "ホストに、OfflineLAN が導入済みでルームのバージョンと一致しているか確認してもらいましょう。",
+  ),
+  "pages.offlineLan.install": D("一键安装 OfflineLAN", "Install OfflineLAN", "OfflineLAN をワンクリック導入"),
+  "pages.offlineLan.installing": D("安装中…", "Installing…", "導入中…"),
+  "pages.offlineLan.installDone": D(
+    "已安装 OfflineLAN：{file}",
+    "OfflineLAN installed: {file}",
+    "OfflineLAN を導入しました：{file}",
+  ),
+  "pages.offlineLan.installed": D(
+    "已安装 OfflineLAN（房主侧生效）",
+    "OfflineLAN installed (takes effect on the host side)",
+    "OfflineLAN 導入済み（ホスト側で有効）",
+  ),
+  "pages.offlineLan.installedGuest": D(
+    "房主侧应已装好 OfflineLAN，进房前再跟房主确认一次",
+    "The host side should have OfflineLAN — confirm with the host before joining",
+    "ホスト側に OfflineLAN があるはずです。参加前にホストへ確認してください",
+  ),
+  "pages.offlineLan.unsupportedTitle": D(
+    "OfflineLAN 还不支持 MC {version}（{loader}）",
+    "OfflineLAN doesn't support MC {version} ({loader}) yet",
+    "OfflineLAN は MC {version}（{loader}）に未対応です",
+  ),
+  "pages.offlineLan.unsupportedBody": D(
+    "这个模组只发布了部分版本/加载器（目前只有 Fabric）；换一个它覆盖的 MC 版本或加载器，或者改用正版账号联机。",
+    "The mod only ships for some versions/loaders (Fabric only for now); switch to an MC version or loader it covers, or play with a genuine account.",
+    "この MOD は一部のバージョン／ローダーのみ提供されています（現状は Fabric のみ）。対応する MC バージョンかローダーに変えるか、正規アカウントで遊んでください。",
+  ),
+  "pages.offlineLan.unsupportedInstalled": D(
+    "实例里已有 OfflineLAN，但它是给 MC {installedVersion} 装的，和当前实例版本对不上，等于还没装。",
+    "OfflineLAN is present but was built for MC {installedVersion}, which doesn't match this instance.",
+    "OfflineLAN はありますが MC {installedVersion} 向けで、このインスタンスと一致しません。",
+  ),
+  "pages.offlineLan.checkFailed": D(
+    "暂时查不到 OfflineLAN 的可用文件（网络或来源站问题），可以稍后重试。",
+    "Can't reach OfflineLAN's file list right now (network or site issue) — retry later.",
+    "OfflineLAN のファイル一覧を取得できません（ネットワークか配布元の問題）。後で再試行してください。",
+  ),
+  "pages.offlineLan.retry": D("重试", "Retry", "再試行"),
 
   // ---- 开服页 ----
   "pages.server.title": D("开服", "Servers", "サーバー"),
@@ -845,4 +960,30 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
   "pages.launchFail.exportDone": D("诊断包已保存：{path}", "Diagnosis package saved: {path}", "診断パッケージを保存しました：{path}"),
   "pages.launchFail.exportFailed": D("导出诊断包失败：{error}", "Failed to export the diagnosis package: {error}", "診断パッケージの書き出しに失敗しました：{error}"),
   "pages.launchFail.reveal": D("定位文件", "Show in folder", "フォルダーで表示"),
+
+  // ---- 关于页 · 核心团队卡片 ----
+  "pages.about.teamHint": D("点击卡片用浏览器打开", "Click a card to open it in the browser", "カードをクリックするとブラウザで開きます"),
+  "pages.about.teamOpen": D(
+    "在浏览器打开 {label}（{role}）",
+    "Open {label} in your browser ({role})",
+    "ブラウザで {label} を開く（{role}）",
+  ),
+  "pages.about.role.net": D("联机能力提供", "Multiplayer tooling", "マルチプレイ提供"),
+  "pages.about.team.sakura": D("樱花穿透", "Sakura Frp", "Sakura Frp"),
+  "pages.about.team.terracotta": D("陶瓦联机", "Terracotta", "Terracotta"),
+
+  // ---- 设置页：更新方式 ----
+  "settings.updateMode": D("更新方式", "Update checks", "更新の確認"),
+  "settings.updateModeHint": D(
+    "自动 = 打开程序时自动检测新版本（只在后台查，不打断你）",
+    "Automatic = check for a new version each time the launcher opens (runs in the background only)",
+    "自動 = 起動時に新しいバージョンを確認します（バックグラウンドのみで中断しません）",
+  ),
+  "settings.update.manual": D("手动更新", "Manual", "手動"),
+  "settings.update.auto": D("自动更新", "Automatic", "自動"),
+
+  // ---- 下载完成提示（右上角浮条） ----
+  "pages.dlToast.done": D("下载完成：{title}", "Download finished: {title}", "ダウンロード完了：{title}"),
+  "pages.dlToast.failed": D("下载失败：{title}", "Download failed: {title}", "ダウンロード失敗：{title}"),
+  "pages.dlToast.view": D("查看", "View", "表示"),
 };

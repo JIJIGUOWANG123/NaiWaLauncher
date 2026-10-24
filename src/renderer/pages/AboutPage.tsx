@@ -3,6 +3,7 @@ import logo from "../assets/logo.png";
 import avatarNailong from "../assets/team/nailong.png";
 import avatarXiaoqi from "../assets/team/xiaoqi.png";
 import avatarDeepseek from "../assets/team/deepseek.png";
+import avatarSakura from "../assets/team/sakura.png";
 import { api } from "../lib/api";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
@@ -12,6 +13,7 @@ import { ConfirmDialog } from "../components/Modal";
 import {
   IconBook,
   IconChevronRight,
+  IconGithub,
   IconDownload,
   IconFolder,
   IconInstances,
@@ -37,6 +39,11 @@ const QQ_GROUP_NO = "619915692";
 const QQ_GROUP_URL = "https://qm.qq.com/q/42ksfWCEw0";
 /** 推荐软件：羽翼城的 Steamcommunity 302（改善 Steam 社区 / GitHub 访问）。 */
 const RECOMMEND_URL = "https://www.dogfight360.com/blog/18682/";
+/** 联机能力来源：联机页的内网穿透用樱花穿透，联机模组用陶瓦联机。 */
+const SAKURA_FRP_URL = "https://www.natfrp.com/";
+const TERRACOTTA_URL = "https://github.com/burningtnt/Terracotta";
+/** 工具提供方走官网（比仓库说明更能说明它是什么）。 */
+const DEEPSEEK_URL = "https://www.deepseek.com/";
 
 const CAPABILITIES = [
   { Icon: IconPackage, titleKey: "about.capability.fabric", descKey: "about.capability.fabricDesc" },
@@ -59,11 +66,46 @@ const LINKS = [
 
 
 
-/** 团队头像一律用首字色块占位，不放真人照片。 */
-const TEAM = [
-  { name: "奶龙", roleKey: "about.role.main", initial: "奶", avatar: avatarNailong },
-  { name: "小七", roleKey: "about.role.co", initial: "七", avatar: avatarXiaoqi },
-  { name: "DeepSeek", roleKey: "about.role.tools", initial: "D", avatar: avatarDeepseek },
+type TeamEntry = {
+  /** 显示名；项目卡走 nameKey 翻译，人名保持原样。 */
+  name: string;
+  nameKey?: string;
+  roleKey: string;
+  /** 没有头像时用首字色块或图标占位。 */
+  initial: string;
+  avatar?: string;
+  Icon?: typeof IconLink;
+  url: string;
+  kind?: "person" | "project";
+  license?: string;
+};
+
+/** 团队头像一律用本地 png；项目卡用组件库里已有的图标，不引新依赖。 */
+const TEAM: TeamEntry[] = [
+  { name: "奶龙", roleKey: "about.role.main", initial: "奶", avatar: avatarNailong, url: PROJECT_URL },
+  { name: "小七", roleKey: "about.role.co", initial: "七", avatar: avatarXiaoqi, url: PROJECT_URL },
+  { name: "DeepSeek", roleKey: "about.role.tools", initial: "D", avatar: avatarDeepseek, url: DEEPSEEK_URL },
+  {
+    name: "樱花穿透",
+    nameKey: "pages.about.team.sakura",
+    roleKey: "pages.about.role.net",
+    initial: "樱",
+    // 樱花穿透的官方头像（由 https://a.favicon.im/openid.13a.com 的 ico 转成 png 后随包分发，离线也能显示）
+    avatar: avatarSakura,
+    url: SAKURA_FRP_URL,
+    kind: "project",
+  },
+  {
+    name: "陶瓦联机",
+    nameKey: "pages.about.team.terracotta",
+    roleKey: "pages.about.role.net",
+    initial: "陶",
+    // 陶瓦联机没有官方应用图标，按需求直接用 GitHub 标志（它的项目与发布都在 GitHub 上）
+    Icon: IconGithub,
+    url: TERRACOTTA_URL,
+    kind: "project",
+    license: "AGPL-3.0-or-later",
+  },
 ];
 
 /** 把外壳 .app-bg 上当前铺着的背景图镜像到 Hero：轮播换图时跟着更新。 */
@@ -341,19 +383,44 @@ export function AboutPage() {
         <section className="panel">
           <div className="panel-head">
             <h2 className="panel-title">{tr("about.teamTitle")}</h2>
+            <span className="panel-count">{tr("pages.about.teamHint")}</span>
           </div>
-          <ul className="about-team">
-            {TEAM.map((member) => (
-              <li className="about-member" data-about-member key={member.name}>
-                <span className="about-avatar" aria-hidden="true">
-                  {member.avatar ? <img src={member.avatar} alt="" loading="lazy" /> : member.initial}
-                </span>
-                <span className="about-member-text">
-                  <strong>{member.name}</strong>
-                  <small>{tr(member.roleKey)}</small>
-                </span>
-              </li>
-            ))}
+          <ul className="about-team" data-about-team>
+            {TEAM.map((member) => {
+              const Icon = member.Icon;
+              const label = member.nameKey ? tr(member.nameKey) : member.name;
+              const role = tr(member.roleKey);
+              const openLabel = tr("pages.about.teamOpen", { label, role });
+              return (
+                <li className="about-team-cell" key={member.name}>
+                  <button
+                    type="button"
+                    className="about-member"
+                    data-about-member
+                    data-about-member-kind={member.kind ?? "person"}
+                    data-about-url={member.url}
+                    title={openLabel}
+                    aria-label={openLabel}
+                    onClick={() => void open(member.url, label)}
+                  >
+                    <span className="about-avatar" aria-hidden="true">
+                      {member.avatar ? (
+                        <img src={member.avatar} alt="" loading="lazy" />
+                      ) : Icon ? (
+                        <Icon size={member.kind === "project" ? 22 : 17} />
+                      ) : (
+                        member.initial
+                      )}
+                    </span>
+                    <span className="about-member-text">
+                      <strong>{label}</strong>
+                      <small>{role}</small>
+                      {member.license ? <small className="about-member-license">{member.license}</small> : null}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </section>
 

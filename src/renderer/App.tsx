@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppProvider, useApp } from "./lib/store";
 import { TaskProvider } from "./lib/tasks";
-import { ToastProvider } from "./components/Toast";
+import { ToastProvider, useToast } from "./components/Toast";
 import { Sidebar } from "./components/Sidebar";
 import { LaunchFailureDialog } from "./components/LaunchFailureDialog";
 import { TitleBar } from "./components/TitleBar";
@@ -23,12 +23,13 @@ import { api } from "./lib/api";
 import { iconSrc } from "./lib/appIcon";
 import { backgroundUrl, isVideoFile, mediaUrl, musicUrl } from "./lib/media";
 import { clampInterval, useBackgroundPlayback } from "./lib/background";
-import type { BackgroundMode } from "../shared/types";
+import type { BackgroundMode, DownloadJob } from "../shared/types";
 import type { LaunchDiagnosisEvent } from "../shared/ipc";
 import { attachAudio, pauseMusic, playMusic, setMusicVolume } from "./lib/music";
 import { playStartupSound, stopStartupSound } from "./lib/startupSound";
 import { afterFirstFrame, perfMark, perfTime } from "./lib/perf";
 import { applyTheme } from "./lib/theme";
+import { useT } from "./lib/i18n";
 import { useAsync } from "./lib/useAsync";
 
 export function App() {
@@ -44,7 +45,9 @@ export function App() {
 }
 
 function Shell() {
-  const { page, booted, settings, iconUrl } = useApp();
+  const { page, booted, settings, iconUrl, navigate } = useApp();
+  const { push: pushToast } = useToast();
+  const tr = useT();
   // 背景层与标题栏图片都要用 dirs，外壳自己拉一次媒体列表。
   // 它只影响背景图/背景音乐这类装饰，延后到首帧之后再要，别和 boot 的 IPC 抢时间。
   const [mediaReady, setMediaReady] = useState(false);
@@ -174,6 +177,36 @@ function Shell() {
   const bgIsVideo = apiMode
     ? apiBg?.kind === "video"
     : (isVideoFile(playback.name) || isVideoFile(bgUrl));
+
+  // 下载任务收尾提示：status 变成 done/failed 时在右上角浮一条，几秒后自己淡出。
+  // slot 固定为 "download"：同一时间只有一条，新的直接顶掉旧的（不叠加），也不阻塞任何操作。
+  const jobStatuses = useRef(new Map<string, DownloadJob["status"]>());
+  useEffect(() => {
+    return api.downloads.onChanged((jobs) => {
+      const seen = jobStatuses.current;
+      const next = new Map<string, DownloadJob["status"]>();
+      for (const job of jobs) {
+        next.set(job.id, job.status);
+        const previous = seen.get(job.id);
+        // 第一次见到的任务（重启后从磁盘恢复的记录）只记基线，不补弹提示
+        if (previous === undefined || previous === job.status) continue;
+        if (job.status !== "done" && job.status !== "failed") continue;
+        const ok = job.status === "done";
+        pushToast(
+          tr(ok ? "pages.dlToast.done" : "pages.dlToast.failed", { title: job.title }),
+          ok ? "success" : "error",
+          { label: tr("pages.dlToast.view"), onClick: () => navigate("downloads") },
+          {
+            placement: "top-right",
+            durationMs: 3500,
+            slot: "download",
+            data: { "data-dl-toast": "", "data-dl-toast-state": ok ? "done" : "failed" },
+          },
+        );
+      }
+      jobStatuses.current = next;
+    });
+  }, [navigate, pushToast, tr]);
 
   // 启动失败诊断弹窗：按实例 id 去重排队，一次只弹一条，多个实例同时崩溃时不会连弹
   const [launchFailures, setLaunchFailures] = useState<LaunchDiagnosisEvent[]>([]);

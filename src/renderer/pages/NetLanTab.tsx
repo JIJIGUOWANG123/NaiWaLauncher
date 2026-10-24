@@ -6,6 +6,7 @@ import { useT } from "../lib/i18n";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
 import { EmptyState, ErrorState, SkeletonRows } from "../components/State";
+import { OfflineLanNotice } from "../components/OfflineLanNotice";
 import { Field, TextInput } from "../components/Form";
 import { IconCheck, IconRefresh, IconWifi } from "../components/icons";
 
@@ -69,6 +70,8 @@ export function NetLanTab() {
 
   return (
     <>
+      <OfflineLanNotice side="host" />
+
       <div className="panel" data-net-card="lan">
         <div className="panel-head">
           <h2 className="panel-title">

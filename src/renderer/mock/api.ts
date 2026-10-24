@@ -26,6 +26,29 @@ import { emitDone, emitProgress, mockBus } from "./emitter";
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * OfflineLAN 不在种子数据里：联机页的「一键安装 OfflineLAN」在浏览器预览下也要能走通，
+ * 所以按 Modrinth 的真实 project_id / slug 补一条；查不到再回落到常规种子查询。
+ */
+const MOCK_OFFLINELAN: ModSearchResult = {
+  provider: "modrinth",
+  projectId: "pimmstPB",
+  slug: "offlinelan",
+  title: "OfflineLAN",
+  description: "Offline LAN: lets a world opened to LAN skip the online-mode check.",
+  author: "Aeroshide",
+  downloads: 1_200_000,
+  categories: ["utility"],
+  titleZh: "离线局域网",
+  summaryZh: "让「对局域网开放」的服务器跳过正版验证，离线账号也能进房。",
+};
+
+/** 种子项目 + OfflineLAN：只影响模组文件/安装两处查询，其余保持原样。 */
+function findProject(projectId: string): ModSearchResult | undefined {
+  if (projectId === MOCK_OFFLINELAN.projectId || projectId === MOCK_OFFLINELAN.slug) return MOCK_OFFLINELAN;
+  return mockFindProject(projectId);
+}
+
 /** 预览模式下没有主进程：启动失败诊断的订阅者放这里（等价于 Electron 的 game:diagnosis）。 */
 const mockDiagnosis = new Set<(event: LaunchDiagnosisEvent) => void>();
 
@@ -345,24 +368,21 @@ const JAVA_VENDOR_LABEL: Record<Exclude<JavaSourceId, "auto">, string> = {
   tuna: "Temurin (TUNA)",
   zulu: "Azul Zulu",
   oracle: "Oracle JDK",
-  dragonwell: "Dragonwell",
 };
 
 const JAVA_BASE_URL: Record<Exclude<JavaSourceId, "auto">, string> = {
   bellsoft: "https://download.bell-sw.com/java",
   adoptium: "https://github.com/adoptium/temurin-release/releases/download",
   tuna: "https://mirrors.tuna.tsinghua.edu.cn/Adoptium",
-  // 前两个是第三方镜像上的目录列表，最后一个走后者的官方 OSS 镜像
+  // 后两个是第三方镜像上的目录列表
   zulu: "https://d10.injdk.cn/openjdk/zulu",
   oracle: "https://d10.injdk.cn/openjdk/oraclejdk",
-  dragonwell: "https://dragonwell.oss-cn-shanghai.aliyuncs.com",
 };
 
 function javaFileName(version: string, source: Exclude<JavaSourceId, "auto">): string {
   if (source === "bellsoft") return `bellsoft-jdk${version}-windows-amd64.zip`;
   if (source === "zulu") return `zulu-ca-jdk${version}-win_x64.zip`;
   if (source === "oracle") return `jdk-${version}_windows-x64_bin.zip`;
-  if (source === "dragonwell") return `Alibaba_Dragonwell_Standard_${version}_x64_windows.zip`;
   return `OpenJDK-${version}-windows-x64-${source}.zip`;
 }
 
@@ -1436,6 +1456,21 @@ export function createMockApi(): NaiwaApi {
         }
         return { ...installed };
       },
+      uninstall: async (path: string) => {
+        trace("java.uninstall", { path });
+        // 与主进程一致：javaw.exe → JDK 根目录，只允许删 <dataRoot>/java 之下的
+        const norm = path.replace(/\\/g, "/");
+        const home = norm.split("/").slice(0, -2).join("/");
+        if (!home.includes("/java/")) throw new Error("这是系统安装的 JDK，请用系统卸载程序");
+        const index = installedJava.findIndex((item) => item.path.replace(/\\/g, "/").startsWith(home + "/"));
+        if (index < 0) throw new Error(`找不到该 JDK 目录：${path}`);
+        await sleep(280);
+        installedJava.splice(index, 1);
+        return installedJava.map((item) => ({ ...item }));
+      },
+      revealHome: async (path: string) => {
+        trace("java.revealHome", { path });
+      },
     },
 
     github: {
@@ -1568,7 +1603,7 @@ export function createMockApi(): NaiwaApi {
         trace("mods.files", { projectId: req.projectId, kind });
         if (req.provider === "curseforge") requireCurseforgeKey();
         // minekuai 的 projectId 就是 Modrinth ID，按 projectId 反查即可沿用 Modrinth 那一套文件数据。
-        const project = mockFindProject(req.projectId);
+        const project = findProject(req.projectId);
         if (!project) throw new Error(`未找到项目：${req.projectId}`);
         await sleep(420);
         return mockFiles(project, req.gameVersion ?? "", req.loader === "vanilla" ? "" : (req.loader ?? ""), kind);
@@ -1639,7 +1674,7 @@ export function createMockApi(): NaiwaApi {
         return { instanceId: created.id, name: created.name };
       },
       install: async (req: ModInstallRequest) => {
-        const project = mockFindProject(req.projectId);
+        const project = findProject(req.projectId);
         if (!project) throw new Error(`未找到项目：${req.projectId}`);
         const kind = readKind(req);
         const withDeps = req.installDependencies === true;

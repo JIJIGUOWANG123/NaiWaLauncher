@@ -100,6 +100,82 @@
   color: var(--danger);
 }
 
+/* OfflineLAN 提示：三种联机方式共用，沿用 above 的虚线提示卡风格 */
+.net-offlinelan {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent-2) 32%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+.net-offlinelan svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-2);
+}
+
+.net-offlinelan-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.net-offlinelan-title {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.net-offlinelan-hint {
+  color: var(--text-dim);
+}
+
+.net-offlinelan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+/* 原版 / 版本不匹配：用错误色描边，和普通提示区分开 */
+.net-offlinelan.is-vanilla,
+.net-offlinelan.is-unsupported {
+  border-color: color-mix(in srgb, var(--danger) 34%, transparent);
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.net-offlinelan.is-vanilla svg,
+.net-offlinelan.is-unsupported svg {
+  color: var(--danger);
+}
+
+/* 已装：一行轻提示，不占版面 */
+.net-offlinelan.is-ok {
+  align-items: center;
+  padding: 7px 12px;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--ok) 32%, transparent);
+  background: color-mix(in srgb, var(--ok) 9%, transparent);
+  font-size: 12px;
+}
+
+.net-offlinelan.is-ok svg {
+  margin-top: 0;
+  color: var(--ok);
+}
+
+.net-offlinelan.is-ok .net-offlinelan-title {
+  color: var(--ok);
+  font-weight: 500;
+}
+
 /* ---------- 联机方式 Tab ---------- */
 
 .net-tabs {

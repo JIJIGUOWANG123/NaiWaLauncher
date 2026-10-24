@@ -1,5 +1,5 @@
 import { perfMark } from "./core/perf";
-import { app, BrowserWindow, dialog, net, shell } from "electron";
+import { app, BrowserWindow, dialog, net, Notification, shell } from "electron";
 import { basename, join } from "node:path";
 import { existsSync } from "node:fs";
 import { getPaths } from "./core/paths";
@@ -11,7 +11,8 @@ import { setLogSink, logger } from "./core/logger";
 import { setActiveSource } from "./core/sources";
 import { setSystemFetcher } from "./core/netfetch";
 import { registerIpc } from "./ipc/register";
-import type { Settings } from "../shared/types";
+import { checkAppUpdates } from "./core/updates";
+import type { Settings, UpdateCheckResult } from "../shared/types";
 import { createSplash, fadeInWindow, fadeOutSplash, logoPathFor, splashHoldRemaining } from "./splash";
 import { destroyTray, hasTray, isQuitting, markQuitting, syncTray } from "./tray";
 import { stopSkinApi } from "./skins/localapi";
@@ -189,6 +190,58 @@ async function askCloseAction(win: BrowserWindow): Promise<void> {
   }
 }
 
+/**
+ * 自动更新检查的延迟：窗口出来之后再等 6 秒。
+ * 6s 落在需求给的 5–8s 区间里，也避开了首帧、背景图、版本清单那几轮 IPC 的高峰。
+ */
+const AUTO_UPDATE_DELAY_MS = 6000;
+
+/**
+ * 「自动更新」的提示：用系统通知，不弹阻塞式对话框 ——
+ * 用户可能正在进游戏，任何挡住窗口的弹窗都是干扰。
+ */
+function notifyUpdateAvailable(result: UpdateCheckResult): void {
+  if (!Notification.isSupported()) {
+    log.warn("系统通知不可用，跳过新版本提示（版本 " + result.latest + "）");
+    return;
+  }
+  const notice = new Notification({
+    title: mt("main.updateAvailableTitle"),
+    body: mt("main.updateAvailableBody", { latest: result.latest ?? "", current: result.current }),
+    silent: true,
+  });
+  // 点通知把窗口叫到前台，更新入口在「关于」页
+  notice.on("click", () => {
+    const win = mainWindow;
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
+    win.focus();
+  });
+  notice.show();
+}
+
+/**
+ * 启动完成后的自动检查（只在 updateMode === "auto" 时跑）。
+ * 定时器不 await、不挡住启动流程；手动模式下这里直接返回，什么也不做，
+ * 于是「只有用户点检查更新才查」的原有行为保持不变。
+ */
+function scheduleAutoUpdateCheck(): void {
+  setTimeout(() => {
+    if (getSettings().updateMode !== "auto") return;
+    void (async () => {
+      try {
+        const result = await checkAppUpdates();
+        log.info("[updates] 自动检查：" + (result.hasUpdate ? "发现新版本 " + result.latest : "已是最新"));
+        if (result.hasUpdate) notifyUpdateAvailable(result);
+      } catch (err) {
+        // 自动检查失败静默：用户到「关于」页手动检查时才会看到错误
+        log.warn("[updates] 自动检查失败：" + (err instanceof Error ? err.message : String(err)));
+      }
+    })();
+  }, AUTO_UPDATE_DELAY_MS);
+}
+
 async function bootstrap(): Promise<void> {
   const root = rootDir();
   // 建目录与读设置互不依赖（设置读的是文件，目录不存在也只是读不到），并行等更省一趟往返
@@ -276,6 +329,8 @@ function startApp(): void {
     mainWindow.on("closed", () => { mainWindow = null; });
     // 启动时按设置决定有没有托盘图标（关掉设置的用户不会看到多余图标）
     syncTray(() => mainWindow, () => quitApp());
+    // 自动更新检查（updateMode=auto 才查）：延迟 6 秒、后台跑，绝不阻塞启动
+    scheduleAutoUpdateCheck();
 
     app.on("before-quit", () => { markQuitting(); });
     app.on("activate", () => {

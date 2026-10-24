@@ -19,6 +19,12 @@ const CLOSE_ACTIONS: Array<{ value: Settings["closeAction"]; labelKey: string }>
   { value: "quit", labelKey: "settings.close.quit" },
 ];
 
+/** 更新方式：manual 只在用户点「检查更新」时查；auto 在启动后自动查一次（主进程负责）。 */
+const UPDATE_MODES: Array<{ value: Settings["updateMode"]; labelKey: string }> = [
+  { value: "manual", labelKey: "settings.update.manual" },
+  { value: "auto", labelKey: "settings.update.auto" },
+];
+
 const MOD_PROVIDERS: Array<{ value: ModProviderId; labelKey: string }> = [
   { value: "modrinth", labelKey: "settings.provider.modrinth" },
   { value: "curseforge", labelKey: "settings.provider.curseforge" },
@@ -31,6 +37,7 @@ export function SettingsPage() {
   // 选项常量里存的是 i18n key，渲染前按当前语言翻成 label
   const modProviders = MOD_PROVIDERS.map((item) => ({ value: item.value, label: tr(item.labelKey) }));
   const closeActions = CLOSE_ACTIONS.map((item) => ({ value: item.value, label: tr(item.labelKey) }));
+  const updateModes = UPDATE_MODES.map((item) => ({ value: item.value, label: tr(item.labelKey) }));
 
   /** 界面语言：立即写设置并回读，当前页面马上按新语言重渲染。 */
   const changeLanguage = async (next: Lang) => {
@@ -277,6 +284,24 @@ export function SettingsPage() {
                 <button type="button" className="btn btn-primary" onClick={() => void saveThreshold()} disabled={savingThreshold}>
                   {savingThreshold ? tr("common.saving") : tr("common.save")}
                 </button>
+              </div>
+            </Field>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">{tr("settings.updateMode")}</h2>
+          </div>
+          <div className="form-grid">
+            <Field label={tr("settings.updateMode")} hint={tr("settings.updateModeHint")}>
+              {/* data-update-mode 带上当前值，便于自检 */}
+              <div data-update-mode={settings.updateMode}>
+                <Segmented
+                  value={settings.updateMode}
+                  options={updateModes}
+                  onChange={(value) => void saveSettings({ updateMode: value })}
+                />
               </div>
             </Field>
           </div>

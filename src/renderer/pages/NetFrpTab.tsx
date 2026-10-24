@@ -11,6 +11,7 @@ import { useToast } from "../components/Toast";
 import { EmptyState, ErrorState, SkeletonRows } from "../components/State";
 import { Field, Select, TextInput } from "../components/Form";
 import { Modal } from "../components/Modal";
+import { OfflineLanNotice } from "../components/OfflineLanNotice";
 import {
   IconAlert, IconCheck, IconEye, IconEyeOff, IconInfo, IconLink, IconPlus, IconRefresh,
 } from "../components/icons";
@@ -253,6 +254,8 @@ push(tr("pages.netFrp.errNodeRequired"), "error");
 
   return (
     <div className="net-frp" data-frp-tab>
+      <OfflineLanNotice side="host" />
+
       <p className="net-frp-notice" data-frp-notice>
         <IconInfo size={16} />
         <span>

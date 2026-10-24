@@ -181,8 +181,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [reloadInstances, reloadVersions]);
 
   // 启动 3 秒后静默查一次更新：只写状态，不弹窗（关于页与侧边栏据此显示提示）。
+  // 只在「自动更新」下查：手动模式下不自动发请求，留给关于页的「检查更新」按钮。
   useEffect(() => {
     if (!booted) return;
+    if (settings?.updateMode !== "auto") return;
     let alive = true;
     const timer = window.setTimeout(() => {
       void (async () => {
@@ -198,7 +200,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [booted]);
+  }, [booted, settings?.updateMode]);
 
   /** 记住的实例已经不在了（删掉/换目录）：清空本地记忆，回到「不选择实例」。 */
   useEffect(() => {
