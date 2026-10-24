@@ -1296,6 +1296,8 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
 
   // ---- 关于页 · 链接与致谢卡片（0.4.0） ----
   "pages.about.thanks.projectHint": D("GitHub · 源码与发布", "GitHub · source and releases", "GitHub · ソースとリリース"),
+  "pages.about.thanks.minekuai": D("麦块社区", "Minekuai", "Minekuai"),
+  "pages.about.thanks.minekuaiHint": D("中文模组与插件索引", "Chinese mod & plugin index", "中国語の Mod・プラグイン索引"),
   "pages.about.thanks.modrinthHint": D("开源模组社区", "Open mod community", "オープンな Mod コミュニティ"),
   "pages.about.thanks.curseforgeHint": D("模组与整合包站", "Mods and modpacks", "Mod と MOD パック"),
   "pages.about.thanks.terracottaHint": D(
@@ -1466,5 +1468,31 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
     "这个模组要求在服务端也安装",
     "This mod must be installed on the server as well",
     "この MOD はサーバー側にもインストールが必要です",
+  ),
+  // ---- 设置页：本地目录快捷入口（0.4.1 从关于页搬来的两颗按钮） ----
+  "pages.settings.dirs": D("本地目录", "Local folders", "ローカルフォルダー"),
+  "pages.settings.dirsHint": D(
+    "一键打开启动器与游戏所在位置",
+    "Open where the launcher and game files live",
+    "ランチャーとゲームファイルの場所を開きます",
+  ),
+  // ---- 资源页「安装到…」弹窗（0.4.1）：实例 / 服务端分组选择 ----
+  "pages.mods.targetModalTitle": D("安装到…", "Install to…", "インストール先…"),
+  "pages.mods.installToInstance": D("安装到实例", "Install to an instance", "インスタンスにインストール"),
+  "pages.mods.installToNamed": D("安装到「{name}」", "Install to \"{name}\"", "「{name}」にインストール"),
+  "pages.mods.targetModalNoInstances": D(
+    "还没有实例，先去「实例」页创建一个",
+    "No instances yet — create one on the Instances page first",
+    "インスタンスがまだありません。先に「インスタンス」ページで作成してください",
+  ),
+  "pages.mods.targetModalNoServers": D(
+    "还没有服务端，先去「开服」页创建一个",
+    "No servers yet — create one on the Servers page first",
+    "サーバーがまだありません。先に「サーバー」ページで作成してください",
+  ),
+  "pages.mods.targetBusyInstance": D(
+    "这个项目正在往该实例安装",
+    "This project is already installing into that instance",
+    "このプロジェクトはそのインスタンスにインストール中です",
   ),
 };

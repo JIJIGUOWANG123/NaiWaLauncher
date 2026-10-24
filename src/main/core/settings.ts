@@ -100,7 +100,7 @@ export function defaults(): Settings {
     modFileNameTemplate: "[{name}] {slug}-{version}",
     modDisplayStyle: "title",
     notifyGameUpdates: true,
-    forceChinese: true,
+    forceChinese: false,
     versionIsolation: "all",
     windowTitle: "",
     launcherBrand: "NaiWa",

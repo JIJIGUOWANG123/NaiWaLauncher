@@ -7,9 +7,9 @@ import { api } from "../lib/api";
 import { formatAgo, formatCount, formatDate, loaderLabel } from "../lib/format";
 import {
   KIND_BADGE_KEY, KIND_DIR, KIND_FILE_ACTION_KEY, KIND_INSTALL_LABEL_KEY, KIND_PLACEHOLDER_KEY,
-  KIND_TABS, SORT_OPTIONS_KEY, checkPluginPlatform, isBackendKind, kindLabel, loaderOptionLabel, serverCapabilitiesOf,
-  serverContentKindOf, serverTargetGateFor, sourceBadge,
-  showsLoader, showsResolution,
+  KIND_TABS, SORT_OPTIONS_KEY, TARGET_GROUP_LABEL_KEY, checkPluginPlatform, isBackendKind, kindLabel, loaderOptionLabel,
+  serverCapabilitiesOf, serverContentKindOf, serverTargetGateFor, sourceBadge, showsLoader, showsResolution,
+  targetGroupsOf,
   type KindFilesRequest, type KindInstallRequest, type KindSearchRequest, type ModSort,
   type UiContentKind,
 } from "../lib/modKind";
@@ -18,7 +18,6 @@ import { perfNow, perfSince } from "../lib/perf";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
-import { AnchoredMenu } from "../components/AnchoredMenu";
 import { ModDetailPanel } from "../components/ModDetailPanel";
 import { ModDepsDialog, type DepsChoice } from "../components/ModDepsDialog";
 import { ConfirmDialog, Modal } from "../components/Modal";
@@ -462,10 +461,11 @@ export function ModsPage() {
   const startedInstalls = useRef(new Set<string>());
   /** 用户主动取消过的条目：取消后的失败帧要显示成「已取消」而不是「失败」。 */
   const cancelledInstalls = useRef(new Set<string>());
-  /** 展开中的实例浮层：记下是哪张卡片 + 锚点按钮，浮层自己在 body 上定位。 */
-  const [picker, setPicker] = useState<{ mod: ModSearchResult; anchor: HTMLElement } | null>(null);
-  /** 卡片上的实例按钮，详情面板里点安装时按 key 取回锚点，把浮层开在对应卡片上。 */
-  const pickerAnchors = useRef(new Map<string, HTMLButtonElement>());
+  /**
+   * 「安装到…」弹窗：记下要装的项目（可能已经指定了某个文件）。
+   * 卡片上的安装按钮与详情面板的安装入口都走它，实例 / 服务端在弹窗里分组选。
+   */
+  const [targetModal, setTargetModal] = useState<{ mod: ModSearchResult; file: ModFileInfo | null } | null>(null);
   /** 整合包「安装并创建实例」的确认弹窗（进行中的条目在 installs 队列里）。 */
   const [packConfirm, setPackConfirm] = useState<ModSearchResult | null>(null);
   /** 下载记录快照：进度按记录自己的重试参数对回条目，谁的进度显示在谁身上。 */
@@ -538,7 +538,7 @@ export function ModsPage() {
     setFilters(sanitizeFilters(readFilters(next), next));
     setLooseSearch(false);
     setSelected(null);
-    setPicker(null);
+    setTargetModal(null);
   };
 
   const selectSource = (next: ModProviderId) => {
@@ -548,7 +548,7 @@ export function ModsPage() {
     writeSource(next);
     setLooseSearch(false);
     setSelected(null);
-    setPicker(null);
+    setTargetModal(null);
     // 当前类型不被新来源支持时，落到该来源的第一个类型（数据包这种占位标签跳过）。
     const tabs = kindsForSource(next);
     if (!tabs.some((tab) => tab.value === kind && !kindDisabledFor(next, tab.value))) {
@@ -616,6 +616,17 @@ export function ModsPage() {
     : (currentInstance ? `instance:${currentInstance.id}` : "");
   /** 这个类型能不能装进服务端（资源包/光影/整合包只能装实例，服务端分组直接置灰）。 */
   const serverKindOk = serverContentKindOf(kind) !== null;
+  /** 弹窗里要显示哪几组：模组两组、插件只有服务端、其它只有实例。 */
+  const targetGroups = useMemo(() => targetGroupsOf(kind), [kind]);
+  const showsServerGroup = targetGroups.includes("server");
+  /** 卡片安装按钮文案：选过目标就显示目标名，没选就是「安装到实例 / 安装到服务端」。 */
+  const installTargetLabel = kind === "plugin"
+    ? (pluginServer
+      ? tr("pages.mods.installToNamed", { name: pluginServer.meta.name })
+      : tr("pages.mods.serverInstall"))
+    : (currentInstance
+      ? tr("pages.mods.installToNamed", { name: currentInstance.name })
+      : tr("pages.mods.installToInstance"));
   /** 主进程给的能力表（拿不到就用核心推的兜底），决定这个类型能不能装进这个服务端。 */
   const serverCaps = useAsync(
     () => (serverTarget ? api.servers.capabilities(serverId) : Promise.resolve(null)),
@@ -686,8 +697,8 @@ export function ModsPage() {
   const effectiveLoader = filters.loader
     || (looseSearch ? "" : showsLoader(kind) ? currentInstance?.loader ?? "" : "");
 
-  /** 每页固定 5 条：分页后列表只保留当前页，DOM 规模恒定。 */
-  const SEARCH_PAGE_SIZE = 5;
+  /** 每页固定 10 条（2 列 × 5 行）：分页后列表只保留当前页，DOM 规模恒定。 */
+  const SEARCH_PAGE_SIZE = 10;
   /** 列表刷新的依赖清单：useAsync 与分页复位共用，保证两边永远同步。 */
   const searchDeps = [
     source, kind, submitted, effectiveVersion, effectiveLoader, filters.resolution, filters.categories.join(","),
@@ -1219,19 +1230,13 @@ export function ModsPage() {
   const titleOf = (mod: ModSearchResult) => (translateMods ? mod.titleZh : undefined) ?? mod.title;
 
   /**
-   * 装进服务端：plugin → <服务端>/plugins，mod → <服务端>/mods。
+   * 真正落盘的那一步：plugin → <服务端>/plugins，mod → <服务端>/mods。
    * 不进客户端实例、也不进安装队列（单个文件就完事，失败了重点一次即可）。
    * 成功后提示并刷新该服务端对应目录的清单。
    */
-  const installToServer = async (mod: ModSearchResult, file: ModFileInfo | null) => {
-    if (!pluginServer) {
-      push(tr("pages.mods.pluginPickServerFirst"), "info");
-      return;
-    }
-    if (serverBlocked) {
-      if (serverBlockHint) push(serverBlockHint, "info");
-      return;
-    }
+  const runServerInstall = async (
+    mod: ModSearchResult, targetServerId: string, targetName: string, file: ModFileInfo | null,
+  ) => {
     const target = serverContentKindOf(kind);
     if (target === null) {
       push(tr("pages.mods.serverTargetUnsupported"), "info");
@@ -1241,21 +1246,21 @@ export function ModsPage() {
     try {
       if (target === "plugin") {
         await plugins.install({
-          serverId: pluginServer.meta.id,
+          serverId: targetServerId,
           provider: mod.provider,
           projectId: mod.projectId,
           fileId: file?.fileId,
         });
       } else {
         await api.servers.contentInstall({
-          serverId: pluginServer.meta.id,
+          serverId: targetServerId,
           kind: "mod",
           provider: mod.provider,
           projectId: mod.projectId,
           fileId: file?.fileId,
         });
       }
-      push(tr("pages.mods.pluginInstalled", { name: pluginServer.meta.name }), "success");
+      push(tr("pages.mods.pluginInstalled", { name: targetName }), "success");
       setPluginRefresh((value) => value + 1);
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -1264,35 +1269,52 @@ export function ModsPage() {
     }
   };
 
-  const closePicker = useCallback(() => setPicker(null), []);
-
-  /** 打开某张卡片的实例浮层（锚点是卡片自己的按钮）。 */
-  const openPicker = (mod: ModSearchResult, anchor: HTMLElement) => setPicker({ mod, anchor });
-
-  /** 卡片下拉选实例：切到该实例并直接装最佳版本。 */
-  const installInto = async (mod: ModSearchResult, instance: InstanceMeta) => {
-    setPicker(null);
-    setCurrentInstanceId(instance.id);
-    await installContent(mod, instance, null);
+  /** 装进左侧选好的那个服务端（详情面板的文件行还在用这条直接路径）。 */
+  const installToServer = async (mod: ModSearchResult, file: ModFileInfo | null) => {
+    if (!pluginServer) {
+      push(tr("pages.mods.pluginPickServerFirst"), "info");
+      return;
+    }
+    if (serverBlocked) {
+      if (serverBlockHint) push(serverBlockHint, "info");
+      return;
+    }
+    await runServerInstall(mod, pluginServer.meta.id, pluginServer.meta.name, file);
   };
 
-  /** 没有实例也能浏览：下拉里的「不安装，仅浏览」只打开详情看内容。 */
+  /** 弹窗里选实例：切到该实例，把内容装进去（弹窗里带了文件就用那个文件）。 */
+  const pickTargetInstance = async (mod: ModSearchResult, instance: InstanceMeta, file: ModFileInfo | null) => {
+    setTargetModal(null);
+    setServerId("");
+    setCurrentInstanceId(instance.id);
+    await installContent(mod, instance, file);
+  };
+
+  /** 弹窗里选服务端：先按该核心的能力门禁校验，再切目标并装进对应目录。 */
+  const pickTargetServer = async (mod: ModSearchResult, entry: ServerEntry, file: ModFileInfo | null) => {
+    const gate = serverTargetGateFor(kind, serverCapabilitiesOf(entry.meta.core));
+    if (!gate.allowed) {
+      if (gate.reasonKey) push(tr(gate.reasonKey), "info");
+      return;
+    }
+    setTargetModal(null);
+    setServerId(entry.meta.id);
+    await runServerInstall(mod, entry.meta.id, entry.meta.name, file);
+  };
+
+  /** 弹窗里的「不安装，仅浏览」：关掉弹窗、打开详情，不发安装请求。 */
   const browseOnly = (mod: ModSearchResult) => {
-    setPicker(null);
+    setTargetModal(null);
     setSelected(mod);
   };
 
   /**
-   * 安装入口发现「没选实例」：提示一句并把这套装到哪里的选择权交回卡片。
-   * 关闭详情面板 + 滚到该卡片 + 展开它的实例浮层。
+   * 安装入口发现「还没选目标」：提示一句并打开「安装到…」弹窗，
+   * 让用户在实例 / 服务端分组里自己挑（不再把选择权交回某张卡片）。
    */
-  const nudgeToPickInstance = (mod: ModSearchResult) => {
+  const nudgeToPickInstance = (mod: ModSearchResult, file: ModFileInfo | null = null) => {
     push(tr("pages.mods.pickInstanceFirst"), "info");
-    setSelected(null);
-    const anchor = pickerAnchors.current.get(keyOf(mod));
-    if (!anchor) return;
-    anchor.scrollIntoView({ block: "center", behavior: "instant" });
-    setPicker({ mod, anchor });
+    setTargetModal({ mod, file });
   };
 
   /**
@@ -1301,7 +1323,7 @@ export function ModsPage() {
    */
   const installModpackAndCreate = (mod: ModSearchResult, fileId?: string) => {
     setPackConfirm(null);
-    setPicker(null);
+    setTargetModal(null);
     enqueueInstall({
       key: installKeyOf(mod.provider, mod.projectId, fileId ?? null, ""),
       projectKey: keyOf(mod),
@@ -1316,12 +1338,6 @@ export function ModsPage() {
       installDependencies: false,
     });
   };
-
-  /** 列表换了一批（搜索 / 刷新）时卡片会被重建，锚点可能已经不在，浮层跟着收起。 */
-  useEffect(() => {
-    if (!search.loading) return;
-    setPicker(null);
-  }, [search.loading]);
 
   const versionOptions = useMemo(
     () => [
@@ -1774,7 +1790,7 @@ export function ModsPage() {
           ) : null}
 
           {/* 只有首屏（还没有任何数据）才铺骨架；换页时保留当前页，翻页条自己显示「加载中」的禁用态。 */}
-          {!noKey && search.loading && search.data === null ? <SkeletonRows count={5} /> : null}
+          {!noKey && search.loading && search.data === null ? <SkeletonRows count={10} /> : null}
           {!noKey && search.error ? <ErrorState message={search.error} onRetry={search.reload} /> : null}
 
           {!noKey && !search.loading && !search.error && results.length === 0 ? (
@@ -1807,7 +1823,6 @@ export function ModsPage() {
                 const titleZh = translateMods ? mod.titleZh : undefined;
                 const summaryZh = translateMods ? mod.summaryZh : undefined;
                 const favorite = favorites.includes(key);
-                const open = picker !== null && keyOf(picker.mod) === key;
                 const cardEntry = entryForProject(key);
                 const creating = cardEntry?.phase === "queued" || cardEntry?.phase === "running";
                 const updatedAt = updatedAtOf(mod);
@@ -1906,39 +1921,28 @@ export function ModsPage() {
                         >
                           {creating ? phaseText(cardEntry as InstallEntry) : tr("pages.mods.installAndCreate")}
                         </button>
-                      ) : serverTarget ? (
-                        /* 服务端目标：模组装 mods、插件装 plugins，按核心能力决定能不能点。 */
+                      ) : (
+                        /* 安装入口：统一开「安装到…」弹窗，实例 / 服务端在弹窗里分组选。
+                           没选过目标也能点（弹窗里挑一个就装），不是禁用死。 */
                         <button
                           type="button"
-                          className={`btn btn-sm ${serverBlocked || !pluginServer ? "btn-ghost" : "btn-primary"}`.trim()}
+                          className={`btn btn-sm ${pluginBusyKey === key ? "btn-ghost" : "btn-primary"}`.trim()}
+                          data-install-target={key}
+                          data-instance-picker={key}
                           data-plugin-install={key}
                           data-server-install={key}
-                          data-server-blocked={serverBlocked ? "1" : undefined}
-                          disabled={!pluginServer || serverBlocked || pluginBusyKey === key}
-                          title={!pluginServer
-                            ? tr("pages.mods.pluginPickServerFirst")
-                            : serverBlockHint ?? tr("pages.mods.serverInstall")}
-                          onClick={() => void installToServer(mod, null)}
+                          data-target-kind={targetKind}
+                          data-target-name={targetKind === "server"
+                            ? pluginServer?.meta.name
+                            : currentInstance?.name}
+                          data-server-blocked={serverTarget && serverBlocked ? "1" : undefined}
+                          aria-haspopup="dialog"
+                          aria-expanded={targetModal !== null && keyOf(targetModal.mod) === key}
+                          disabled={pluginBusyKey === key}
+                          title={serverTarget && serverBlockHint ? serverBlockHint : installTargetLabel}
+                          onClick={() => setTargetModal({ mod, file: null })}
                         >
-                          {pluginBusyKey === key ? tr("pages.mods.installing") : tr("pages.mods.serverInstall")}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${noInstance ? "btn-ghost" : "btn-primary"}`.trim()}
-                          data-instance-picker={key}
-                          aria-haspopup="menu"
-                          aria-expanded={open}
-                          ref={(element) => {
-                            if (element) pickerAnchors.current.set(key, element);
-                            else pickerAnchors.current.delete(key);
-                          }}
-                          onClick={(event) => {
-                            if (open) closePicker();
-                            else openPicker(mod, event.currentTarget);
-                          }}
-                        >
-                          {noInstance ? tr("pages.mods.noInstanceShort") : tr("pages.mods.selectInstance")}
+                          {pluginBusyKey === key ? tr("pages.mods.installing") : installTargetLabel}
                           <IconChevronDown size={14} />
                         </button>
                       )}
@@ -1980,55 +1984,6 @@ export function ModsPage() {
         </div>
       </div>
 
-      {/* 实例浮层 Portal 到 body、fixed 定位：任何卡片上的下拉都压在最上层，不被后面的卡片裁切。 */}
-      {picker ? (
-        <AnchoredMenu
-          anchor={picker.anchor}
-          onClose={closePicker}
-          ariaLabel={tr("pages.mods.pickerAria")}
-          menuKey={keyOf(picker.mod)}
-        >
-          <span className="res-menu-title">{noInstance ? tr("pages.mods.noUsableInstances") : tr("pages.mods.pickerAria")}</span>
-          {instances.map((instance) => (
-            <button
-              key={instance.id}
-              type="button"
-              role="menuitem"
-              className="res-menu-item"
-              data-menu-instance={instance.id}
-              disabled={busyInInstance(picker.mod.provider, picker.mod.projectId, instance.id)}
-              onClick={() => void installInto(picker.mod, instance)}
-            >
-              <span className="res-menu-name">{instance.name}</span>
-              <span className="res-menu-meta">{instance.mcVersion} · {loaderLabel(instance.loader, tr)}</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            role="menuitem"
-            className="res-menu-item"
-            data-menu-browse
-            onClick={() => browseOnly(picker.mod)}
-          >
-            <span className="res-menu-name">{tr("pages.mods.browseOnly")}</span>
-            <span className="res-menu-meta">{tr("pages.mods.openDetailHint")}</span>
-          </button>
-          {noInstance ? (
-            <button
-              type="button"
-              role="menuitem"
-              className="res-menu-item is-link"
-              data-menu-create
-              onClick={() => {
-                closePicker();
-                navigate("instances");
-              }}
-            >
-              <span className="res-menu-name">{tr("pages.mods.createInstanceLink")}</span>
-            </button>
-          ) : null}
-        </AnchoredMenu>
-      ) : null}
 
       {selected ? (
         <ModDetailPanel
@@ -2041,22 +1996,14 @@ export function ModsPage() {
           installLabel={selectedGrade ? tr("pages.mods.reinstall") : tr(KIND_INSTALL_LABEL_KEY[detailKind])}
           onClose={() => setSelected(null)}
           onInstall={() => {
-            // 整合包：新建实例，不需要选实例。
+            // 整合包：新建实例，不需要选目标。
             if (detailKind === "modpack") {
               setPackConfirm(selected);
               return;
             }
-            // 插件：装进上面选好的服务端（没选服务端就不发请求）。
-            if (detailKind === "plugin") {
-              void installToServer(selected, sortedFiles[0] ?? null);
-              return;
-            }
-            // 没选实例：提示一句并把实例选择交回卡片浮层。
-            if (!currentInstance) {
-              nudgeToPickInstance(selected);
-              return;
-            }
-            void installContent(selected, currentInstance, sortedFiles[0] ?? null);
+            // 其余类型统一开「安装到…」弹窗：实例 / 服务端都在弹窗里选，
+            // 没选过目标也能点（弹窗里挑一个就装），不再用禁用态拦人。
+            setTargetModal({ mod: selected, file: sortedFiles[0] ?? null });
           }}
           targetKind={targetKind}
           installing={panelInstalling || (serverTarget && pluginBusyKey === keyOf(selected))}
@@ -2078,7 +2025,6 @@ export function ModsPage() {
                 : selectedGrade === "scan"
                   ? tr("pages.mods.maybeInstalledHint", { files: hitFileNames(selectedMatch) })
                   : undefined}
-          installDisabled={serverTarget && (!pluginServer || serverBlocked)}
           noInstance={detailKind === "modpack" ? false : serverTarget ? !pluginServer : !currentInstance}
           filesSlot={
             <>
@@ -2185,7 +2131,7 @@ export function ModsPage() {
                               return;
                             }
                             if (!currentInstance) {
-                              nudgeToPickInstance(selected);
+                              nudgeToPickInstance(selected, file);
                               return;
                             }
                             void installContent(selected, currentInstance, file);
@@ -2205,6 +2151,132 @@ export function ModsPage() {
             </>
           }
         />
+      ) : null}
+
+      {/* 「安装到…」：实例 / 服务端分组选择（插件只有服务端组，其它类型只有实例组）。
+          排在抽屉之后：.overlay 同为 z-index 60，后渲染的才压在抽屉上面。 */}
+      {targetModal ? (
+        <Modal
+          open
+          title={tr("pages.mods.targetModalTitle")}
+          subtitle={titleOf(targetModal.mod)}
+          width={520}
+          onClose={() => setTargetModal(null)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                data-target-modal-browse
+                onClick={() => browseOnly(targetModal.mod)}
+              >
+                {tr("pages.mods.browseOnly")}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                data-target-modal-cancel
+                onClick={() => setTargetModal(null)}
+              >
+                {tr("pages.common.cancel")}
+              </button>
+            </>
+          }
+        >
+          <div className="target-modal" data-target-modal data-target-modal-kind={detailKind}>
+            {targetGroups.map((group) => (
+              <section
+                key={group}
+                className="target-group"
+                data-target-modal-group={group}
+                aria-label={tr(TARGET_GROUP_LABEL_KEY[group])}
+              >
+                <header className="target-group-head">
+                  <span className="field-label">{tr(TARGET_GROUP_LABEL_KEY[group])}</span>
+                  <span className="target-group-count" data-target-modal-count>
+                    {group === "instance" ? instances.length : (servers.data ?? []).length}
+                  </span>
+                </header>
+
+                {group === "instance" ? (
+                  instances.length === 0 ? (
+                    <p className="aside-hint" data-target-modal-empty="instance">
+                      {tr("pages.mods.targetModalNoInstances")}
+                    </p>
+                  ) : (
+                    <div className="target-options">
+                      {instances.map((instance) => {
+                        /* 同一项目正在往这个实例装：这一项先禁掉，免得多点一次排队。 */
+                        const busy = busyInInstance(targetModal.mod.provider, targetModal.mod.projectId, instance.id);
+                        const current = !serverTarget && currentInstance?.id === instance.id;
+                        const meta = `${instance.mcVersion} · ${loaderLabel(instance.loader, tr)}`;
+                        return (
+                          <button
+                            key={instance.id}
+                            type="button"
+                            className={`target-option ${current ? "is-selected" : ""}`.trim()}
+                            data-target-option
+                            data-target-option-kind="instance"
+                            data-target-option-id={instance.id}
+                            data-target-option-disabled={busy ? "1" : "0"}
+                            disabled={busy}
+                            title={busy ? tr("pages.mods.targetBusyInstance") : meta}
+                            onClick={() => void pickTargetInstance(targetModal.mod, instance, targetModal.file)}
+                          >
+                            <span className="target-option-name">{instance.name}</span>
+                            <span className="target-option-meta">{meta}</span>
+                            {busy ? (
+                              <span className="target-option-reason">{tr("pages.mods.targetBusyInstance")}</span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )
+                ) : (servers.data ?? []).length === 0 ? (
+                  <p className="aside-hint" data-target-modal-empty="server">
+                    {tr("pages.mods.targetModalNoServers")}
+                  </p>
+                ) : (
+                  <div className="target-options">
+                    {(servers.data ?? []).map((entry) => {
+                      /* 能力门禁按该服务端核心算：模组→插件服 / 插件→模组服 / 原版服都不合适。 */
+                      const gate = serverTargetGateFor(kind, serverCapabilitiesOf(entry.meta.core));
+                      const reason = gate.reasonKey ? tr(gate.reasonKey) : null;
+                      const current = serverTarget && pluginServer?.meta.id === entry.meta.id;
+                      const meta = `${entry.meta.mcVersion} · ${entry.meta.core}`;
+                      return (
+                        <button
+                          key={entry.meta.id}
+                          type="button"
+                          className={`target-option ${current ? "is-selected" : ""}`.trim()}
+                          data-target-option
+                          data-target-option-kind="server"
+                          data-target-option-id={entry.meta.id}
+                          data-target-option-disabled={gate.allowed ? "0" : "1"}
+                          disabled={!gate.allowed}
+                          title={!gate.allowed && reason ? reason : meta}
+                          onClick={() => void pickTargetServer(targetModal.mod, entry, targetModal.file)}
+                        >
+                          <span className="target-option-name">{entry.meta.name}</span>
+                          <span className="target-option-meta">{meta}</span>
+                          {!gate.allowed && reason ? <span className="target-option-reason">{reason}</span> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            ))}
+
+            {/* 光影 / 资源包 / 整合包只能进实例：服务端组不出现，这里把原因写清楚。 */}
+            {showsServerGroup ? null : (
+              <p className="aside-hint" data-target-modal-note>
+                {tr("pages.mods.serverTargetUnsupported")}
+              </p>
+            )}
+          </div>
+        </Modal>
       ) : null}
 
       {/* 必须排在抽屉之后：.overlay 同为 z-index 60，后渲染的才压在抽屉上面。 */}

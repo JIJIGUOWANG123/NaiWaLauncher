@@ -9,7 +9,7 @@ import { useToast } from "../components/Toast";
 import { Field, Segmented, TextInput, Toggle } from "../components/Form";
 import { LANGUAGES, translate, useT, type Lang } from "../lib/i18n";
 import { ErrorState, LoadingState } from "../components/State";
-import { IconEye, IconEyeOff, IconInfo, IconZap } from "../components/icons";
+import { IconEye, IconEyeOff, IconFolder, IconInfo, IconZap } from "../components/icons";
 
 /** 关闭窗口的三种行为：ask 会弹窗询问并记住，tray/quit 直接按选择走。 */
 const CLOSE_ACTIONS: Array<{ value: Settings["closeAction"]; labelKey: string }> = [
@@ -31,7 +31,7 @@ const MOD_PROVIDERS: Array<{ value: ModProviderId; labelKey: string }> = [
 ];
 
 export function SettingsPage() {
-  const { settings, saveSettings, applySettings, settingsError, navigate } = useApp();
+  const { settings, saveSettings, applySettings, settingsError, navigate, info } = useApp();
   const tr = useT();
   // 选项常量里存的是 i18n key，渲染前按当前语言翻成 label
   const modProviders = MOD_PROVIDERS.map((item) => ({ value: item.value, label: tr(item.labelKey) }));
@@ -65,6 +65,17 @@ export function SettingsPage() {
   useEffect(() => {
     if (settings) setWallpaperDraft(settings.wallpaperEngineDir);
   }, [settings?.wallpaperEngineDir]);
+
+  /** 打开本地目录（原关于页的两颗按钮搬到这里）：路径来自 AppInfo，接口仍是 api.app.openPath。 */
+  const openDir = async (target: string | undefined, label: string) => {
+    if (!target) return;
+    try {
+      await api.app.openPath(target);
+      push(tr("about.openedDir", { label }), "success");
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    }
+  };
 
   const saveWallpaperDir = async () => {
     const next = wallpaperDraft.trim();
@@ -381,6 +392,37 @@ export function SettingsPage() {
                 </button>
               </div>
             </Field>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">{tr("pages.settings.dirs")}</h2>
+            <span className="panel-count">{tr("pages.settings.dirsHint")}</span>
+          </div>
+          <div className="dir-row">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              data-settings-dir="launcher"
+              title={info?.rootDir}
+              disabled={!info}
+              onClick={() => void openDir(info?.rootDir, tr("about.openLauncherDir"))}
+            >
+              <IconFolder size={14} />
+              {tr("about.openLauncherDir")}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              data-settings-dir="game"
+              title={info?.gameRoot}
+              disabled={!info}
+              onClick={() => void openDir(info?.gameRoot, tr("about.openGameDir"))}
+            >
+              <IconFolder size={14} />
+              {tr("about.openGameDir")}
+            </button>
           </div>
         </div>
 

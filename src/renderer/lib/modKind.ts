@@ -224,6 +224,25 @@ export function serverTargetGateFor(
   return { allowed: false, reasonKey: "pages.mods.serverTargetUnsupported" };
 }
 
+/**
+ * 「安装到…」弹窗里的两组目标。模组两组都能装；插件只进服务端（实例里没有 plugins 目录）；
+ * 整合包/资源包/光影包只能进实例，服务端组根本不该出现。
+ */
+export type TargetGroupId = "instance" | "server";
+
+/** 某个类型在弹窗里要显示哪几组，顺序即渲染顺序。 */
+export function targetGroupsOf(kind: UiContentKind): TargetGroupId[] {
+  if (kind === "plugin") return ["server"];
+  if (kind === "mod") return ["instance", "server"];
+  return ["instance"];
+}
+
+/** 分组标题的词典键：实例 / 服务端。 */
+export const TARGET_GROUP_LABEL_KEY: Record<TargetGroupId, string> = {
+  instance: "pages.mods.targetInstances",
+  server: "pages.mods.targetServers",
+};
+
 /** 地图来源说明（页面顶部固定展示）。 */
 export const MAPS_NOTICE_KEY = "pages.mods.mapsNotice";
 /** 麦块社区的地图页：没有直链时让用户在浏览器里下载。 */

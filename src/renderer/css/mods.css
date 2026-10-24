@@ -528,9 +528,11 @@
   background: var(--accent-soft);
 }
 
+/* 每页 10 张卡 = 2 列 × 5 行：固定两列，不再按宽度 auto-fill 成 3/4 列（那会变成 4×2.5 的畸形排布）。 */
 .res-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(336px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, auto);
   gap: 12px;
 }
 
@@ -869,6 +871,11 @@
     grid-template-columns: 1fr;
   }
 
+  /* 窄屏退化成单列（每页仍是 10 条，纵向滚动）。 */
+  .res-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .mods-aside {
     position: static;
     flex-direction: row;
@@ -1179,4 +1186,96 @@
   padding: 0 2px;
   opacity: 0.6;
   user-select: none;
+}
+
+/* ---------- 「安装到…」弹窗（实例 / 服务端分组） ---------- */
+
+.target-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.target-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.target-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.target-group-count {
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.target-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* 一项一个按钮：名字 + 版本/核心副标，点一下就装上。 */
+.target-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.target-option:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent-2) 34%, transparent);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.target-option.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.target-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.target-option-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.target-option-meta {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+/* 置灰项的原因：写在副标下面，不靠 hover 才看得到。 */
+.target-option-reason {
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--warning-ink, var(--text-faint));
 }

@@ -106,6 +106,14 @@
   flex: 1;
 }
 
+/* 目录快捷入口：启动器 / 游戏两个按钮一行（原关于页的 .about-dirs 搬过来） */
+.dir-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .about-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));

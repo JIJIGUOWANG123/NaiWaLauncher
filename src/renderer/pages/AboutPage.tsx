@@ -4,6 +4,9 @@ import avatarNailong from "../assets/team/nailong.png";
 import avatarXiaoqi from "../assets/team/xiaoqi.png";
 import avatarDeepseek from "../assets/team/deepseek.png";
 import avatarSakura from "../assets/team/sakura.png";
+import brandBmclapi from "../assets/brand/bmclapi.png";
+import brandDogfight from "../assets/brand/dogfight.png";
+import brandMinekuai from "../assets/brand/minekuai.png";
 import brandQq from "../assets/brand/qq.png";
 import brandModrinth from "../assets/brand/modrinth.png";
 import brandCurseforge from "../assets/brand/curseforge.png";
@@ -19,7 +22,6 @@ import {
   IconChevronRight,
   IconGithub,
   IconDownload,
-  IconFolder,
   IconImage,
   IconInstances,
   IconJava,
@@ -73,6 +75,8 @@ const CAPABILITIES = [
 const MODRINTH_URL = "https://modrinth.com/";
 const CURSEFORGE_URL = "https://www.curseforge.com/minecraft";
 const MIRROR_URL = "https://bmclapi2.bangbang93.com/";
+/** 麦块社区（模组/插件的中文搜索源之一）。 */
+const MINEKUAI_URL = "https://bbs.minekuai.com/";
 
 /** 致谢卡片：image 走本地 png（品牌 logo / 头像），Icon 走组件库里的实心图标。 */
 type ThanksEntry = {
@@ -87,8 +91,8 @@ type ThanksEntry = {
 
 /**
  * 链接与致谢：和核心团队同一套卡片网格。
- * 项目主页 / 问题反馈 / 陶瓦联机用 GitHub 图标；QQ 群、Modrinth、CurseForge、樱花穿透用品牌图片；
- * 镜像与推荐的第三方工具沿用原有的功能图标。
+ * 项目主页 / 问题反馈 / 陶瓦联机用 GitHub 图标；QQ 群、Modrinth、CurseForge、樱花穿透、BMCLAPI、麦块、Steamcommunity 302
+ * 全部用各自官方图标（随包分发的本地 png，离线也能显示）。
  */
 const THANKS: ThanksEntry[] = [
   { key: "project", titleKey: "about.link.project", hintKey: "pages.about.thanks.projectHint", Icon: IconGithub, url: PROJECT_URL },
@@ -96,8 +100,9 @@ const THANKS: ThanksEntry[] = [
   { key: "qq", titleKey: "about.link.qq", hintKey: "about.link.qqHint", image: brandQq, url: QQ_GROUP_URL },
   { key: "modrinth", titleKey: "about.link.modrinth", hintKey: "pages.about.thanks.modrinthHint", image: brandModrinth, url: MODRINTH_URL },
   { key: "curseforge", titleKey: "about.link.curseforge", hintKey: "pages.about.thanks.curseforgeHint", image: brandCurseforge, url: CURSEFORGE_URL },
-  { key: "mirror", titleKey: "about.link.mirror", hintKey: "about.link.mirrorHint", Icon: IconZap, url: MIRROR_URL },
-  { key: "steam302", titleKey: "about.link.steam302", hintKey: "about.link.steam302Hint", Icon: IconRocket, url: RECOMMEND_URL },
+  { key: "mirror", titleKey: "about.link.mirror", hintKey: "about.link.mirrorHint", image: brandBmclapi, url: MIRROR_URL },
+  { key: "minekuai", titleKey: "pages.about.thanks.minekuai", hintKey: "pages.about.thanks.minekuaiHint", image: brandMinekuai, url: MINEKUAI_URL },
+  { key: "steam302", titleKey: "about.link.steam302", hintKey: "about.link.steam302Hint", image: brandDogfight, url: RECOMMEND_URL },
   { key: "sakura", titleKey: "pages.about.team.sakura", hintKey: "pages.about.role.net", image: avatarSakura, url: SAKURA_FRP_URL },
   { key: "terracotta", titleKey: "pages.about.team.terracotta", hintKey: "pages.about.thanks.terracottaHint", Icon: IconGithub, url: TERRACOTTA_URL },
 ];
@@ -163,16 +168,6 @@ export function AboutPage() {
     try {
       await api.app.openExternal(url);
       push(tr("about.openedExternal", { label }), "success");
-    } catch (error: unknown) {
-      push(errorMessage(error), "error");
-    }
-  };
-
-  const openDir = async (target: string | undefined, label: string) => {
-    if (!target) return;
-    try {
-      await api.app.openPath(target);
-      push(tr("about.openedDir", { label }), "success");
     } catch (error: unknown) {
       push(errorMessage(error), "error");
     }
@@ -395,30 +390,6 @@ export function AboutPage() {
             );
           })}
         </ul>
-        <div className="about-dirs" data-about-dirs>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            data-about-dir="root"
-            title={info?.rootDir}
-            disabled={!info}
-            onClick={() => void openDir(info?.rootDir, tr("about.openLauncherDir"))}
-          >
-            <IconFolder size={14} />
-            {tr("about.openLauncherDir")}
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            data-about-dir="game"
-            title={info?.gameRoot}
-            disabled={!info}
-            onClick={() => void openDir(info?.gameRoot, tr("about.openGameDir"))}
-          >
-            <IconFolder size={14} />
-            {tr("about.openGameDir")}
-          </button>
-        </div>
       </section>
 
       <div className="about-columns">

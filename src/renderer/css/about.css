@@ -178,16 +178,6 @@
   overflow-wrap: anywhere;
 }
 
-/* 目录快捷入口：链接面板底部一行 */
-.about-dirs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding-top: 12px;
-  border-top: 1px dashed var(--line-strong);
-}
-
 /* 更新日志：按版本分段，最新一段在最上面 */
 .about-log-version + .about-log-version {
   margin-top: 12px;

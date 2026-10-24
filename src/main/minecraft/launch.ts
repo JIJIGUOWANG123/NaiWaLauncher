@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { createWriteStream, existsSync, readFileSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import { basename, join } from "node:path";
-import type { Account, InstanceMeta, ProcessPriority, WindowMode } from "../../shared/types";
+import type { Account, InstanceMeta, ProcessPriority, Settings, WindowMode } from "../../shared/types";
 import AdmZip from "adm-zip";
 import { IPC, type LaunchDiagnosisEvent, type LaunchDiagnosisExport, type LaunchDiagnosisKind } from "../../shared/ipc";
 import { getActiveAccount } from "../auth/accounts";
@@ -652,9 +652,20 @@ async function resolveExecutable(instance: InstanceMeta): Promise<string> {
 
 const OPTIONS_FILE = "options.txt";
 
+/** 启动器语言 → options.txt 的 lang 值（Minecraft 只认这种下划线小写形式）。 */
+const MC_LANG_BY_LAUNCHER: Record<Settings["language"], string> = {
+  "zh-CN": "zh_cn",
+  "en-US": "en_us",
+  "ja-JP": "ja_jp",
+};
+
+/** 语言值不认识时退回 zh_cn：宁可中文，也别把 lang 写成空值让游戏回到英文。 */
+export function minecraftLangFor(launcherLanguage: string | undefined): string {
+  return MC_LANG_BY_LAUNCHER[launcherLanguage as Settings["language"]] ?? MC_LANG_BY_LAUNCHER["zh-CN"];
+}
+
 // 原版默认值，只写稳定键：实验性键会让玩家进游戏看到意外的设置
 const DEFAULT_OPTIONS = [
-  "lang:zh_cn",
   "autoJump:false",
   "fov:0.0",
   "gamma:1.0",
@@ -673,7 +684,13 @@ const DEFAULT_OPTIONS = [
   "soundCategory_ui:1.0",
 ];
 
-export type LanguageSetupResult = "created" | "appended" | "already-zh" | "kept-user" | "forced";
+export type LanguageSetupResult = "created" | "updated" | "already" | "forced";
+
+/** 覆盖设置里的语言来源，给启动以外的调用方（自检脚本）留一个显式入口。 */
+export interface OptionsLanguageOptions {
+  language?: string;
+  forceChinese?: boolean;
+}
 
 async function writeFileAtomic(file: string, content: string): Promise<void> {
   const tmp = file + ".tmp";
@@ -682,20 +699,26 @@ async function writeFileAtomic(file: string, content: string): Promise<void> {
 }
 
 /**
- * 简体中文界面。
- * forceChinese=true：无论玩家之前选了什么语言，都强制改回 lang:zh_cn（设置里的「强制中文」）。
- * forceChinese=false：只在玩家没选过语言时补一行，已有其它语言一律保留，不覆盖玩家选择。
- * 两种模式都只动 lang 这一行，其余键与顺序原样保留；写盘用临时文件 + rename。
+ * 让游戏语言跟着启动器走：options.txt 的 lang 行写成 settings.language 对应的 MC 语言。
+ * 优先级：forceChinese=true（「强制中文」开关）压过语言跟随，直接写 zh_cn；否则跟随 settings.language。
+ * 只动 lang 这一行，其余键与顺序原样保留、换行风格沿用原文件；写盘用临时文件 + rename。
+ * 已经是目标值时直接返回 already，不重复写盘。
  */
 export async function ensureOptionsLanguage(
   gameDir: string,
-  forceChinese: boolean = getSettings().forceChinese === true,
+  options: OptionsLanguageOptions = {},
 ): Promise<LanguageSetupResult> {
+  const settings = getSettings();
+  const forceChinese = options.forceChinese ?? settings.forceChinese === true;
+  const launcherLanguage = options.language ?? settings.language;
+  const target = forceChinese ? "zh_cn" : minecraftLangFor(launcherLanguage);
   const file = join(gameDir, OPTIONS_FILE);
   const existing = await fs.readFile(file, "utf8").catch(() => null);
+
   if (existing === null) {
     await fs.mkdir(gameDir, { recursive: true });
-    await writeFileAtomic(file, DEFAULT_OPTIONS.join("\n") + "\n");
+    await writeFileAtomic(file, ["lang:" + target, ...DEFAULT_OPTIONS].join("\n") + "\n");
+    log.info("已创建 options.txt，游戏语言 " + (forceChinese ? "按「强制中文」定为 " : "跟随启动器（" + launcherLanguage + "）定为 ") + target + " · " + file);
     return "created";
   }
 
@@ -705,27 +728,22 @@ export async function ensureOptionsLanguage(
   const index = lines.findIndex((line) => line.startsWith("lang:"));
   const current = index >= 0 ? lines[index].slice("lang:".length).trim() : null;
 
-  if (current === "zh_cn") return "already-zh";
+  // 已是目标值：不碰文件，避免每次启动都刷新 mtime
+  if (current === target) return "already";
+
+  const wanted = "lang:" + target;
+  if (index >= 0) lines[index] = wanted;
+  // 文件以换行结尾时 split 会多出一个空尾元素，插在它前面才不会多出空行
+  else if (lines.length > 0 && lines[lines.length - 1] === "") lines.splice(lines.length - 1, 0, wanted);
+  else lines.push(wanted);
+  await writeFileAtomic(file, lines.join(eol));
 
   if (forceChinese) {
-    if (index >= 0) lines[index] = "lang:zh_cn";
-    // 文件以换行结尾时 split 会多出一个空尾元素，插在它前面才不会多出空行
-    else if (lines.length > 0 && lines[lines.length - 1] === "") lines.splice(lines.length - 1, 0, "lang:zh_cn");
-    else lines.push("lang:zh_cn");
-    await writeFileAtomic(file, lines.join(eol));
-    log.info("已按「强制中文」改写语言：" + String(current ?? "未设置") + " → zh_cn · " + file);
+    log.info("已按「强制中文」改写游戏语言：" + String(current ?? "未设置") + " → " + target + " · " + file);
     return "forced";
   }
-
-  if (current !== null) {
-    log.info("玩家已把语言设为 " + current + "，保持不动：" + file);
-    return "kept-user";
-  }
-
-  // 只追加一行，原有键与顺序原样保留
-  const separator = existing.length === 0 || existing.endsWith("\n") ? "" : eol;
-  await writeFileAtomic(file, existing + separator + "lang:zh_cn" + eol);
-  return "appended";
+  log.info("游戏语言跟随启动器：" + String(current ?? "未设置") + " → " + target + " · " + file);
+  return "updated";
 }
 
 /**
@@ -1262,9 +1280,8 @@ export async function launchInstance(id: string, quickPlayLevel?: string): Promi
   await fs.mkdir(resolveModsDir(instance), { recursive: true });
   await fs.mkdir(paths.logs, { recursive: true });
 
-  const language = await ensureOptionsLanguage(gameDir, settings.forceChinese === true);
-  if (language === "created" || language === "appended") log.info("已把界面语言初始化为简体中文（" + language + "）");
-  else if (language === "forced") log.info("已按「强制中文」把语言改回 zh_cn：" + join(gameDir, OPTIONS_FILE));
+  // 游戏语言跟随 settings.language；「强制中文」开关优先，具体优先级与日志都在 ensureOptionsLanguage 里
+  const language = await ensureOptionsLanguage(gameDir);
 
   // 实例显式选了窗口形态才覆盖 options.txt；"跟随设置" 时不动玩家自己的全屏开关
   const windowSpec = resolveWindowSpec(instance);
@@ -1313,7 +1330,7 @@ export async function launchInstance(id: string, quickPlayLevel?: string): Promi
   write("# " + new Date().toISOString() + " NaiWa Launcher 启动 " + instance.name + "\r\n");
   write("# 版本隔离: " + (settings.versionIsolation === "none" ? "none（共用 .minecraft）" : "all（每实例独立）") + "\r\n");
   write("# gameDir: " + gameDir + "\r\n");
-  write("# options.txt: " + join(gameDir, OPTIONS_FILE) + "（" + language + "）\r\n");
+  write("# options.txt: " + join(gameDir, OPTIONS_FILE) + "（语言处理：" + language + "）\r\n");
   write("# windowTitle: " + title + "\r\n");
   write(
     "# window: " + (windowSpec.fullscreen ? "全屏" : "窗口 " + windowSpec.width + "x" + windowSpec.height) +

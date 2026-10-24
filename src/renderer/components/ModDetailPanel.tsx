@@ -157,7 +157,9 @@ export function ModDetailPanel({
           type="button"
           className="btn btn-primary"
           onClick={onInstall}
-          disabled={installing || !data || installDisabled || sideUnsupported}
+          /* 这个按钮只负责「打开安装到…」：选目标之前不能判定这一单装不进服务端，
+             所以服务端不支持只提示不禁用（禁用会让人连换目标的机会都没有）。 */
+          disabled={installing || !data || installDisabled}
           title={sideUnsupported ? tr("pages.modDetail.serverUnsupported") : installTitle}
           data-action="install"
         >
