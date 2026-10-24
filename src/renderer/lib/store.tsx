@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { UpdateStateEvent } from "../../shared/ipc";
 import type { AppInfo, InstanceMeta, Settings, UpdateCheckResult, VersionBrief } from "../../shared/types";
 import { api } from "./api";
 import { NO_APP_ICON, fetchAppIcon, type AppIconInfo } from "./appIcon";
@@ -33,9 +34,11 @@ export interface AppContextValue {
   iconPath: string | null;
   /** 重新向主进程要一次自定义图标（设置里换了图标后调用）。 */
   reloadIcon(): Promise<void>;
-  /** 最近一次更新检查结果（静默检查与关于页手动检查共用；null 表示还没查过）。 */
+  /** 最近一次更新检查结果（启动检查与关于页手动检查共用；null 表示还没查过）。 */
   update: UpdateCheckResult | null;
   setUpdate(result: UpdateCheckResult | null): void;
+  /** 主进程推送的更新阶段（启动检查 / 自动下载 / 安装完成）：只用于界面提示。 */
+  updatePhase: UpdateStateEvent | null;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -54,6 +57,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [booted, setBooted] = useState(false);
   const [icon, setIcon] = useState<AppIconInfo>(NO_APP_ICON);
   const [update, setUpdate] = useState<UpdateCheckResult | null>(null);
+  const [updatePhase, setUpdatePhase] = useState<UpdateStateEvent | null>(null);
   const [currentInstanceId, setCurrentId] = useState<string | null>(() => {
     try {
       return localStorage.getItem(INSTANCE_KEY);
@@ -180,27 +184,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [reloadInstances, reloadVersions]);
 
-  // 启动 3 秒后静默查一次更新：只写状态，不弹窗（关于页与侧边栏据此显示提示）。
-  // 只在「自动更新」下查：手动模式下不自动发请求，留给关于页的「检查更新」按钮。
+  // 启动检查只由主进程做一次（manual/auto 都查），结果通过 app:updateState 推过来：
+  // 这里只把结果写进上下文（关于页徽标 / 更新面板）并记下阶段（App 据此弹不阻塞的 toast），
+  // 绝不再自己发一次 request（否则一次启动会查两遍）。
   useEffect(() => {
     if (!booted) return;
-    if (settings?.updateMode !== "auto") return;
-    let alive = true;
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const result = await api.app.checkUpdates();
-          if (alive) setUpdate(result);
-        } catch {
-          // 静默检查失败就算了，用户到关于页手动检查时再报错。
-        }
-      })();
-    }, 3000);
-    return () => {
-      alive = false;
-      window.clearTimeout(timer);
-    };
-  }, [booted, settings?.updateMode]);
+    return api.events.onUpdateState((event) => {
+      setUpdatePhase(event);
+      if (event.result) setUpdate(event.result);
+    });
+  }, [booted]);
 
   /** 记住的实例已经不在了（删掉/换目录）：清空本地记忆，回到「不选择实例」。 */
   useEffect(() => {
@@ -244,10 +237,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     reloadIcon,
     update,
     setUpdate,
+    updatePhase,
   }), [
     page, booted, info, settings, saveSettings, applySettings, settingsError, instances,
     instancesLoading, instancesError, reloadInstances, versions, versionsError, reloadVersions,
-    currentInstanceId, setCurrentInstanceId, currentInstance, icon, reloadIcon, update,
+    currentInstanceId, setCurrentInstanceId, currentInstance, icon, reloadIcon, update, updatePhase,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

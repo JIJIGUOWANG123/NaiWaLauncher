@@ -176,6 +176,95 @@
   font-weight: 500;
 }
 
+/* 联机模组提示 0.3.7：手选实例 + 常驻安装状态行 */
+.net-offlinelan-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.net-offlinelan-picker-label {
+  color: var(--text-dim);
+  flex: none;
+}
+
+.net-offlinelan-picker .select-wrap {
+  min-width: 0;
+  max-width: 280px;
+}
+
+.net-offlinelan-select {
+  width: 100%;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  font-size: 12.5px;
+}
+
+.net-offlinelan-statusrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 状态行按安装状态上色：已装绿、未装用警示色、未选/无方案走暗色 */
+.net-offlinelan-statusrow[data-ol-status="installed"] .net-offlinelan-title {
+  color: var(--ok);
+}
+
+.net-offlinelan-statusrow[data-ol-status="missing"] .net-offlinelan-title,
+.net-offlinelan-statusrow[data-ol-status="mismatch"] .net-offlinelan-title {
+  color: color-mix(in srgb, var(--danger) 62%, var(--text-strong));
+}
+
+.net-offlinelan-statusrow[data-ol-status="no-instance"] .net-offlinelan-title,
+.net-offlinelan-statusrow[data-ol-status="unavailable"] .net-offlinelan-title,
+.net-offlinelan-statusrow[data-ol-status="checking"] .net-offlinelan-title {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.net-offlinelan-reco {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--text-dim) 88%, transparent);
+}
+
+/* 0.3.8：装了「另一个」联机模组时的条目列表 + 逐个卸载 */
+.net-offlinelan-others {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.net-offlinelan-other {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.net-offlinelan-other-name {
+  color: var(--text-strong);
+  font-size: 12px;
+}
+
+.net-offlinelan-other .btn-sm {
+  padding-top: 1px;
+  padding-bottom: 1px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--danger) 78%, var(--text-dim));
+}
+
+.net-offlinelan-conflict {
+  color: color-mix(in srgb, var(--danger) 58%, var(--text-dim));
+}
+
 /* ---------- 联机方式 Tab ---------- */
 
 .net-tabs {
@@ -551,6 +640,30 @@
 .net-tera-input {
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
   letter-spacing: 0.06em;
+}
+
+/* 专用服务器端口：右对齐等宽，避免和 16 位的邀请码框共用视觉重量 */
+.net-tera-port {
+  max-width: 140px;
+  text-align: center;
+  letter-spacing: 0.12em;
+}
+
+/* 专用服务器模式在邀请码下方追加的「已分享 127.0.0.1:端口」 */
+.net-tera-share {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--ok) 34%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
 }
 
 .net-tera-code-row {

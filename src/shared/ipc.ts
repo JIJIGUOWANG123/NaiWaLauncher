@@ -19,6 +19,8 @@ export const IPC = {
   appIcon: "app:appIcon",
   appCheckUpdates: "app:checkUpdates",
   appInstallUpdate: "app:installUpdate",
+  /** 主进程 → 渲染层：启动检查/自动下载的进度（检查只由主进程做一次）。 */
+  appUpdateState: "app:updateState",
   appReveal: "app:reveal",
   appChangelog: "app:changelog",
   downloadsList: "downloads:list",
@@ -247,6 +249,16 @@ export type TeraState =
   | "guest-ok"
   | "exception";
 
+/** 房主分享方式：lan = 游戏里「对局域网开放」（原行为，陶瓦自己扫）；server = 专用服务器（启动器代发局域网广播）。 */
+export type TeraHostMode = "lan" | "server";
+
+/** tera:host 的可选参数：省略即 lan 模式，与旧行为完全一致。 */
+export interface TeraHostOptions {
+  mode?: TeraHostMode;
+  /** 专用服务器在本机监听的端口（仅 server 模式有意义，默认 25565）。 */
+  serverPort?: number;
+}
+
 /** tera:status 返回的只读快照：主进程轮询 /state 合并 /meta 的结果。 */
 export interface TeraStatus {
   /** 陶瓦 HTTP 服务可达（我们拉起的 worker，或复用了用户自己开的实例）。 */
@@ -272,6 +284,14 @@ export interface TeraStatus {
   exceptionType?: number;
   /** 最近一次本地失败原因（启动/请求），成功时为空。 */
   problem?: string;
+  /** 本次房主的分享方式；没做过房主时为空。 */
+  mode?: TeraHostMode;
+  /** server 模式下被分享出去的本机端口。 */
+  serverPort?: number;
+  /** 专用服务器广播是否正在发：停止/复位/异常之后必须是 false。 */
+  broadcasting?: boolean;
+  /** 广播不可用（端口被占、没有可用网卡）的原因；此时陶瓦发现不了端口，host 流程本身不受影响。 */
+  broadcastError?: string;
 }
 
 /** 启动失败诊断的原因分类：决定弹窗标题与建议文案。 */
@@ -301,6 +321,26 @@ export interface LaunchDiagnosisExport {
   path: string | null;
   /** 打进 zip 的文件名（取消时为空数组）。 */
   files: string[];
+}
+
+/**
+ * 启动检查的进度阶段（只有主进程会发检查，渲染层只按这里的状态做展示）：
+ * checking → available/none（manual 到此为止，等用户点「立即更新」）
+ * auto 继续：downloading → downloaded →（有游戏在跑则 deferred）→ installing
+ * applied：上一次自动更新已装好，这次启动时提示「已更新到 vX」。
+ */
+export type UpdatePhase = "checking" | "available" | "none" | "downloading" | "downloaded" | "deferred" | "installing" | "applied" | "error";
+
+export interface UpdateStateEvent {
+  phase: UpdatePhase;
+  /** 触发这次检查/更新的模式。 */
+  mode: "manual" | "auto";
+  /** 检查结果（phase=checking 时没有）。 */
+  result?: UpdateCheckResult;
+  /** 正在下载/已安装的版本号。 */
+  latest?: string;
+  /** 失败或延后的原因（给界面上的提示用）。 */
+  message?: string;
 }
 
 /** The surface exposed on window.naiwa by the preload script. */
@@ -397,8 +437,8 @@ export interface NaiwaApi {
   tera: {
     /** 当前快照（meta + state 合并）；未启动时 running 为 false。 */
     status(): Promise<TeraStatus>;
-    /** 房主：开始扫描本机局域网端口，之后在游戏里「对局域网开放」即可。 */
-    host(player?: string): Promise<TeraStatus>;
+    /** 房主：lan 模式扫描游戏开出来的局域网端口；server 模式由启动器代专用服务器发局域网广播。 */
+    host(player?: string, options?: TeraHostOptions): Promise<TeraStatus>;
     /** 加入方：room 支持宽松输入（自动补 U/ 与短横线）。 */
     join(room: string, player?: string): Promise<TeraStatus>;
     /** 复位回 waiting（exception 之后的唯一出口）。 */
@@ -573,5 +613,7 @@ export interface NaiwaApi {
     onLog(cb: (l: LogLine) => void): () => void;
     /** 游戏启动失败诊断推送（进程非 0 退出或启动后 30s 内退出）。 */
     onGameDiagnosis(cb: (d: LaunchDiagnosisEvent) => void): () => void;
+    /** 启动检查与自动更新的进度推送（主进程是唯一检查者）。 */
+    onUpdateState(cb: (s: UpdateStateEvent) => void): () => void;
   };
 }

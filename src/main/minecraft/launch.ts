@@ -41,6 +41,11 @@ const runningGames = new Map<string, { child: ChildProcess; name: string }>();
  * · 设置 gameInstanceLimit = "one"（默认）且已有存活实例 → 报错并提示怎么放开；
  * · "unlimited" 只拦同实例重复启动。
  */
+/** 当前进程里还活着的游戏实例数：自动更新装机会重启启动器，用它决定要不要等到游戏结束。 */
+export function runningGameCount(): number {
+  return runningGames.size;
+}
+
 function assertGameSlot(instanceId: string, instanceName: string, limit: "one" | "unlimited"): void {
   const same = runningGames.get(instanceId);
   if (same) throw new Error(mt("launch.alreadyRunning", { name: same.name, pid: String(same.child.pid ?? 0) }));

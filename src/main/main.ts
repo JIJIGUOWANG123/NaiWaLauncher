@@ -12,6 +12,10 @@ import { setActiveSource } from "./core/sources";
 import { setSystemFetcher } from "./core/netfetch";
 import { registerIpc } from "./ipc/register";
 import { checkAppUpdates } from "./core/updates";
+import { consumeAppliedMarker, installUpdate } from "./core/updater";
+import { runningGameCount } from "./minecraft/launch";
+import { IPC } from "../shared/ipc";
+import type { UpdateStateEvent } from "../shared/ipc";
 import type { Settings, UpdateCheckResult } from "../shared/types";
 import { createSplash, fadeInWindow, fadeOutSplash, logoPathFor, splashHoldRemaining } from "./splash";
 import { destroyTray, hasTray, isQuitting, markQuitting, syncTray } from "./tray";
@@ -191,13 +195,26 @@ async function askCloseAction(win: BrowserWindow): Promise<void> {
 }
 
 /**
- * 自动更新检查的延迟：窗口出来之后再等 6 秒。
+ * 启动检查的延迟：窗口出来之后再等 6 秒。
  * 6s 落在需求给的 5–8s 区间里，也避开了首帧、背景图、版本清单那几轮 IPC 的高峰。
  */
-const AUTO_UPDATE_DELAY_MS = 6000;
+const STARTUP_UPDATE_DELAY_MS = 6000;
+
+/** 等游戏结束时的复查间隔（自动更新不打断正在玩的游戏）。 */
+const UPDATE_GAME_WAIT_MS = 5000;
 
 /**
- * 「自动更新」的提示：用系统通知，不弹阻塞式对话框 ——
+ * 更新状态推给渲染层：检查只由主进程发起一次，渲染层只负责展示
+ * （关于页徽标、右上角 toast），不再自己发检查请求。
+ */
+function pushUpdateState(state: UpdateStateEvent): void {
+  const win = mainWindow;
+  if (!win || win.isDestroyed()) return;
+  win.webContents.send(IPC.appUpdateState, state);
+}
+
+/**
+ * 新版本提示：用系统通知，不弹阻塞式对话框 ——
  * 用户可能正在进游戏，任何挡住窗口的弹窗都是干扰。
  */
 function notifyUpdateAvailable(result: UpdateCheckResult): void {
@@ -211,35 +228,137 @@ function notifyUpdateAvailable(result: UpdateCheckResult): void {
     silent: true,
   });
   // 点通知把窗口叫到前台，更新入口在「关于」页
-  notice.on("click", () => {
-    const win = mainWindow;
-    if (!win || win.isDestroyed()) return;
-    if (win.isMinimized()) win.restore();
-    if (!win.isVisible()) win.show();
-    win.focus();
+  notice.on("click", () => bringWindowToFront());
+  notice.show();
+}
+
+/** 把主窗口叫到前台（点通知 / 已更新提示都走这里）。 */
+function bringWindowToFront(): void {
+  const win = mainWindow;
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.focus();
+}
+
+/** 上一次自动更新装好后的提示：不阻塞，弹一条系统通知 + 让界面弹 toast。 */
+function notifyAppliedUpdate(latest: string): void {
+  if (!Notification.isSupported()) return;
+  const notice = new Notification({
+    title: mt("main.updateAppliedTitle"),
+    body: mt("main.updateAppliedBody", { version: latest }),
+    silent: true,
   });
+  notice.on("click", () => bringWindowToFront());
   notice.show();
 }
 
 /**
- * 启动完成后的自动检查（只在 updateMode === "auto" 时跑）。
- * 定时器不 await、不挡住启动流程；手动模式下这里直接返回，什么也不做，
- * 于是「只有用户点检查更新才查」的原有行为保持不变。
+ * 自动更新的「安装门禁」：安装会重启启动器，正在跑游戏时先把安装压住。
+ * 每 5 秒复查一次，游戏全退出后立刻放行；期间只提示一次，绝不打断游戏。
  */
-function scheduleAutoUpdateCheck(): void {
+async function waitForGamesToExit(latest: string): Promise<void> {
+  let announced = false;
+  for (;;) {
+    const running = runningGameCount();
+    if (running === 0) {
+      if (announced) log.info("[updates] 游戏已全部退出，继续安装 " + latest);
+      return;
+    }
+    if (!announced) {
+      announced = true;
+      log.info("[updates] 自动更新：还有 " + running + " 个游戏实例在运行，等它结束后再安装 " + latest);
+      pushUpdateState({
+        phase: "deferred",
+        mode: "auto",
+        latest,
+        message: mt("main.updateDeferredBody", { count: String(running) }),
+      });
+    }
+    await new Promise((resolve) => setTimeout(resolve, UPDATE_GAME_WAIT_MS));
+  }
+}
+
+/**
+ * auto 模式：检查到新版本就整条走完 —— 下载 → 校验 → 静默安装 → 自动重启。
+ * 全程后台，界面只收到不阻塞的 toast 提示。
+ */
+async function runAutoUpdate(result: UpdateCheckResult): Promise<void> {
+  const latest = result.latest ?? "";
+  log.info("[updates] 自动更新开始：下载并安装 " + latest);
+  try {
+    await installUpdate(result.assetUrl ?? result.setupUrl, result, {
+      onDownloading: (version) => {
+        log.info("[updates] 自动更新：正在下载 " + version);
+        pushUpdateState({ phase: "downloading", mode: "auto", latest: version, result });
+      },
+      onDownloaded: (version) => {
+        pushUpdateState({ phase: "downloaded", mode: "auto", latest: version, result });
+      },
+      beforeInstall: () => waitForGamesToExit(latest),
+      onInstalling: (version) => {
+        log.info("[updates] 自动更新：触发安装 " + version + "，进程即将退出");
+        pushUpdateState({ phase: "installing", mode: "auto", latest: version, result });
+      },
+    });
+  } catch (err) {
+    // 自动更新失败不打扰用户（可能只是网络问题）：留在「关于」页，他点一下还能重试
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn("[updates] 自动更新失败：" + message);
+    pushUpdateState({ phase: "error", mode: "auto", latest, message });
+  }
+}
+
+/**
+ * 启动后唯一一次更新检查（manual 与 auto 都查）。
+ * - manual：发现新版本只提示（系统通知 + 关于页徽标），**不自动下载**，等用户点「立即更新」；
+ * - auto：发现新版本直接自动下载安装并重启。
+ * 定时器不 await、不挡住启动流程，也不弹任何阻塞对话框。
+ */
+async function runStartupUpdateCheck(): Promise<void> {
+  const mode = getSettings().updateMode;
+  log.info("[updates] 启动检查开始：模式 " + mode);
+  pushUpdateState({ phase: "checking", mode });
+  try {
+    const result = await checkAppUpdates();
+    log.info(
+      "[updates] 启动检查完成：" +
+        (result.hasUpdate ? "发现新版本 " + (result.latest ?? "") + "（当前 " + result.current + "）" : "已是最新") +
+        (result.error ? "，但是 " + result.error : ""),
+    );
+    pushUpdateState({ phase: result.hasUpdate ? "available" : "none", mode, result });
+    if (!result.hasUpdate) return;
+    if (mode === "manual") {
+      log.info("[updates] 手动模式：只提示新版本 " + (result.latest ?? "") + "，不自动下载（等用户点「立即更新」）");
+      notifyUpdateAvailable(result);
+      return;
+    }
+    await runAutoUpdate(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn("[updates] 启动检查失败：" + message);
+    pushUpdateState({ phase: "error", mode, message });
+  }
+}
+
+/** 排一次启动检查：延迟 6 秒、后台跑。 */
+function scheduleStartupUpdateCheck(): void {
   setTimeout(() => {
-    if (getSettings().updateMode !== "auto") return;
-    void (async () => {
-      try {
-        const result = await checkAppUpdates();
-        log.info("[updates] 自动检查：" + (result.hasUpdate ? "发现新版本 " + result.latest : "已是最新"));
-        if (result.hasUpdate) notifyUpdateAvailable(result);
-      } catch (err) {
-        // 自动检查失败静默：用户到「关于」页手动检查时才会看到错误
-        log.warn("[updates] 自动检查失败：" + (err instanceof Error ? err.message : String(err)));
-      }
-    })();
-  }, AUTO_UPDATE_DELAY_MS);
+    void runStartupUpdateCheck();
+  }, STARTUP_UPDATE_DELAY_MS);
+}
+
+/** 上次自动更新装好了吗？装好了就在这次启动里提示「已更新到 vX」（读后即删，只提示一次）。 */
+async function announceAppliedUpdate(): Promise<void> {
+  try {
+    const latest = await consumeAppliedMarker();
+    if (!latest) return;
+    log.info("[updates] 上次自动更新已生效，当前版本 " + latest);
+    pushUpdateState({ phase: "applied", mode: "auto", latest });
+    notifyAppliedUpdate(latest);
+  } catch (err) {
+    log.warn("[updates] 读取更新标记失败：" + (err instanceof Error ? err.message : String(err)));
+  }
 }
 
 async function bootstrap(): Promise<void> {
@@ -329,8 +448,11 @@ function startApp(): void {
     mainWindow.on("closed", () => { mainWindow = null; });
     // 启动时按设置决定有没有托盘图标（关掉设置的用户不会看到多余图标）
     syncTray(() => mainWindow, () => quitApp());
-    // 自动更新检查（updateMode=auto 才查）：延迟 6 秒、后台跑，绝不阻塞启动
-    scheduleAutoUpdateCheck();
+    // 更新检查（manual/auto 都查）：延迟 6 秒、后台跑，绝不阻塞启动。
+    // manual 只提示，auto 自动下载安装 —— 都由主进程这一处负责，渲染层不再自己查。
+    scheduleStartupUpdateCheck();
+    // 上次自动更新装好了？界面加载完再提示「已更新到 vX」（不阻塞、不弹对话框）
+    mainWindow.webContents.once("did-finish-load", () => { void announceAppliedUpdate(); });
 
     app.on("before-quit", () => { markQuitting(); });
     app.on("activate", () => {

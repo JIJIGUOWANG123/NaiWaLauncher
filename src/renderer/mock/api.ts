@@ -27,26 +27,66 @@ import { emitDone, emitProgress, mockBus } from "./emitter";
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * OfflineLAN 不在种子数据里：联机页的「一键安装 OfflineLAN」在浏览器预览下也要能走通，
- * 所以按 Modrinth 的真实 project_id / slug 补一条；查不到再回落到常规种子查询。
+ * 联机模组不在种子数据里：联机页的「一键安装」在浏览器预览下也要能走通，
+ * 所以按 Modrinth 的真实 project_id / slug 各补一条；查不到再回落到常规种子查询。
  */
-const MOCK_OFFLINELAN: ModSearchResult = {
-  provider: "modrinth",
-  projectId: "pimmstPB",
-  slug: "offlinelan",
-  title: "OfflineLAN",
-  description: "Offline LAN: lets a world opened to LAN skip the online-mode check.",
-  author: "Aeroshide",
-  downloads: 1_200_000,
-  categories: ["utility"],
-  titleZh: "离线局域网",
-  summaryZh: "让「对局域网开放」的服务器跳过正版验证，离线账号也能进房。",
-};
+const MOCK_LAN_PROJECTS: ModSearchResult[] = [
+  {
+    provider: "modrinth",
+    projectId: "RTWpcTBp",
+    slug: "mcwifipnp",
+    title: "LAN World Plug-n-Play",
+    description: "Open a world to LAN without leaving the game, and skip the online-mode check.",
+    author: "S-Road",
+    downloads: 7_390_000,
+    categories: ["utility"],
+    titleZh: "局域网即插即用",
+    summaryZh: "在游戏内一键「对局域网开放」，顺便关掉正版验证；Fabric/Forge/NeoForge/Quilt 四种加载器都有发布。",
+  },
+  {
+    provider: "modrinth",
+    projectId: "pimmstPB",
+    slug: "offlinelan",
+    title: "OfflineLAN",
+    description: "Offline LAN: lets a world opened to LAN skip the online-mode check.",
+    author: "Aeroshide",
+    downloads: 1_200_000,
+    categories: ["utility"],
+    titleZh: "离线局域网",
+    summaryZh: "让「对局域网开放」的服务器跳过正版验证，离线账号也能进房。",
+  },
+  {
+    provider: "modrinth",
+    projectId: "deYSo63V",
+    slug: "lan-properties",
+    title: "LAN Properties",
+    description: "Configurable LAN world properties: online mode, max players, ports.",
+    author: "Svenar",
+    downloads: 900_000,
+    categories: ["utility"],
+    titleZh: "局域网属性",
+    summaryZh: "给「对局域网开放」的世界加可选配置：关掉正版验证、改最大人数与端口。",
+  },
+  {
+    provider: "modrinth",
+    projectId: "SqnBX2qd",
+    slug: "lan-server-properties",
+    title: "LAN Server Properties",
+    description: "Per-world LAN server settings, including online mode and port.",
+    author: "Rikka0w0",
+    downloads: 1_600_000,
+    categories: ["utility"],
+    titleZh: "局域网服务器属性",
+    summaryZh: "按世界保存局域网服务器设置，同样能关掉正版验证。",
+  },
+];
 
-/** 种子项目 + OfflineLAN：只影响模组文件/安装两处查询，其余保持原样。 */
+/** 种子项目 + 四种联机模组：只影响模组文件/安装两处查询，其余保持原样。 */
 function findProject(projectId: string): ModSearchResult | undefined {
-  if (projectId === MOCK_OFFLINELAN.projectId || projectId === MOCK_OFFLINELAN.slug) return MOCK_OFFLINELAN;
-  return mockFindProject(projectId);
+  const lanProject = MOCK_LAN_PROJECTS.find(
+    (item) => item.projectId === projectId || item.slug === projectId,
+  );
+  return lanProject ?? mockFindProject(projectId);
 }
 
 /** 预览模式下没有主进程：启动失败诊断的订阅者放这里（等价于 Electron 的 game:diagnosis）。 */
@@ -2146,6 +2186,8 @@ export function createMockApi(): NaiwaApi {
         mockDiagnosis.add(cb);
         return () => { mockDiagnosis.delete(cb); };
       },
+      // 浏览器预览没有主进程：更新状态永远推不到（真机由主进程启动检查后推送）
+      onUpdateState: () => () => {},
     },
   };
 

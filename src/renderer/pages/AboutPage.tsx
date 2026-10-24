@@ -128,7 +128,7 @@ function useAppBackground(): string {
 
 export function AboutPage() {
   const tr = useT();
-  const { info, update, setUpdate } = useApp();
+  const { info, settings, update, setUpdate } = useApp();
   const { push } = useToast();
   const heroImage = useAppBackground();
   const [checking, setChecking] = useState(false);
@@ -181,15 +181,19 @@ export function AboutPage() {
     }
   };
 
+  // 「立即更新」的发起地址：真实资产地址，或资产清单未知时的固定名兜底地址
+  const installUrl = update?.assetUrl || update?.setupUrl;
+  // 资产清单未知（走的是镜像通道）：URL 是固定名兜底，界面要如实说明
+  const assetsUnknown = Boolean(update?.assetsUnknown);
+
   // 一键更新：免安装版替换自身；安装版下载 Setup 静默装回当前目录后重启（主进程自行判断）
   const install = async () => {
-    const assetUrl = update?.assetUrl ?? update?.setupUrl;
-    if (!assetUrl) return;
+    if (!installUrl) return;
     setConfirming(false);
     setInstalling(true);
     setDownloadHighlight(false);
     try {
-      await api.app.installUpdate(assetUrl);
+      await api.app.installUpdate(installUrl);
     } catch (error: unknown) {
       push(errorMessage(error), "error");
       // 自动替换失败时把「前往下载」高亮，引导手动下载。
@@ -268,10 +272,12 @@ export function AboutPage() {
               type="button"
               className="btn btn-primary btn-sm"
               data-about-install
-              disabled={installing || !(update.assetUrl || update.setupUrl)}
+              disabled={installing || !installUrl}
               title={
-                update.assetUrl || update.setupUrl
-                  ? tr("about.installNote")
+                installUrl
+                  ? assetsUnknown
+                    ? tr("about.assetsUnknownTitle")
+                    : tr("about.installNote")
                   : tr("about.noPackage")
               }
               onClick={() => setConfirming(true)}
@@ -294,14 +300,23 @@ export function AboutPage() {
               <li key={line}>{line}</li>
             ))}
           </ul>
-          {!(update.assetUrl || update.setupUrl) ? (
+          {!installUrl ? (
             <p className="about-update-hint" data-about-no-asset>
               {tr("about.manualInstall")}
+            </p>
+          ) : assetsUnknown ? (
+            <p className="about-update-hint" data-about-asset-unknown>
+              {tr("about.assetsUnknownHint", { version: update.latest ?? "" })}
             </p>
           ) : null}
           {installing ? (
             <p className="about-update-hint" data-about-installing>
               {tr("about.restartHint")}
+            </p>
+          ) : settings?.updateMode === "auto" ? (
+            // auto：启动检查后主进程已经在后台自己下载安装了，这里如实说明，别再让用户以为要自己点
+            <p className="about-update-hint" data-about-auto-update>
+              {tr("upd.autoHint")}
             </p>
           ) : null}
         </section>

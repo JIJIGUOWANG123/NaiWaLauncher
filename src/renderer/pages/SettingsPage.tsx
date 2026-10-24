@@ -19,7 +19,7 @@ const CLOSE_ACTIONS: Array<{ value: Settings["closeAction"]; labelKey: string }>
   { value: "quit", labelKey: "settings.close.quit" },
 ];
 
-/** 更新方式：manual 只在用户点「检查更新」时查；auto 在启动后自动查一次（主进程负责）。 */
+/** 更新方式（都由主进程在启动后查一次）：manual 只提示，用户点「立即更新」才装；auto 查到就自动下载安装。 */
 const UPDATE_MODES: Array<{ value: Settings["updateMode"]; labelKey: string }> = [
   { value: "manual", labelKey: "settings.update.manual" },
   { value: "auto", labelKey: "settings.update.auto" },

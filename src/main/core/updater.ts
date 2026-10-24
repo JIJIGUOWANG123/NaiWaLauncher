@@ -4,7 +4,8 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { checkAppUpdates } from "./updates";
+import { checkAppUpdates, compareVersion } from "./updates";
+import type { UpdateCheckResult } from "../../shared/types";
 import { downloadFile } from "./http";
 import { getPaths } from "./paths";
 import { logger } from "./logger";
@@ -12,6 +13,58 @@ import { mt } from "./i18n";
 import { githubUrlCandidates } from "../net/github";
 
 const log = logger("updater");
+
+/**
+ * 自动更新时主进程要观察的进度点：全部是可选的，界面据此给「不阻塞」的提示。
+ * beforeInstall 是安装前的门禁 —— 安装要重启启动器，有游戏在跑时必须在这里等。
+ */
+export interface InstallProgress {
+  onDownloading?(latest: string): void;
+  onDownloaded?(latest: string): void;
+  onInstalling?(latest: string): void;
+  beforeInstall?(): Promise<void>;
+}
+
+/** 「上次自动更新成功」的标记文件：装好重启后据此提示「已更新到 vX」。 */
+function appliedMarkerPath(): string {
+  return join(getPaths().dataRoot, "update", "applied.json");
+}
+
+/** 记下这次自动更新要装到的版本；写不进去只影响下次启动的提示，不拦更新。 */
+async function writeAppliedMarker(latest: string): Promise<void> {
+  if (!latest) return;
+  const file = appliedMarkerPath();
+  try {
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify({ latest, at: Date.now() }), "utf8");
+  } catch (err) {
+    log.warn("[updater] 写更新标记失败（不影响更新）：" + (err instanceof Error ? err.message : String(err)));
+  }
+}
+
+/**
+ * 读出「上次自动更新」的目标版本并删掉标记。
+ * 只有当前版本真的等于该版本时才返回它 —— 否则（安装失败、换回了旧包）宁可什么也不提示。
+ */
+export async function consumeAppliedMarker(): Promise<string | null> {
+  const file = appliedMarkerPath();
+  try {
+    const raw = await readFile(file, "utf8");
+    await rm(file, { force: true });
+    const parsed = JSON.parse(raw) as { latest?: unknown };
+    const latest = typeof parsed.latest === "string" ? parsed.latest : "";
+    if (!latest) return null;
+    const current = app.getVersion();
+    if (compareVersion(current, latest) !== 0) {
+      log.warn("[updater] 更新标记是 " + latest + "，但当前版本是 " + current + "：不提示已更新");
+      return null;
+    }
+    return latest;
+  } catch {
+    // 没有标记 / 内容坏了：当作没有发生过更新
+    return null;
+  }
+}
 
 /** 免安装版文件名（仓库 Release 里就叫这个，不带版本号）。 */
 export const SINGLE_EXE_NAME = "NaiWaLauncher.exe";
@@ -168,7 +221,7 @@ async function downloadSetup(url: string): Promise<string> {
 }
 
 /** 安装版：下载 Setup 并静默装回当前目录，然后重启。 */
-async function installViaSetup(url: string): Promise<void> {
+async function installViaSetup(url: string, latest: string, progress?: InstallProgress): Promise<void> {
   const root = getPaths().root;
   // 安装版把程序放在 <root>\main，数据留在 <root>；老版本平铺在根目录时回退到根目录的 exe
   const mainExe = join(root, "main", "NaiWa Launcher.exe");
@@ -177,34 +230,49 @@ async function installViaSetup(url: string): Promise<void> {
     throw new Error(mt("upd.mainExeMissing", { path: mainExe }));
   }
   const installer = await downloadSetup(url);
+  log.info("[updater] 下载完成：" + installer);
+  progress?.onDownloaded?.(latest);
+  // 安装会重启启动器：自动更新在这里等游戏结束（手动更新没有门禁，用户自己点的）
+  await progress?.beforeInstall?.();
   const script = join(tmpdir(), "naiwa-setup-update-" + Date.now() + ".cmd");
   // 安装包一定把 exe 装到 <root>\main，重启目标就固定指向它（老版本的根目录 exe 交由安装包覆盖/丢弃）
   await writeFile(script, setupScriptBody(installer, root, mainExe, script), "utf8");
   log.info("[updater] 安装版更新：将静默安装到 " + root + "（程序在 main 子目录），脚本 " + script);
   const launch = updateLaunch(script);
+  await writeAppliedMarker(latest);
+  progress?.onInstalling?.(latest);
   spawn(launch.command, launch.args, launch.options).unref();
+  log.info("[updater] 已启动安装脚本，退出当前进程");
   setTimeout(() => app.quit(), 300);
 }
 
-/** 下载并应用更新：免安装版替换自身；安装版静默安装回原目录后重启。 */
-export async function installUpdate(url?: string): Promise<void> {
+/**
+ * 下载并应用更新：免安装版替换自身；安装版静默安装回原目录后重启。
+ * checked 是调用方已经查到的结果（启动检查用过一次就别再查：一次启动只查一次）；
+ * progress 让自动更新把进度推给界面、并在安装前等游戏结束。
+ */
+export async function installUpdate(url?: string, checked?: UpdateCheckResult, progress?: InstallProgress): Promise<void> {
   const mode = updateMode();
   if (mode === "none") {
     throw new Error(mt("upd.tempCopy"));
   }
   if (mode === "setup") {
     // 安装版要的是「安装包」，用 Release 里固定名的 Setup；调用方给的 url 可能是免安装版，忽略它
-    const check = await checkAppUpdates();
+    const check = checked ?? (await checkAppUpdates());
     const setupUrl = check.setupUrl ?? url;
     if (!setupUrl) throw new Error(mt("upd.noSetup"));
     log.info("[updater] 安装版更新：当前 " + check.current + " → " + check.latest);
-    await installViaSetup(setupUrl);
+    progress?.onDownloading?.(check.latest ?? "");
+    await installViaSetup(setupUrl, check.latest ?? "", progress);
     return;
   }
   const target = updateTarget();
   log.info("[updater] 开始更新：目标 " + target + "（运行中：" + app.getPath("exe") + "）");
-  const source = url ?? (await checkAppUpdates()).assetUrl;
+  const check = checked ?? (await checkAppUpdates());
+  const latest = check.latest ?? "";
+  const source = url ?? check.assetUrl;
   if (!source) throw new Error(mt("upd.noPortable"));
+  progress?.onDownloading?.(latest);
   let staged = "";
   try {
     staged = await downloadToStaging(source);
@@ -212,8 +280,13 @@ export async function installUpdate(url?: string): Promise<void> {
     throw new Error(err instanceof Error ? err.message : mt("upd.failed", { error: String(err) }));
   }
   log.info("[updater] 下载完成，准备替换");
+  progress?.onDownloaded?.(latest);
+  // 安装会重启启动器：自动更新在这里等游戏结束（手动更新没有门禁，用户自己点的）
+  await progress?.beforeInstall?.();
   const script = await writeSwapScript(staged, target);
   const launch = updateLaunch(script);
+  await writeAppliedMarker(latest);
+  progress?.onInstalling?.(latest);
   spawn(launch.command, launch.args, launch.options).unref();
   log.info("[updater] 已启动替换脚本，退出当前进程");
   setTimeout(() => app.quit(), 300);

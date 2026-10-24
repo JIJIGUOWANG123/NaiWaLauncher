@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { InstalledContentRef, InstanceMeta, LoaderKind, ModFileInfo } from "../../shared/types";
 import { api } from "../lib/api";
 import { loaderLabel } from "../lib/format";
@@ -6,148 +6,551 @@ import { useT } from "../lib/i18n";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
-import { IconAlert, IconCheck, IconInfo } from "../components/icons";
+import { IconAlert, IconCheck, IconChevronDown, IconInfo } from "../components/icons";
+
+/** 联机模组在 Modrinth 上的固定标识（已核对，不要再猜别处的 id）。 */
+export type LanModKey = "offlinelan" | "mcwifipnp" | "lan-properties" | "lan-server-properties";
+
+export interface LanModDef {
+  key: LanModKey;
+  slug: string;
+  projectId: string;
+  /** 项目名本身不翻译，界面文案里直接用。 */
+  name: string;
+  /** 已装判定的模糊词：文件名 / modId / 显示名去掉分隔符后做子串匹配。 */
+  aliases: string[];
+}
+
+export const LAN_MODS: Record<LanModKey, LanModDef> = {
+  offlinelan: {
+    key: "offlinelan", slug: "offlinelan", projectId: "pimmstPB", name: "OfflineLAN", aliases: ["offlinelan"],
+  },
+  mcwifipnp: {
+    key: "mcwifipnp",
+    slug: "mcwifipnp",
+    projectId: "RTWpcTBp",
+    name: "LAN World Plug-n-Play",
+    // 站点上的文件名用项目自己的 slug（lan-world-plug-n-play），三种写法都认。
+    aliases: ["mcwifipnp", "lanworldplugnplay", "lanworldplugandplay"],
+  },
+  "lan-properties": {
+    key: "lan-properties", slug: "lan-properties", projectId: "deYSo63V", name: "LAN Properties", aliases: ["lanproperties"],
+  },
+  "lan-server-properties": {
+    key: "lan-server-properties",
+    slug: "lan-server-properties",
+    projectId: "SqnBX2qd",
+    name: "LAN Server Properties",
+    aliases: ["lanserverproperties"],
+  },
+};
+
+/** 实例的 loader 里没有 legacy-fabric，但 LAN Properties 在站点上按 legacy-fabric 发布，判定矩阵要能表达它。 */
+export type LanLoader = LoaderKind | "legacy-fabric";
 
 /**
- * Modrinth 上的 OfflineLAN（离线局域网）：让「对局域网开放」的服务器跳过正版验证。
- * /project/{id} 与 /project/{slug} 都能查版本文件，所以两个标识都留着，谁通就把谁缓存下来。
+ * 推荐矩阵：按加载器给出有序候选，前面的查不到文件才回退到后面那个。
+ * Fabric / Quilt → OfflineLAN（回退 mcwifipnp → LAN Properties → LAN Server Properties）；
+ * Forge / NeoForge / Legacy Fabric → mcwifipnp（回退 LAN Properties → LAN Server Properties）；
+ * 原版另有提示；没有候选的加载器（liteloader）返回空数组，由调用方按 unsupported 处理。
  */
-const PROJECT_ID = "pimmstPB";
-const PROJECT_SLUG = "offlinelan";
+export function lanModCandidates(loader: LanLoader): LanModKey[] {
+  switch (loader) {
+    case "fabric":
+    case "quilt":
+      // 首选 OfflineLAN，但它覆盖的 MC 版本少：没文件时依次回退 mcwifipnp、LAN Properties、LAN Server Properties。
+      return ["offlinelan", "mcwifipnp", "lan-properties", "lan-server-properties"];
+    case "forge":
+    case "neoforge":
+    case "legacy-fabric":
+      // mcwifipnp 四种加载器都有发布，比只发 Forge/NeoForge 的 LAN Properties 更通用，所以放首位兜底。
+      return ["mcwifipnp", "lan-properties", "lan-server-properties"];
+    default:
+      return [];
+  }
+}
+
+export type LanAvailability = "yes" | "no" | "unknown";
+
+/** 候选里第一个「站点上有当前版本+加载器文件」的那个。 */
+export function pickLanMod(
+  candidates: LanModKey[],
+  availability: Partial<Record<LanModKey, LanAvailability>>,
+): LanModKey | null {
+  for (const key of candidates) {
+    if (availability[key] === "yes") return key;
+  }
+  return null;
+}
 
 export type OfflineLanState = "no-instance" | "vanilla" | "missing" | "unsupported" | "ok";
 /** host = 自己是房主（要自己装）；guest = 自己只是房客（让房主装/确认）。 */
 export type OfflineLanSide = "host" | "guest";
+/** 常驻的那行安装状态：未选实例 / 无可用方案 / 未安装 / 已装且匹配 / 已装但版本不匹配。 */
+export type LanInstallStatus = "no-instance" | "unavailable" | "missing" | "installed" | "mismatch";
 
-export interface OfflineLanFacts {
+export interface LanInstalledInfo {
+  fileName: string;
+  /** 文件名加号后面那段 MC 版本（offlinelan-2.0.0+1.21.4.jar → 1.21.4）；没有就是 null。 */
+  mcVersion: string | null;
+  /** 文件名里的模组版本；解析不到就是 null。 */
+  version: string | null;
+}
+
+export interface LanFacts {
   instance: Pick<InstanceMeta, "mcVersion" | "loader"> | null;
-  /** 实例 mods 目录里是否已有 OfflineLAN（索引或扫描结果里有它）。 */
-  installed: boolean;
-  /** 已装文件自带的 MC 版本（offlinelan-2.0.0+1.21.4.jar → 1.21.4）；文件名里没有就是 null。 */
-  installedMcVersion: string | null;
-  /** 该项目在「当前 MC 版本 + 加载器」下有没有文件；null = 还没查出来或查询失败。 */
-  available: boolean | null;
+  availability: Partial<Record<LanModKey, LanAvailability>>;
+  installed: Partial<Record<LanModKey, LanInstalledInfo>>;
+}
+
+/** 实例里装着的「另一个」联机模组（不是当前推荐项）：状态行要指出来并给卸载按钮。 */
+export interface LanOtherMod {
+  key: LanModKey;
+  name: string;
+  version: string | null;
+  /** 卸载要按文件名删，所以条目必须带上它。 */
+  fileName: string;
+}
+
+/** 同时装多个联机模组会互相抢 LAN 端口，列表最多列这么多，避免撑破提示卡。 */
+export const MAX_OTHER_LAN_MODS = 4;
+
+/** 已装但不是推荐项的那些联机模组：顺序跟着 LAN_MODS 声明走，结果稳定，自检可以断言。 */
+export function otherLanMods(
+  installed: Partial<Record<LanModKey, LanInstalledInfo>>,
+  mod: LanModKey | null,
+  limit = MAX_OTHER_LAN_MODS,
+): LanOtherMod[] {
+  const list: LanOtherMod[] = [];
+  for (const key of Object.keys(LAN_MODS) as LanModKey[]) {
+    if (key === mod) continue;
+    const info = installed[key];
+    if (!info) continue;
+    list.push({ key, name: LAN_MODS[key].name, version: info.version, fileName: info.fileName });
+  }
+  return list.slice(0, limit);
+}
+
+export interface LanPlan {
+  state: OfflineLanState;
+  /** 推荐的那个模组；没有可用方案时 null。 */
+  mod: LanModKey | null;
+  install: LanInstallStatus;
+  installed: LanInstalledInfo | null;
+  /** 走回退时，被跳过的那个候选（用于「已回退」提示）。 */
+  fallbackFrom: LanModKey | null;
+  /** 回退是因为「查询失败」而不是「确实没有文件」——提示语要分开写。 */
+  fallbackUnknown: boolean;
+  /** 候选全都查不到文件（不是网络失败）。 */
+  noFiles: boolean;
+  /** 实例里另外装着的联机模组（不是推荐项），最多 MAX_OTHER_LAN_MODS 个。 */
+  others: LanOtherMod[];
+}
+
+function fallbackOf(candidates: LanModKey[], chosen: LanModKey | null): LanModKey | null {
+  if (!chosen) return null;
+  const index = candidates.indexOf(chosen);
+  return index > 0 ? candidates[index - 1] : null;
 }
 
 /**
- * 五种界面状态：没选实例 → 原版 → 已装且对得上 → 装不上（版本/加载器不匹配）→ 还没装。
- * 已装的情况先看文件名里的 MC 版本（装成别的版本等于没装对），再看站点上有没有当前版本的文件。
+ * 推荐 + 已装一起算：先按加载器挑候选，再对照站点文件与实例里已装的内容。
+ * 已装但文件名里的 MC 版本和实例对不上 = 等于没装：状态仍归 unsupported，但安装状态行会说清原因。
  */
-export function resolveOfflineLanState(facts: OfflineLanFacts): OfflineLanState {
-  const { instance } = facts;
-  if (!instance) return "no-instance";
-  if (instance.loader === "vanilla") return "vanilla";
-  if (facts.installed) {
-    if (facts.installedMcVersion && facts.installedMcVersion !== instance.mcVersion) return "unsupported";
-    if (facts.available === false) return "unsupported";
-    return "ok";
+export function resolveLanPlan(facts: LanFacts): LanPlan {
+  const base: LanPlan = {
+    state: "no-instance",
+    mod: null,
+    install: "no-instance",
+    installed: null,
+    fallbackFrom: null,
+    fallbackUnknown: false,
+    noFiles: false,
+    others: [],
+  };
+  const instance = facts.instance;
+  if (!instance) return base;
+  if (instance.loader === "vanilla") return { ...base, state: "vanilla", install: "unavailable" };
+
+  const candidates = lanModCandidates(instance.loader);
+  if (candidates.length === 0) return { ...base, state: "unsupported", install: "unavailable" };
+
+  const noFiles = candidates.every((key) => facts.availability[key] === "no");
+  const withFiles = pickLanMod(candidates, facts.availability);
+  // 站点上一个可用文件都没有时，只要实例里已经装了候选之一，仍按它显示安装状态（比「不支持」更有用）。
+  const mod = withFiles ?? candidates.find((key) => facts.installed[key]) ?? null;
+  if (!mod) {
+    // 查询失败（unknown）不能说成「不支持」：留 missing，界面给重试。
+    return {
+      ...base,
+      state: noFiles ? "unsupported" : "missing",
+      install: "unavailable",
+      noFiles,
+      others: otherLanMods(facts.installed, null),
+    };
   }
-  return facts.available === false ? "unsupported" : "missing";
+
+  const fallbackFrom = fallbackOf(candidates, withFiles);
+  const fallbackUnknown = fallbackFrom !== null && facts.availability[fallbackFrom] === "unknown";
+  // 已装的其它联机模组：推荐项自己不算，它们才是要卸载/换装的对象。
+  const others = otherLanMods(facts.installed, mod);
+  const installed = facts.installed[mod] ?? null;
+  if (!installed) {
+    return { ...base, state: "missing", mod, install: "missing", fallbackFrom, fallbackUnknown, noFiles, others };
+  }
+  const mismatched = installed.mcVersion !== null && installed.mcVersion !== instance.mcVersion;
+  return {
+    state: mismatched ? "unsupported" : "ok",
+    mod,
+    install: mismatched ? "mismatch" : "installed",
+    installed,
+    fallbackFrom,
+    fallbackUnknown,
+    noFiles,
+    others,
+  };
 }
 
-/** Modrinth 的文件名是 <slug>-<模组版本>+<MC 版本>.jar：只认 + 后面那段，别把模组版本当游戏版本。 */
+export interface LanViewOptions {
+  t: (key: string, vars?: Record<string, string | number>) => string;
+  side: OfflineLanSide;
+  /** 探测是否已经给出这个实例的结果；false 时只显示「正在检查…」。 */
+  settled: boolean;
+  mcVersion: string;
+  loader: string;
+  /** 查询本身失败了（网络/来源站），界面给「重试」。 */
+  queryFailed: boolean;
+}
+
+/** 状态行 + 说明行 + 按钮可见性：组件直接渲染这几个字段，自检也断言它。 */
+export interface LanView {
+  /** 常驻状态行的取值（data-ol-status）。 */
+  status: LanInstallStatus | "checking";
+  statusText: string;
+  note: string | null;
+  hint: string | null;
+  showInstall: boolean;
+  showRetry: boolean;
+  /** 已装的其它联机模组（推荐项除外）：组件按它逐个渲染卸载条目。 */
+  otherMods: LanOtherMod[];
+  /** 卸载按钮是否可见（有别的联机模组装着就可见）。 */
+  showUninstall: boolean;
+  /** 换装 / 多装冲突提示；没有其它联机模组时为 null。 */
+  otherHint: string | null;
+}
+
+export function describeLanPlan(plan: LanPlan, options: LanViewOptions): LanView {
+  const { t, side, settled, mcVersion, loader } = options;
+  const modName = plan.mod ? LAN_MODS[plan.mod].name : "";
+  const status = settled ? plan.install : "checking";
+  if (!settled) {
+    return {
+      status,
+      statusText: t("pages.lanMod.checking"),
+      note: null,
+      hint: null,
+      showInstall: false,
+      showRetry: false,
+      otherMods: [],
+      showUninstall: false,
+      otherHint: null,
+    };
+  }
+
+  // 装着的是「另一个」联机模组：状态行直接点名，并给卸载入口，卸载完再装推荐的那个。
+  const otherMods = plan.others;
+  const otherNames = otherMods.map((item) => item.name).join(", ");
+
+  // 走了回退就在状态行尾巴上写清原因：推荐项不是首选这件事必须让用户看见。
+  const fallbackSuffix = plan.fallbackFrom
+    ? (plan.fallbackUnknown
+      ? t("pages.lanMod.fallbackUnknown", { skipped: LAN_MODS[plan.fallbackFrom].name })
+      : t("pages.lanMod.fallback", { skipped: LAN_MODS[plan.fallbackFrom].name, version: mcVersion }))
+    : "";
+
+  const statusText = (() => {
+    if (plan.state === "vanilla") return t("pages.lanMod.vanillaStatus");
+    if (plan.install === "no-instance") return t("pages.lanMod.noInstance");
+    if (plan.install === "unavailable") return t("pages.lanMod.unavailable");
+    if (plan.install === "missing") {
+      // 装了别的联机模组 ≠ 什么都没装：状态行必须同时说出「已装谁」和「推荐谁」。
+      if (otherMods.length === 1) {
+        const other = otherMods[0];
+        const key = other.version ? "pages.lanMod.otherInstalled" : "pages.lanMod.otherInstalledBare";
+        return t(key, { other: other.name, version: other.version ?? "", recommended: modName }) + fallbackSuffix;
+      }
+      if (otherMods.length > 1) {
+        return t("pages.lanMod.othersInstalled", {
+          count: otherMods.length, others: otherNames, recommended: modName,
+        }) + fallbackSuffix;
+      }
+      return t("pages.lanMod.missing", { mod: modName }) + fallbackSuffix;
+    }
+    if (plan.install === "mismatch") {
+      return t("pages.lanMod.mismatch", {
+        mod: modName, installedMc: plan.installed?.mcVersion ?? "", mcVersion,
+      }) + fallbackSuffix;
+    }
+    return plan.installed?.version
+      ? t("pages.lanMod.installedWithVersion", { mod: modName, version: plan.installed.version })
+      : t("pages.lanMod.installed", { mod: modName });
+  })();
+
+  const note = (() => {
+    if (plan.install === "no-instance") return t("pages.lanMod.noInstanceBody");
+    if (plan.state === "vanilla") return t("pages.lanMod.vanillaBody");
+    if (plan.install === "unavailable") return t("pages.lanMod.unavailableBody", { version: mcVersion, loader });
+    if (plan.install === "missing") {
+      return side === "guest"
+        ? t("pages.lanMod.guestMissingBody", { mod: modName })
+        : t("pages.lanMod.missingBody", { mod: modName });
+    }
+    if (plan.install === "mismatch") return t("pages.lanMod.mismatchBody", { mod: modName, mcVersion });
+    return side === "guest"
+      ? t("pages.lanMod.installedGuest", { mod: modName })
+      : t("pages.lanMod.installedBody", { mod: modName });
+  })();
+
+  const hint = (() => {
+    if (plan.install === "missing") {
+      return side === "guest" ? t("pages.lanMod.guestDoNotInstall") : t("pages.lanMod.missingGuestHint");
+    }
+    if ((plan.install === "installed" || plan.install === "mismatch") && side === "guest") {
+      return t("pages.lanMod.guestHostHint", { mod: modName });
+    }
+    return null;
+  })();
+
+  // 推荐项已装时只是「多装了一个」：提示卸载，而不是「换装」；
+  // 推荐项没装时：一个 → 换装提示（先卸再装），两个以上 → 互相冲突提示（会抢端口）。
+  const recommendedInstalled = plan.install === "installed" || plan.install === "mismatch";
+  const otherHint = otherMods.length === 0
+    ? null
+    : recommendedInstalled
+      ? t("pages.lanMod.extraConflictHint", { other: otherNames, recommended: modName })
+      : otherMods.length > 1
+        ? t("pages.lanMod.otherConflictHint", { count: otherMods.length, recommended: modName })
+        : t("pages.lanMod.switchModHint", { other: otherNames, recommended: modName });
+
+  return {
+    status,
+    statusText,
+    note,
+    hint,
+    showInstall: plan.install === "missing" && side === "host",
+    // 只有「查不到文件」才给重试：版本不支持重试也没用。
+    showRetry: plan.install === "unavailable" && options.queryFailed,
+    otherMods,
+    showUninstall: otherMods.length > 0,
+    otherHint,
+  };
+}
+
+/** 卡片根节点上的 data 属性：自检按它们断言，别随手改名。 */
+export interface LanDataView {
+  state: OfflineLanState | undefined;
+  available: "true" | "false" | "unknown";
+  installedFlag: "true" | "false" | "unknown";
+  mod: string;
+  modVersion: string;
+  status: LanInstallStatus | "checking";
+  projectId: string;
+  /** 回退时被跳过的那个候选，没回退就是空串（data-ol-fallback-from）。 */
+  fallbackFrom: string;
+  /** 另外装着的联机模组数量（data-ol-other-mods），没有就是 "0"。 */
+  otherMods: string;
+}
+
+export function lanDataView(
+  plan: LanPlan,
+  options: { settled: boolean; fileId: string },
+): LanDataView {
+  return {
+    state: options.settled ? plan.state : undefined,
+    available: plan.mod ? "true" : options.settled && plan.noFiles ? "false" : "unknown",
+    installedFlag: plan.install === "installed" || plan.install === "mismatch"
+      ? "true"
+      : plan.install === "missing" ? "false" : "unknown",
+    mod: plan.mod ?? "",
+    modVersion: plan.installed?.version ?? "",
+    status: options.settled ? plan.install : "checking",
+    projectId: plan.mod ? LAN_MODS[plan.mod].projectId : "",
+    fallbackFrom: plan.fallbackFrom ?? "",
+    otherMods: String(plan.others.length),
+  };
+}
+
+/**
+ * 已装文件里的 MC 版本：
+ * 1) Modrinth 新文件名是 slug-模组版本+MC 版本.jar，加号后面那段就是 MC 版本；
+ * 2) 老式文件名（lan-properties-1.20.1-1.4.2.jar）没有加号，取「最后一个号段之前」那个 1.x 号段——
+ *    要求至少两个号段，避免把单号段的模组版本（offlinelan-2.0.0.jar）误当游戏版本。
+ */
 export function mcVersionFromFileName(fileName: string): string | null {
-  const match = /\+\s*(\d+\.\d+(?:\.\d+)?)/.exec(fileName);
-  return match ? match[1] : null;
+  const plus = /\+\s*(\d+\.\d+(?:\.\d+)?)/.exec(fileName);
+  if (plus) return plus[1];
+  const tokens = fileName.replace(/\.jar$/i, "").split(/[-_\s]+/).filter((token) => /^v?\d+(?:\.\d+)*$/.test(token));
+  if (tokens.length < 2) return null;
+  const mcToken = tokens.slice(0, -1).find((token) => /^1\.\d{1,2}(?:\.\d{1,2})?$/.test(token));
+  return mcToken ?? null;
 }
 
-/** 已装列表里挑 OfflineLAN：project_id / modId / 文件名（含分隔空格写法）三路都认。 */
-export function isOfflineLanRef(ref: InstalledContentRef): boolean {
-  if (ref.projectId === PROJECT_ID || ref.projectId === PROJECT_SLUG) return true;
-  if (ref.modId && /offlinelan/i.test(ref.modId)) return true;
-  const text = `${ref.fileName} ${ref.name ?? ""}`.toLowerCase();
-  return text.includes("offlinelan") || text.includes("offline lan");
+/** 取文件名里最后一个版本号段当模组版本：offlinelan-2.0.0+1.21.4.jar → 2.0.0。 */
+export function modVersionFromFileName(fileName: string): string | null {
+  const base = fileName.replace(/\.jar$/i, "");
+  const head = base.includes("+") ? base.slice(0, base.indexOf("+")) : base;
+  const tokens = head.split(/[-_\s]+/).filter((token) => /^v?\d+(?:\.\d+)*$/.test(token));
+  if (tokens.length === 0) return null;
+  return tokens[tokens.length - 1].replace(/^v/i, "");
 }
 
-/** 解析过一次就记住可用的项目标识，之后每个 tab 只查一次文件列表。 */
-let resolvedProjectId: string | null = null;
+/** 去掉大小写与分隔符：lan-server-properties 与 LAN Server Properties 都归一到 lanserverproperties。 */
+function normalizeRefText(value: string): string {
+  return value.toLowerCase().replace(/[\s._-]+/g, "");
+}
 
-/** 查该项目在当前版本/加载器下的文件；两个标识都不通时返回 null（未知），不要当成「不支持」。 */
-async function fetchProjectFiles(mcVersion: string, loader: LoaderKind): Promise<ModFileInfo[] | null> {
-  const candidates = resolvedProjectId ? [resolvedProjectId] : [PROJECT_SLUG, PROJECT_ID];
-  for (const projectId of candidates) {
+/** 已装列表里挑某个联机模组：project_id / slug / modId / 文件名 / 显示名五路都认。 */
+export function isLanModRef(ref: InstalledContentRef, key: LanModKey): boolean {
+  const def = LAN_MODS[key];
+  if (ref.projectId === def.projectId || ref.projectId === def.slug) return true;
+  // 扫描兜底来的条目没有 projectId，只能靠 modId 与显示名认。
+  const text = normalizeRefText(ref.fileName + " " + (ref.modId ?? "") + " " + (ref.name ?? ""));
+  return def.aliases.some((alias) => text.includes(alias));
+}
+
+/** 实例下拉的默认值：跟当前实例；当前实例为空时留空，渲染「请选择实例」占位。 */
+export function defaultInstanceId(currentInstanceId: string | null | undefined): string {
+  return currentInstanceId ?? "";
+}
+
+/** 下拉选中的实例：手选的 id 在实例列表里找不到（例如刚被删掉）时等同于没选。 */
+export function selectedInstance<T extends Pick<InstanceMeta, "id">>(
+  instances: readonly T[],
+  instanceId: string,
+): T | null {
+  return instances.find((item) => item.id === instanceId) ?? null;
+}
+
+/** 每个模组记住第一次查通的标识（project_id 或 slug），之后每个 tab 只查一次。 */
+const resolvedIdentifiers = new Map<LanModKey, string>();
+
+/** 查某个模组在当前版本/加载器下的文件；标识全都不通时返回 null（未知），不要当成「不支持」。 */
+async function fetchModFiles(key: LanModKey, mcVersion: string, loader: LoaderKind): Promise<ModFileInfo[] | null> {
+  const def = LAN_MODS[key];
+  const known = resolvedIdentifiers.get(key);
+  const identifiers = known ? [known] : [def.projectId, def.slug];
+  for (const projectId of identifiers) {
     try {
       const files = await api.mods.files({
         provider: "modrinth", projectId, kind: "mod", gameVersion: mcVersion, loader,
       });
-      resolvedProjectId = projectId;
+      resolvedIdentifiers.set(key, projectId);
       return files;
     } catch {
-      // 换下一个标识再试；全都失败就交给调用方按「未知」处理。
+      // 换下一个标识再试；都不通行就交给调用方按「未知」处理。
     }
   }
   return null;
 }
 
 interface Probe {
-  installed: boolean;
-  installedMcVersion: string | null;
-  available: boolean | null;
-  projectId: string | null;
-  fileId: string | null;
+  /** 探测结果属于哪个实例：切实例时旧结果不能拿来下结论。 */
+  instanceId: string | null;
+  availability: Partial<Record<LanModKey, LanAvailability>>;
+  files: Partial<Record<LanModKey, ModFileInfo[]>>;
+  installed: Partial<Record<LanModKey, LanInstalledInfo>>;
 }
 
-const EMPTY_PROBE: Probe = {
-  installed: false, installedMcVersion: null, available: null, projectId: null, fileId: null,
-};
+const EMPTY_PROBE: Probe = { instanceId: null, availability: {}, files: {}, installed: {} };
 
 /**
- * 三种联机方式共用的服主侧提示：版本匹配由「实例版本/加载器 + 站点文件列表 + 已装文件名」三方对照。
- * 只读渲染层已有能力（installedContent / files / install），不在主进程加查询。
+ * 三种联机方式共用的提示卡：手选实例 → 按加载器推荐联机模组 → 三方对照（实例版本/加载器、
+ * 站点文件列表、已装文件名）给出常驻的安装状态行，并在房主侧给一键安装。
+ * 只读渲染层已有能力（instances / installedContent / files / install），不在主进程加查询。
  */
 export function OfflineLanNotice({ side = "host" }: { side?: OfflineLanSide }) {
-  const { currentInstance } = useApp();
+  const { instances, currentInstanceId } = useApp();
   const t = useT();
   const { push } = useToast();
   const [installing, setInstalling] = useState(false);
+  // 正在卸载哪一个联机模组（null = 没有正在进行的卸载）。
+  const [uninstalling, setUninstalling] = useState<LanModKey | null>(null);
+  // 手选实例：默认跟当前实例；用户选过就保持本页的选择，页面外切换当前实例时再跟一次。
+  const [instanceId, setInstanceId] = useState(() => defaultInstanceId(currentInstanceId));
+  const lastCurrent = useRef(currentInstanceId);
+  useEffect(() => {
+    if (lastCurrent.current === currentInstanceId) return;
+    lastCurrent.current = currentInstanceId;
+    setInstanceId(defaultInstanceId(currentInstanceId));
+  }, [currentInstanceId]);
+
+  const selected = useMemo(() => selectedInstance(instances, instanceId), [instances, instanceId]);
+  const candidates = selected ? lanModCandidates(selected.loader) : [];
+  const probing = Boolean(selected) && selected?.loader !== "vanilla" && candidates.length > 0;
 
   const probe = useAsync<Probe>(async () => {
-    const instance = currentInstance;
+    const instance = selected;
     if (!instance || instance.loader === "vanilla") return EMPTY_PROBE;
-    const [refs, files] = await Promise.all([
-      // 已装列表查不到时按「没装」处理：状态照常显示，安装按钮重复点一次也不会坏。
-      api.mods.installedContent(instance.id).catch(() => [] as InstalledContentRef[]),
-      fetchProjectFiles(instance.mcVersion, instance.loader),
-    ]);
-    const ref = refs.find(isOfflineLanRef) ?? null;
-    // exactMatch 是主进程按实例版本+加载器算好的，优先用它，否则取第一个可用文件。
-    const file = files && files.length > 0 ? (files.find((item) => item.exactMatch) ?? files[0]) : null;
-    return {
-      installed: Boolean(ref),
-      installedMcVersion: ref ? mcVersionFromFileName(ref.fileName) : null,
-      available: files === null ? null : files.length > 0,
-      projectId: files === null ? null : (resolvedProjectId ?? PROJECT_ID),
-      fileId: file?.fileId ?? null,
-    };
-  }, [currentInstance?.id ?? "", currentInstance?.mcVersion ?? "", currentInstance?.loader ?? ""]);
+    const keys = lanModCandidates(instance.loader);
+    // 已装列表查不到时按「没装」处理：状态照常显示，安装按钮重复点一次也不会坏。
+    const refs = await api.mods.installedContent(instance.id).catch(() => [] as InstalledContentRef[]);
+    const installed: Partial<Record<LanModKey, LanInstalledInfo>> = {};
+    // 已装判定扫全部联机模组（不只是候选）：装了「另一个」联机模组时要能指出来并给卸载。
+    for (const key of Object.keys(LAN_MODS) as LanModKey[]) {
+      const ref = refs.find((item) => isLanModRef(item, key));
+      if (!ref) continue;
+      installed[key] = {
+        fileName: ref.fileName,
+        mcVersion: mcVersionFromFileName(ref.fileName),
+        version: modVersionFromFileName(ref.fileName),
+      };
+    }
+    const availability: Partial<Record<LanModKey, LanAvailability>> = {};
+    const files: Partial<Record<LanModKey, ModFileInfo[]>> = {};
+    for (const key of keys) {
+      const list = await fetchModFiles(key, instance.mcVersion, instance.loader);
+      availability[key] = list === null ? "unknown" : list.length > 0 ? "yes" : "no";
+      if (list) files[key] = list;
+      // 前一个候选有文件就不必再查后面的：回退只在前一个没文件时发生。
+      if (list !== null && list.length > 0) break;
+    }
+    return { instanceId: instance.id, availability, files, installed };
+  }, [selected?.id ?? "", selected?.mcVersion ?? "", selected?.loader ?? ""]);
 
-  const facts: OfflineLanFacts = {
-    instance: currentInstance,
-    installed: probe.data?.installed ?? false,
-    installedMcVersion: probe.data?.installedMcVersion ?? null,
-    available: probe.data?.available ?? null,
-  };
-  const state = resolveOfflineLanState(facts);
+  const settled = !probing || Boolean(probe.data && probe.data.instanceId === selected?.id);
+  const probed = settled ? probe.data : null;
+  const plan = resolveLanPlan({
+    instance: selected,
+    availability: probed?.availability ?? {},
+    installed: probed?.installed ?? {},
+  });
 
-  // 非原版实例要等第一次探测结果，否则会先闪一下「没装」；原版/未选实例不依赖网络，直接渲染。
-  const skipProbe = !currentInstance || currentInstance.loader === "vanilla";
-  if (!skipProbe && !probe.data) return null;
+  const mcVersion = selected?.mcVersion ?? "";
+  const loader = selected ? loaderLabel(selected.loader, t) : "";
+  const modFiles = plan.mod ? probed?.files[plan.mod] : undefined;
+  const targetFile = modFiles ? (modFiles.find((item) => item.exactMatch) ?? modFiles[0] ?? null) : null;
+  const queryFailed = Boolean(probed) && candidates.some((key) => probed?.availability[key] === "unknown");
+  const view = describeLanPlan(plan, { t, side, settled, mcVersion, loader, queryFailed });
+  const data = lanDataView(plan, { settled, fileId: targetFile?.fileId ?? "" });
+  const modName = plan.mod ? LAN_MODS[plan.mod].name : "";
+  const skipReason = settled && queryFailed;
 
   const runInstall = async () => {
-    const instance = currentInstance;
-    if (!instance) return;
+    if (!selected || !plan.mod) return;
+    const mod = plan.mod;
     setInstalling(true);
     try {
       // 走现有安装队列：同一个 api.mods.install，装完会出现在「管理」页。
       const result = await api.mods.install({
         provider: "modrinth",
-        projectId: probe.data?.projectId ?? PROJECT_ID,
-        fileId: probe.data?.fileId ?? undefined,
-        instanceId: instance.id,
+        projectId: LAN_MODS[mod].projectId,
+        fileId: targetFile?.fileId ?? undefined,
+        instanceId: selected.id,
         kind: "mod",
         installDependencies: true,
       });
-      push(t("pages.offlineLan.installDone", { file: result.fileName }), "success");
+      push(t("pages.lanMod.installDone", { mod: LAN_MODS[mod].name, file: result.fileName }), "success");
+      // 装完立刻重探：状态行自己变成「已安装 …」。
       probe.reload();
     } catch (error: unknown) {
       push(errorMessage(error), "error");
@@ -156,112 +559,135 @@ export function OfflineLanNotice({ side = "host" }: { side?: OfflineLanSide }) {
     }
   };
 
-  const loader = currentInstance ? loaderLabel(currentInstance.loader, t) : "";
-  const mcVersion = currentInstance?.mcVersion ?? "";
+  const runUninstall = async (target: LanOtherMod) => {
+    if (!selected) return;
+    setUninstalling(target.key);
+    try {
+      // 走现有卸载通道（mods:remove）：真删文件，成功后 installedContent 也跟着变。
+      await api.mods.remove(selected.id, target.fileName, "mod");
+      push(t("pages.lanMod.uninstallDone", { mod: target.name }), "success");
+      // 卸载完立刻重探：状态行自己回到 missing，并出现「一键安装 推荐项」。
+      probe.reload();
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      setUninstalling(null);
+    }
+  };
 
-  const body = (() => {
-    if (state === "no-instance") {
-      return (
-        <>
-          <span className="net-offlinelan-title">{t("pages.offlineLan.noInstanceTitle")}</span>
-          <span className="net-offlinelan-hint">{t("pages.offlineLan.noInstanceBody")}</span>
-        </>
-      );
-    }
-    if (state === "vanilla") {
-      return (
-        <>
-          <span className="net-offlinelan-title">{t("pages.offlineLan.vanillaTitle")}</span>
-          <span className="net-offlinelan-hint">{t("pages.offlineLan.vanillaBody")}</span>
-        </>
-      );
-    }
-    if (state === "unsupported") {
-      const installedElsewhere = probe.data?.installedMcVersion
-        && probe.data.installedMcVersion !== mcVersion;
-      return (
-        <>
-          <span className="net-offlinelan-title">
-            {t("pages.offlineLan.unsupportedTitle", { version: mcVersion, loader })}
-          </span>
-          <span className="net-offlinelan-hint">
-            {installedElsewhere
-              ? t("pages.offlineLan.unsupportedInstalled", { installedVersion: probe.data?.installedMcVersion ?? "" })
-              : t("pages.offlineLan.unsupportedBody")}
-          </span>
-          {installedElsewhere ? (
-            <span className="net-offlinelan-hint">{t("pages.offlineLan.unsupportedBody")}</span>
-          ) : null}
-          {side === "guest" ? (
-            <span className="net-offlinelan-hint">{t("pages.offlineLan.guestHostHint")}</span>
-          ) : null}
-        </>
-      );
-    }
-    if (state === "ok") {
-      return (
-        <span className="net-offlinelan-title">
-          {t(side === "guest" ? "pages.offlineLan.installedGuest" : "pages.offlineLan.installed")}
-        </span>
-      );
-    }
-    const failed = probe.data?.available === null && !probe.loading;
-    return (
-      <>
-        <span className="net-offlinelan-title">
-          {t(side === "guest" ? "pages.offlineLan.guestMissingTitle" : "pages.offlineLan.missingTitle")}
-        </span>
-        <span className="net-offlinelan-hint">
-          {t(side === "guest" ? "pages.offlineLan.guestMissingBody" : "pages.offlineLan.missingBody")}
-        </span>
-        {side === "guest" ? (
-          <span className="net-offlinelan-hint">{t("pages.offlineLan.guestDoNotInstall")}</span>
-        ) : (
-          <>
-            <span className="net-offlinelan-hint">{t("pages.offlineLan.missingGuestHint")}</span>
-            {failed ? <span className="net-offlinelan-hint">{t("pages.offlineLan.checkFailed")}</span> : null}
-            <div className="net-offlinelan-actions">
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                data-action="install-offlinelan"
-                onClick={() => void runInstall()}
-                disabled={installing || probe.loading}
-              >
-                {installing ? t("pages.offlineLan.installing") : t("pages.offlineLan.install")}
-              </button>
-              {failed ? (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => probe.reload()}>
-                  {t("pages.offlineLan.retry")}
-                </button>
-              ) : null}
-            </div>
-          </>
-        )}
-      </>
-    );
-  })();
-
-  const icon = state === "ok" ? <IconCheck size={15} />
-    : state === "vanilla" || state === "unsupported" ? <IconAlert size={15} />
-      : <IconInfo size={15} />;
+  const icon = !settled ? <IconInfo size={15} />
+    : plan.state === "ok" ? <IconCheck size={15} />
+      : plan.state === "vanilla" || plan.state === "unsupported" ? <IconAlert size={15} />
+        : <IconInfo size={15} />;
 
   return (
     <div
-      className={`net-offlinelan is-${state}`}
-      data-offlinelan-state={state}
+      className={"net-offlinelan is-" + (settled ? plan.state : "checking")}
+      data-offlinelan-state={data.state}
       data-offlinelan-side={side}
-      data-offlinelan-installed={probe.data?.installed ? "true" : "false"}
+      data-offlinelan-installed={plan.installed ? "true" : "false"}
       data-offlinelan-mc={mcVersion}
-      data-offlinelan-loader={currentInstance?.loader ?? ""}
-      data-offlinelan-available={probe.data?.available === null || probe.data === null
-        ? "unknown"
-        : probe.data.available ? "true" : "false"}
-      data-offlinelan-project={probe.data?.projectId ?? ""}
-      data-offlinelan-file={probe.data?.fileId ?? ""}
+      data-offlinelan-loader={selected?.loader ?? ""}
+      data-offlinelan-available={data.available}
+      data-offlinelan-project={data.projectId}
+      data-offlinelan-file={targetFile?.fileId ?? ""}
+      data-ol-instance={selected?.id ?? ""}
+      data-ol-installed={data.installedFlag}
+      data-ol-mod={data.mod}
+      data-ol-mod-version={data.modVersion}
+      data-ol-status={data.status}
+      data-ol-candidates={candidates.join(",")}
+      data-ol-fallback-from={data.fallbackFrom}
+      data-ol-other-mods={data.otherMods}
     >
       {icon}
-      <div className="net-offlinelan-body">{body}</div>
+      <div className="net-offlinelan-body">
+        <div className="net-offlinelan-picker">
+          <span className="net-offlinelan-picker-label">{t("pages.lanMod.instance")}</span>
+          <div className="select-wrap">
+            <select
+              className="input select net-offlinelan-select"
+              data-ol-instance-select
+              aria-label={t("pages.lanMod.instance")}
+              value={selected ? selected.id : ""}
+              onChange={(event) => setInstanceId(event.target.value)}
+            >
+              {selected ? null : <option value="">{t("pages.lanMod.instancePlaceholder")}</option>}
+              {instances.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name + " · " + item.mcVersion + " · " + loaderLabel(item.loader, t)}
+                </option>
+              ))}
+            </select>
+            <IconChevronDown size={16} className="select-icon" />
+          </div>
+        </div>
+
+        <div className="net-offlinelan-statusrow" data-ol-status={data.status}>
+          <span className="net-offlinelan-title">{view.statusText}</span>
+          {view.showInstall ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              data-action="install-offlinelan"
+              data-ol-action="install"
+              onClick={() => void runInstall()}
+              disabled={installing}
+            >
+              {installing ? t("pages.lanMod.installing") : t("pages.lanMod.install", { mod: modName })}
+            </button>
+          ) : null}
+          {view.showRetry ? (
+            <button type="button" className="btn btn-ghost btn-sm" data-ol-action="retry" onClick={() => probe.reload()}>
+              {t("pages.lanMod.retry")}
+            </button>
+          ) : null}
+        </div>
+
+        {view.note ? <span className="net-offlinelan-hint">{view.note}</span> : null}
+        {settled && plan.mod ? (
+          <span className="net-offlinelan-hint net-offlinelan-reco" data-ol-recommend={plan.mod}>
+            {t("pages.lanMod.recommend", { mod: modName, loader })}
+          </span>
+        ) : null}
+        {view.otherMods.length > 0 ? (
+          <ul className="net-offlinelan-others" data-ol-others>
+            {view.otherMods.map((item) => (
+              <li key={item.key} className="net-offlinelan-other" data-ol-other-mod={item.key}>
+                <span className="net-offlinelan-other-name">
+                  {item.version ? t("pages.lanMod.otherEntry", { mod: item.name, version: item.version }) : item.name}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  data-action="uninstall-lan-mod"
+                  data-ol-other-mod={item.key}
+                  data-ol-uninstall={item.key}
+                  data-ol-uninstall-file={item.fileName}
+                  onClick={() => void runUninstall(item)}
+                  disabled={uninstalling !== null}
+                >
+                  {uninstalling === item.key
+                    ? t("pages.lanMod.uninstalling")
+                    : t("pages.lanMod.uninstall", { mod: item.name })}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {view.otherHint ? (
+          <span className="net-offlinelan-hint net-offlinelan-conflict" data-ol-other-hint>
+            {view.otherHint}
+          </span>
+        ) : null}
+        {view.hint ? <span className="net-offlinelan-hint">{view.hint}</span> : null}
+        {skipReason && !plan.mod ? (
+          <span className="net-offlinelan-hint">{t("pages.lanMod.checkFailedPlain")}</span>
+        ) : null}
+        {skipReason && plan.mod && plan.install === "missing" ? (
+          <span className="net-offlinelan-hint">{t("pages.lanMod.checkFailed", { mod: modName })}</span>
+        ) : null}
+      </div>
     </div>
   );
 }

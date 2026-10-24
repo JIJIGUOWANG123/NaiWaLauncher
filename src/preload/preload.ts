@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC } from "../shared/ipc";
-import type { LaunchDiagnosisEvent, NaiwaApi } from "../shared/ipc";
+import type { LaunchDiagnosisEvent, NaiwaApi, UpdateStateEvent } from "../shared/ipc";
 import type { DownloadJob, LogLine, MediaList, ServerConsoleLine, ServerEntry, TaskProgress, TaskResult } from "../shared/types";
 
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> => ipcRenderer.invoke(channel, ...args);
@@ -59,7 +59,7 @@ const api: NaiwaApi = {
   },
   tera: {
     status: () => invoke(IPC.teraStatus),
-    host: (player) => invoke(IPC.teraHost, player),
+    host: (player, options) => invoke(IPC.teraHost, player, options),
     join: (room, player) => invoke(IPC.teraJoin, room, player),
     reset: () => invoke(IPC.teraReset),
     stop: () => invoke(IPC.teraStop),
@@ -177,6 +177,7 @@ const api: NaiwaApi = {
     onTaskDone: (cb) => { const h = (_: unknown, r: TaskResult) => cb(r); ipcRenderer.on("task:done", h); return () => ipcRenderer.off("task:done", h); },
     onLog: (cb) => { const h = (_: unknown, l: LogLine) => cb(l); ipcRenderer.on("app:log", h); return () => ipcRenderer.off("app:log", h); },
     onGameDiagnosis: (cb) => { const h = (_: unknown, d: LaunchDiagnosisEvent) => cb(d); ipcRenderer.on(IPC.gameDiagnosis, h); return () => ipcRenderer.off(IPC.gameDiagnosis, h); },
+    onUpdateState: (cb) => { const h = (_: unknown, s: UpdateStateEvent) => cb(s); ipcRenderer.on(IPC.appUpdateState, h); return () => ipcRenderer.off(IPC.appUpdateState, h); },
   },
 };
 

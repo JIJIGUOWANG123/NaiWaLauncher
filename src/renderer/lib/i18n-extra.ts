@@ -924,6 +924,31 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
   "pages.netTera.logSubtitle": D("陶瓦自己的 application.log 与启动器记录，排查联机问题时用它", "Terracotta's own application.log plus the launcher's log lines", "陶瓦の application.log とランチャーの記録です"),
   "pages.netTera.logLoading": D("读取日志中…", "Reading the log…", "ログを読み込み中…"),
   "pages.netTera.logEmpty": D("日志为空。", "The log is empty.", "ログは空です。"),
+  "pages.netTera.modeLabel": D("分享方式", "Share via", "共有方法"),
+  "pages.netTera.modeLan": D("分享游戏里的局域网世界", "Share a LAN world from the game", "ゲーム内の LAN ワールドを共有"),
+  "pages.netTera.modeServer": D("分享专用服务器", "Share a dedicated server", "専用サーバーを共有"),
+  "pages.netTera.modeServerHint": D(
+    "专用服务器必须先启动，并且只能分享本机（127.0.0.1）上的服务器：启动器会代它向局域网广播端口，让陶瓦认领。",
+    "The dedicated server must already be running, and only a server on this machine (127.0.0.1) can be shared. The launcher broadcasts its port on the LAN so Terracotta can claim it.",
+    "専用サーバーは先に起動しておく必要があり、この端末（127.0.0.1）上のサーバーのみ共有できます。ランチャーが LAN にポートをブロードキャストし、陶瓦がそれを認識します。",
+  ),
+  "pages.netTera.serverPortLabel": D("服务器端口", "Server port", "サーバーポート"),
+  "pages.netTera.serverPortHint": D(
+    "专用服务器在本机监听的端口，默认 25565",
+    "The port the dedicated server listens on locally; 25565 by default",
+    "専用サーバーがこの端末で待ち受けるポート（既定は 25565）",
+  ),
+  "pages.netTera.serverPortBad": D(
+    "端口必须是 1-65535 的整数",
+    "The port must be an integer between 1 and 65535",
+    "ポートは 1〜65535 の整数で指定してください",
+  ),
+  "pages.netTera.hostStartedServer": D(
+    "已开始广播专用服务器端口，等陶瓦认领…",
+    "Broadcasting the dedicated server port — waiting for Terracotta to claim it…",
+    "専用サーバーのポートをブロードキャスト中です。陶瓦が認識するまでお待ちください…",
+  ),
+  "pages.netTera.sharedLocal": D("已分享 {address}", "Sharing {address}", "{address} を共有中"),
 
   // ---- 启动设置：信任 Windows 证书库 ----
   "pages.launchSettings.javaTrustLabel": D("Java 证书库", "Java certificates", "Java 証明書"),
@@ -975,15 +1000,191 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
   // ---- 设置页：更新方式 ----
   "settings.updateMode": D("更新方式", "Update checks", "更新の確認"),
   "settings.updateModeHint": D(
-    "自动 = 打开程序时自动检测新版本（只在后台查，不打断你）",
-    "Automatic = check for a new version each time the launcher opens (runs in the background only)",
-    "自動 = 起動時に新しいバージョンを確認します（バックグラウンドのみで中断しません）",
+    "手动 = 启动时检查新版本并提示，你点「立即更新」才下载安装；自动 = 启动时检查后自动下载安装（完成后自动重启，有游戏在跑时等它结束再装）",
+    "Manual = the launcher checks on startup and tells you; nothing downloads until you click Update now. Automatic = it checks on startup, then downloads and installs by itself (the launcher restarts when done; if a game is running it waits until it exits)",
+    "手動 = 起動時に確認して知らせるだけ。更新は「今すぐ更新」を押したときだけ。自動 = 起動時に確認し、自動でダウンロードとインストールを実行（完了後に自動再起動・ゲーム実行中は終了を待ちます）",
   ),
   "settings.update.manual": D("手动更新", "Manual", "手動"),
   "settings.update.auto": D("自动更新", "Automatic", "自動"),
+  // ---- 更新进度提示（右上角 toast，自动更新在后台跑时交代进度） ----
+  "upd.toast.downloading": D(
+    "正在下载更新 v{version}…",
+    "Downloading update v{version}…",
+    "アップデート v{version} をダウンロード中…",
+  ),
+  "upd.toast.deferred": D(
+    "有游戏在运行，更新会在游戏结束后自动安装",
+    "A game is running — the update installs automatically once it exits",
+    "ゲームが実行中です。終了後に自動でインストールします",
+  ),
+  "upd.toast.applied": D("已更新到 v{version}", "Updated to v{version}", "v{version} に更新しました"),
+  "upd.autoHint": D(
+    "自动更新已开始：下载完成后会自动安装并重启启动器（有游戏在跑时等它结束）。",
+    "Automatic update started: it installs and restarts the launcher when the download finishes (waiting for a running game first).",
+    "自動更新を開始しました。ダウンロード完了後に自動でインストールして再起動します（ゲーム実行中は終了を待ちます）。",
+  ),
+
+  // ---- 关于页：更新包清单未知（镜像通道只给了版本号） ----
+  "about.assetsUnknownTitle": D(
+    "镜像通道只返回了版本号，包里没有资产清单：点「立即更新」会尝试下载固定文件名安装包",
+    "The mirror channel returned only a version number, with no asset list: \"Update now\" will still try the fixed-name package",
+    "ミラーチャネルはバージョン番号のみを返し、アセット一覧がありません。「今すぐ更新」は固定名のパッケージを取得しようとします",
+  ),
+  "about.assetsUnknownHint": D(
+    "检测到 v{version}；镜像通道未返回更新包清单，点「立即更新」仍会尝试下载固定名安装包",
+    "Found v{version}; the mirror channel returned no package list, but \"Update now\" will still try the fixed-name installer",
+    "v{version} を検出しました。ミラーチャネルはパッケージ一覧を返していませんが、「今すぐ更新」で固定名のインストーラーを取得しようとします",
+  ),
 
   // ---- 下载完成提示（右上角浮条） ----
   "pages.dlToast.done": D("下载完成：{title}", "Download finished: {title}", "ダウンロード完了：{title}"),
   "pages.dlToast.failed": D("下载失败：{title}", "Download failed: {title}", "ダウンロード失敗：{title}"),
   "pages.dlToast.view": D("查看", "View", "表示"),
+
+  // ---- 联机页：联机模组提示（0.3.7：按加载器推荐 OfflineLAN / LAN Properties，实例手动选择） ----
+  "pages.lanMod.instance": D("实例", "Instance", "インスタンス"),
+  "pages.lanMod.instancePlaceholder": D("请选择实例", "Select an instance", "インスタンスを選択してください"),
+  "pages.lanMod.checking": D("正在检查…", "Checking…", "確認中…"),
+  "pages.lanMod.noInstance": D("未选择实例", "No instance selected", "インスタンス未選択"),
+  "pages.lanMod.noInstanceBody": D(
+    "选好实例后，这里会按它的游戏版本和加载器推荐联机模组：Fabric / Quilt 首选 OfflineLAN，Forge / NeoForge 首选 LAN Properties；首选没有对应版本的文件时自动回退到下一个。",
+    "Pick an instance and this card recommends a LAN mod for its game version and loader: OfflineLAN first for Fabric / Quilt, LAN Properties first for Forge / NeoForge — it falls back to the next one when the first has no file for that version.",
+    "インスタンスを選ぶと、そのバージョンとローダーに合う LAN MOD を提案します（Fabric / Quilt はまず OfflineLAN、Forge / NeoForge はまず LAN Properties。対応するファイルが無ければ次の MOD に自動で切り替えます）。",
+  ),
+  "pages.lanMod.vanillaStatus": D("原版没有可用的联机模组", "Vanilla has no LAN mod available", "バニラに使える LAN MOD はありません"),
+  "pages.lanMod.vanillaBody": D(
+    "原版（Vanilla）没有跳过正版验证的能力：房主点「对局域网开放」后服务器会校验正版账号，离线账号一连上就被踢。这不是启动器的问题；想让离线账号联机，请新建或改用 Fabric / Forge / NeoForge 实例。",
+    "Vanilla cannot skip the online-mode check: once the host opens the world to LAN, the server verifies genuine accounts and kicks offline ones. Nothing is broken in the launcher. To let offline accounts join, create or switch to a Fabric / Forge / NeoForge instance.",
+    "バニラには正規アカウントの検証を飛ばす機能がありません。ホストが「LAN に公開」するとサーバーが正規アカウントを確認し、オフラインアカウントは接続直後に切断されます。ランチャーの不具合ではありません。オフラインアカウントで遊ぶには Fabric / Forge / NeoForge のインスタンスを作成（または切り替え）してください。",
+  ),
+  "pages.lanMod.unavailable": D(
+    "当前版本/加载器没有可安装的联机模组",
+    "No LAN mod is available for this version/loader",
+    "このバージョン／ローダーで使える LAN MOD はありません",
+  ),
+  "pages.lanMod.unavailableBody": D(
+    "站点上没有适配 MC {version}（{loader}）的文件：换一个被覆盖的版本或加载器，或者改用正版账号联机。",
+    "The site has no file for MC {version} ({loader}): switch to a version or loader it covers, or play with a genuine account.",
+    "MC {version}（{loader}）に対応するファイルが配布元にありません。対応するバージョンかローダーに変えるか、正規アカウントでプレイしてください。",
+  ),
+  "pages.lanMod.missing": D("未安装 {mod}", "{mod} is not installed", "{mod} が未導入です"),
+  "pages.lanMod.missingBody": D(
+    "这条说的是房主那一侧：房主点「对局域网开放」后，装了 {mod} 才会跳过正版验证，离线好友才进得来。装在自己电脑上才生效。",
+    "This is about the host side: after the host opens the world to LAN, only with {mod} installed is the online-mode check skipped, so offline friends can join. It takes effect on the host's own computer.",
+    "これはホスト側の話です。ホストが「LAN に公開」したとき、{mod} が入っていれば正規アカウントの検証を飛ばせるので、オフラインのフレンドも参加できます。ホスト自身の PC に入れて初めて有効になります。",
+  ),
+  "pages.lanMod.missingGuestHint": D(
+    "你是房客？这条提示是给房主的——让房主装就行，你这边不用装。",
+    "Joining as a guest? This one is for the host — ask them to install it; you don't need to.",
+    "ゲストとして参加する場合、これはホスト向けの案内です。ホストに入れてもらえばよく、あなた側には不要です。",
+  ),
+  "pages.lanMod.guestMissingBody": D(
+    "能不能跳过正版验证由房主侧决定：让房主把 {mod} 装上（版本还要和房间一致），你再进房。",
+    "Whether the online-mode check is skipped is decided on the host side: ask the host to install {mod} (matching the room version), then join.",
+    "検証を飛ばせるかはホスト側で決まります。ホストに {mod} を入れてもらい（ルームと同じバージョン）、それから参加してください。",
+  ),
+  "pages.lanMod.guestDoNotInstall": D(
+    "你这边装它不会让房间跳过验证，别白装。",
+    "Installing it on your side won't change the room's verification — don't bother.",
+    "あなた側に入れてもルームの検証は変わりません。導入は不要です。",
+  ),
+  "pages.lanMod.installed": D(
+    "已安装 {mod}（房主侧生效）",
+    "Installed: {mod} (effective on the host side)",
+    "{mod} 導入済み（ホスト側で有効）",
+  ),
+  "pages.lanMod.installedWithVersion": D(
+    "已安装 {mod} v{version}",
+    "Installed: {mod} v{version}",
+    "{mod} v{version} 導入済み",
+  ),
+  "pages.lanMod.installedBody": D(
+    "房主侧已生效：这个实例开的世界「对局域网开放」时，离线账号可以进房。",
+    "Active on the host side: when this instance opens a world to LAN, offline accounts can join.",
+    "ホスト側で有効です。このインスタンスで「LAN に公開」すると、オフラインアカウントも参加できます。",
+  ),
+  "pages.lanMod.guestHostHint": D(
+    "让房主确认已装 {mod}，并且版本和房间一致。",
+    "Ask the host to confirm {mod} is installed and matches the room version.",
+    "ホストに、{mod} が導入済みでルームのバージョンと一致しているか確認してもらいましょう。",
+  ),
+  "pages.lanMod.installedGuest": D(
+    "房主侧应有 {mod}，进房前再和房主确认一次。",
+    "The host side should have {mod} — confirm with the host before joining.",
+    "ホスト側に {mod} があるはずです。参加前にホストへ確認してください。",
+  ),
+  "pages.lanMod.mismatch": D(
+    "已安装 {mod}（适配 MC {installedMc}），与实例 {mcVersion} 不匹配",
+    "Installed: {mod} (for MC {installedMc}), which doesn't match this instance's {mcVersion}",
+    "導入済み: {mod}（MC {installedMc} 向け）。このインスタンスの {mcVersion} と一致しません",
+  ),
+  "pages.lanMod.mismatchBody": D(
+    "把 {mod} 换成本实例版本（MC {mcVersion}）的那份再开房，否则等于没装。",
+    "Replace {mod} with the build for MC {mcVersion}, otherwise it does nothing.",
+    "{mod} をこのインスタンスの MC {mcVersion} 向けに差し替えてから開いてください。そうでないと効果がありません。",
+  ),
+  "pages.lanMod.recommend": D(
+    "按加载器推荐：{mod}（{loader}）",
+    "Recommended for this loader: {mod} ({loader})",
+    "このローダーの推奨: {mod}（{loader}）",
+  ),
+  "pages.lanMod.fallback": D(
+    "（{skipped} 在 MC {version} 没有可用文件，已回退）",
+    " ({skipped} has no file for MC {version} — using the fallback)",
+    "（{skipped} は MC {version} に対応するファイルが無いため代替）",
+  ),
+  "pages.lanMod.fallbackUnknown": D(
+    "（{skipped} 暂时查不到可用文件，已回退）",
+    " ({skipped}'s file list is unavailable — using the fallback)",
+    "（{skipped} のファイル一覧を取得できないため代替）",
+  ),
+  "pages.lanMod.install": D("一键安装 {mod}", "Install {mod}", "{mod} をワンクリック導入"),
+  "pages.lanMod.installing": D("安装中…", "Installing…", "導入中…"),
+  "pages.lanMod.installDone": D("已安装 {mod}：{file}", "Installed {mod}: {file}", "{mod} を導入しました：{file}"),
+  "pages.lanMod.retry": D("重试", "Retry", "再試行"),
+  "pages.lanMod.checkFailed": D(
+    "暂时查不到 {mod} 的可用文件（网络或来源站问题），可以点重试。",
+    "Can't reach {mod}'s file list right now (network or site issue) — retry later.",
+    "{mod} のファイル一覧を取得できません（ネットワークか配布元の問題）。再試行してください。",
+  ),
+  "pages.lanMod.checkFailedPlain": D(
+    "暂时查不到可用文件（网络或来源站问题），可以点重试。",
+    "Can't reach the file list right now (network or site issue) — retry later.",
+    "ファイル一覧を取得できません（ネットワークか配布元の問題）。再試行してください。",
+  ),
+  // ---- 0.3.8：装了「另一个」联机模组时的状态行 / 卸载 / 换装 / 冲突提示 ----
+  "pages.lanMod.otherInstalled": D(
+    "已安装 {other} v{version}，但推荐 {recommended}",
+    "Installed {other} v{version}, but {recommended} is recommended",
+    "{other} v{version} が導入済みですが、推奨は {recommended} です",
+  ),
+  "pages.lanMod.otherInstalledBare": D(
+    "已安装 {other}，但推荐 {recommended}",
+    "Installed {other}, but {recommended} is recommended",
+    "{other} が導入済みですが、推奨は {recommended} です",
+  ),
+  "pages.lanMod.othersInstalled": D(
+    "同时装了 {count} 个联机模组（{others}），但推荐 {recommended}",
+    "{count} LAN mods are installed ({others}), but {recommended} is recommended",
+    "LAN MOD が {count} 個導入されています（{others}）。推奨は {recommended} です",
+  ),
+  "pages.lanMod.otherEntry": D("{mod} v{version}", "{mod} v{version}", "{mod} v{version}"),
+  "pages.lanMod.uninstall": D("卸载 {mod}", "Remove {mod}", "{mod} を削除"),
+  "pages.lanMod.uninstalling": D("卸载中…", "Removing…", "削除中…"),
+  "pages.lanMod.uninstallDone": D("已卸载 {mod}", "Removed {mod}", "{mod} を削除しました"),
+  "pages.lanMod.switchModHint": D(
+    "换装前先卸载已装的 {other}：两个联机模组同时启用会互相抢端口。卸载后这里会出现「一键安装 {recommended}」。",
+    "Remove the installed {other} before switching: two LAN mods at once fight over the same port. Once it's gone the one-click install for {recommended} shows up here.",
+    "入れ替える前に導入済みの {other} を削除してください。2 つ同時に有効だと同じポートを取り合います。削除すると {recommended} のワンクリック導入がここに表示されます。",
+  ),
+  "pages.lanMod.extraConflictHint": D(
+    "另外还装着 {other}：多个联机模组同时启用会互相抢端口，建议卸载它，只保留 {recommended}。",
+    "You also have {other} installed: several LAN mods at once fight over the same port — remove it and keep only {recommended}.",
+    "{other} も導入されています。複数の LAN MOD を同時に有効にすると同じポートを取り合うため、削除して {recommended} だけにしてください。",
+  ),
+  "pages.lanMod.otherConflictHint": D(
+    "同时装着 {count} 个联机模组，它们会互相冲突（重复开端口、服务端可能拒绝启动）。建议只保留推荐的那个：先逐个卸载，再一键安装 {recommended}。",
+    "{count} LAN mods are installed at once and they conflict (duplicate port binding, the server may refuse to start). Keep only the recommended one: remove them one by one, then install {recommended}.",
+    "LAN MOD が {count} 個同時に入っていて競合します（ポートの二重開放、サーバーが起動しない場合もあります）。推奨のものだけ残してください：1 つずつ削除してから {recommended} を導入します。",
+  ),
 };

@@ -357,6 +357,19 @@ export const DICT: Record<string, Entry> = {
   "net.natfrp.tomlUnsupported": D("frpc {version} 不支持 TOML 配置（该版本只认 ini），请更新 frpc 后重试", "frpc {version} does not support TOML configuration (that version only reads ini) — update frpc and retry", "frpc {version} は TOML 設定に対応していません（そのバージョンは ini のみ）。frpc を更新して再試行してください"),
   "net.natfrp.badTunnelId": D("隧道 ID 不合法：{id}", "Invalid tunnel id: {id}", "トンネル ID が不正です：{id}"),
 
+  // ---- 陶瓦联机：专用服务器模式（启动器代发局域网广播） ----
+  "net.tera.badPort": D(
+    "专用服务器端口不合法：{port}（应为 1-65535 的整数）",
+    "Invalid dedicated server port: {port} (must be an integer between 1 and 65535)",
+    "専用サーバーのポートが不正です：{port}（1〜65535 の整数で指定してください）",
+  ),
+  "net.tera.broadcastFailed": D(
+    "局域网广播没有生效（{error}）：陶瓦发现不了这个服务器端口，请检查端口占用与网络适配器",
+    "The LAN broadcast did not take effect ({error}): Terracotta cannot discover this server port — check port conflicts and network adapters",
+    "LAN ブロードキャストが機能していません（{error}）：陶瓦がこのサーバーポートを検出できません。ポートの競合とネットワークアダプターを確認してください",
+  ),
+  "net.tera.broadcastStopped": D("已停止局域网广播", "Stopped the LAN broadcast", "LAN ブロードキャストを停止しました"),
+
   "core.http.timeout": D("请求超时（{ms}ms）· {url}", "Request timed out ({ms}ms) · {url}", "リクエストがタイムアウトしました（{ms}ms）· {url}"),
   "core.http.headerTimeout": D("连接超时（{ms}ms）· {url}", "Connection timed out ({ms}ms) · {url}", "接続がタイムアウトしました（{ms}ms）· {url}"),
   "core.http.allFailed": D("镜像与官方均失败：{details} · {url}", "Both the mirror and the official source failed: {details} · {url}", "ミラーと公式の両方が失敗しました：{details} · {url}"),
@@ -383,9 +396,20 @@ export const DICT: Record<string, Entry> = {
   "main.gotIt": D("知道了", "Got it", "OK"),
   "main.updateAvailableTitle": D("发现新版本", "Update available", "新しいバージョンがあります"),
   "main.updateAvailableBody": D(
-    "奶娃启动器 {latest}（当前 {current}），到「关于」页可以更新。",
-    "NaiWa Launcher {latest} is available (current {current}); update it on the About page.",
-    "奶娃ランチャー {latest}（現在 {current}）が利用できます。「概要」ページから更新できます。",
+    "奶娃启动器 {latest}（当前 {current}），到「关于」页点「立即更新」即可更新。",
+    "NaiWa Launcher {latest} is available (current {current}); click Update now on the About page.",
+    "奶娃ランチャー {latest}（現在 {current}）が利用できます。「概要」ページの「今すぐ更新」から更新できます。",
+  ),
+  "main.updateDeferredBody": D(
+    "还有 {count} 个游戏实例在运行：更新会在游戏结束后自动安装。",
+    "{count} game instance(s) still running: the update installs itself once the game exits.",
+    "{count} 件のゲームが実行中です：ゲーム終了後に自動でインストールします。",
+  ),
+  "main.updateAppliedTitle": D("已更新完成", "Update installed", "アップデート完了"),
+  "main.updateAppliedBody": D(
+    "奶娃启动器已更新到 {version}。",
+    "NaiWa Launcher is now at {version}.",
+    "奶娃ランチャーは {version} に更新されました。",
   ),
   "common.cancel": D("取消", "Cancel", "キャンセル"),
   "launch.badWorldName": D("非法存档名「{name}」：不能包含 / \\ : * ? \" < > | 或 .. 等路径成分", "Invalid world name \"{name}\": it cannot contain / \\ : * ? \" < > | or path parts such as ..", "不正なワールド名「{name}」：/ \\ : * ? \" < > | や .. などのパス要素は使用できません"),

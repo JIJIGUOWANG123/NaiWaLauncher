@@ -1,5 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
+import { createSocket, type Socket as UdpSocket } from "node:dgram";
 import { createReadStream, existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +9,7 @@ import { gunzipSync } from "node:zlib";
 
 import { app } from "electron";
 
-import type { TeraPlayer, TeraState, TeraStatus } from "../../shared/ipc";
+import type { TeraHostMode, TeraHostOptions, TeraPlayer, TeraState, TeraStatus } from "../../shared/ipc";
 import { downloadFile } from "../core/http";
 import { DICT, mt } from "../core/i18n";
 import { logger } from "../core/logger";
@@ -163,6 +164,21 @@ const HTTP_TIMEOUT_MS = 4000;
 /** /panic 之后等端口关闭的时间，再按端口反查 PID 兜底。 */
 const EXIT_GRACE_MS = 2000;
 const MAX_LOG_LINES = 200;
+/**
+ * 专用服务器模式的局域网广播：陶瓦只认 Minecraft 的这套报文
+ * （组播 224.0.2.60:4445 上的 [MOTD]…[/MOTD][AD]端口[/AD]，见 Terracotta-master/src/mc/scanning.rs），
+ * 专用服务器自己不会发，所以要由启动器代发。
+ */
+const LAN_GROUP = "224.0.2.60";
+const LAN_PORT = 4445;
+/** 陶瓦 5s 就丢弃过期的端口，1.5s 一发（存活窗口内留三次冗余）。 */
+const BROADCAST_MS = 1500;
+/** 不能与陶瓦自己的哨兵 MOTD 相同，否则会被它的过滤器直接丢掉。 */
+const BROADCAST_MOTD = "NaiWa Server";
+const DEFAULT_SERVER_PORT = 25565;
+/** 连续失败这么多次就认定网卡不可用，关掉 socket 不再重试。 */
+const BROADCAST_MAX_FAILURES = 3;
+
 /** %TEMP%\terracotta\<YYYY-MM-DD-HH-MM-SS>-<pid> 超过一天才清（当天可能在跑）。 */
 const TEMP_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -181,6 +197,12 @@ interface TeraRuntime {
   version: string;
   easytierVersion: string;
   problem: string;
+  /** 本次房主的分享方式（lan / server）。 */
+  mode: TeraHostMode;
+  /** server 模式下被分享的本机端口。 */
+  serverPort: number | null;
+  /** 广播不可用的原因（优雅降级用，不阻塞 host）。 */
+  broadcastError: string;
   timer: NodeJS.Timeout | null;
   /** 启动/停止串行化：连点两次不要拉出两个 worker。 */
   pending: Promise<unknown> | null;
@@ -201,6 +223,9 @@ const state: TeraRuntime = {
   version: "",
   easytierVersion: "",
   problem: "",
+  mode: "lan",
+  serverPort: null,
+  broadcastError: "",
   timer: null,
   pending: null,
   log: [],
@@ -469,6 +494,8 @@ function applyState(json: Record<string, unknown>): void {
   state.difficulty = jsonString(json.difficulty);
   state.players = toPlayers(json.profiles);
   state.exceptionType = next === "exception" ? jsonNumber(json.type, -1) : null;
+  // 异常态陶瓦不会再认领端口，继续广播只会白占一个 socket
+  if (next === "exception") stopBroadcast();
   log.info("状态 " + next + "（index " + index + "）" + (state.room ? " room=" + state.room : ""));
 }
 
@@ -598,13 +625,132 @@ function requireWaiting(): void {
   if (state.state !== "waiting") throw new Error(mt("net.tera.notWaiting", { state: state.state }));
 }
 
+// ---------- 专用服务器模式：替服务器发局域网广播 ----------
+
+const broadcaster = {
+  socket: null as UdpSocket | null,
+  timer: null as NodeJS.Timeout | null,
+  failures: 0,
+};
+
+/** 广播是否在跑（停止/复位/异常之后必须为 false）。 */
+function isBroadcasting(): boolean {
+  return broadcaster.socket !== null;
+}
+
+/** 幂等收尾：socket 一定关掉，定时器一定清掉。 */
+function stopBroadcast(): void {
+  if (broadcaster.timer) {
+    clearInterval(broadcaster.timer);
+    broadcaster.timer = null;
+  }
+  const socket = broadcaster.socket;
+  broadcaster.socket = null;
+  broadcaster.failures = 0;
+  if (!socket) return;
+  try {
+    socket.close();
+  } catch {
+    /* 已经关掉了 */
+  }
+  pushLine(mt("net.tera.broadcastStopped"));
+  log.info("已停止局域网广播");
+}
+
+/** 广播失败不阻塞 host：只留原因，界面上单列一条提示。 */
+function failBroadcast(reason: string): void {
+  state.broadcastError = mt("net.tera.broadcastFailed", { error: reason });
+  pushLine("局域网广播不可用：" + reason);
+  log.warn("局域网广播不可用：" + reason);
+}
+
+/**
+ * 每 1.5s 向 224.0.2.60:4445 发一次 [MOTD]NaiWa Server[/MOTD][AD]<port>[/AD]，
+ * 让陶瓦的扫描器把专用服务器端口当成局域网房间认领下来。
+ * 端口被占/无网卡等失败只降级成"陶瓦发现不了端口"，不会中断 host 流程。
+ */
+function startBroadcast(port: number): void {
+  stopBroadcast();
+  state.broadcastError = "";
+  const payload = Buffer.from("[MOTD]" + BROADCAST_MOTD + "[/MOTD][AD]" + port + "[/AD]", "utf8");
+  const target = LAN_GROUP + ":" + LAN_PORT;
+
+  let socket: UdpSocket;
+  try {
+    socket = createSocket({ type: "udp4", reuseAddr: true });
+  } catch (err) {
+    failBroadcast(errorMessage(err));
+    return;
+  }
+  broadcaster.socket = socket;
+
+  const die = (err: unknown): void => {
+    if (broadcaster.socket !== socket) return;
+    failBroadcast(errorMessage(err));
+    stopBroadcast();
+  };
+  socket.on("error", die);
+
+  let announced = false;
+  const send = (): void => {
+    socket.send(payload, LAN_PORT, LAN_GROUP, (err) => {
+      if (broadcaster.socket !== socket) return;
+      if (err) {
+        broadcaster.failures += 1;
+        if (broadcaster.failures >= BROADCAST_MAX_FAILURES) die(err);
+        return;
+      }
+      broadcaster.failures = 0;
+      if (announced) return;
+      // 只报第一次：日志要留证据，但不能每 1.5s 刷一行
+      announced = true;
+      pushLine("广播 " + payload.toString("utf8") + " → " + target);
+      log.info("专用服务器广播 " + payload.toString("utf8") + " → " + target);
+    });
+  };
+
+  socket.bind(() => {
+    if (broadcaster.socket !== socket) return;
+    try {
+      socket.setBroadcast(true);
+      socket.setMulticastTTL(1);
+    } catch (err) {
+      die(err);
+      return;
+    }
+    send();
+    broadcaster.timer = setInterval(send, BROADCAST_MS);
+  });
+}
+
+/** 专用服务器端口：缺省 25565，其余必须是 1-65535 的整数。 */
+function normalizeServerPort(value: unknown): number {
+  if (value === undefined || value === null) return DEFAULT_SERVER_PORT;
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(mt("net.tera.badPort", { port: String(value) }));
+  }
+  return port;
+}
+
 // ---------- 对外接口 ----------
 
-/** 房主：waiting → host-scanning；用户在游戏里「对局域网开放」后自动进 host-ok。 */
-export async function terracottaHost(player?: string): Promise<TeraStatus> {
+/**
+ * 房主：waiting → host-scanning。两种分享方式：
+ * - lan（默认）：用户在游戏里「对局域网开放」，陶瓦自己扫到端口；
+ * - server：陶瓦扫不到不广播的专用服务器，所以由启动器代发局域网广播让它认领 serverPort。
+ */
+export async function terracottaHost(player?: string, options?: TeraHostOptions): Promise<TeraStatus> {
+  const mode: TeraHostMode = options?.mode === "server" ? "server" : "lan";
+  // 端口不合法要在进锁之前抛，别在 exclusive 里留下半截状态
+  const serverPort = mode === "server" ? normalizeServerPort(options?.serverPort) : null;
+
   return exclusive(async () => {
     await launch();
     requireWaiting();
+    state.mode = mode;
+    state.serverPort = serverPort;
+    state.broadcastError = "";
     const query = "?player=" + encodeURIComponent(player ?? "") + publicNodeQuery();
     try {
       const res = await request("/state/scanning" + query);
@@ -614,6 +760,8 @@ export async function terracottaHost(player?: string): Promise<TeraStatus> {
       state.problem = mt("net.tera.requestFailed", { error: errorMessage(err) });
       throw new Error(state.problem);
     }
+    // 进入 host-scanning 之后才广播：这时陶瓦的扫描器才在听
+    if (mode === "server" && serverPort !== null) startBroadcast(serverPort);
     return terracottaStatus();
   });
 }
@@ -647,6 +795,10 @@ export async function terracottaReset(): Promise<TeraStatus> {
   } catch (err) {
     state.problem = mt("net.tera.requestFailed", { error: errorMessage(err) });
   }
+  stopBroadcast();
+  state.mode = "lan";
+  state.serverPort = null;
+  state.broadcastError = "";
   state.state = "waiting";
   state.index = -1;
   state.room = "";
@@ -701,7 +853,11 @@ export async function terracottaStop(): Promise<TeraStatus> {
 }
 
 function resetRuntime(): void {
+  stopBroadcast();
   state.problem = "";
+  state.mode = "lan";
+  state.serverPort = null;
+  state.broadcastError = "";
   state.child = null;
   state.port = null;
   state.secondary = false;
@@ -765,5 +921,9 @@ export function terracottaStatus(): TeraStatus {
     players: [...state.players],
     exceptionType: state.exceptionType ?? undefined,
     problem: state.problem || undefined,
+    mode: state.mode,
+    serverPort: state.serverPort ?? undefined,
+    broadcasting: isBroadcasting(),
+    broadcastError: state.broadcastError || undefined,
   };
 }

@@ -45,7 +45,7 @@ export function App() {
 }
 
 function Shell() {
-  const { page, booted, settings, iconUrl, navigate } = useApp();
+  const { page, booted, settings, iconUrl, navigate, updatePhase } = useApp();
   const { push: pushToast } = useToast();
   const tr = useT();
   // 背景层与标题栏图片都要用 dirs，外壳自己拉一次媒体列表。
@@ -207,6 +207,34 @@ function Shell() {
       jobStatuses.current = next;
     });
   }, [navigate, pushToast, tr]);
+
+  // 主进程推送的更新阶段：检查/下载/安装在后台跑，这里只用右上角 toast 交代进度（不阻塞、不弹对话框）
+  useEffect(() => {
+    if (!updatePhase) return;
+    const version = updatePhase.latest ?? "";
+    if (updatePhase.phase === "downloading") {
+      pushToast(tr("upd.toast.downloading", { version }), "info", undefined, {
+        placement: "top-right",
+        durationMs: 6000,
+        slot: "update",
+        data: { "data-upd-toast": "", "data-upd-toast-state": "downloading" },
+      });
+    } else if (updatePhase.phase === "deferred") {
+      pushToast(tr("upd.toast.deferred"), "info", undefined, {
+        placement: "top-right",
+        durationMs: 9000,
+        slot: "update",
+        data: { "data-upd-toast": "", "data-upd-toast-state": "deferred" },
+      });
+    } else if (updatePhase.phase === "applied") {
+      pushToast(tr("upd.toast.applied", { version }), "success", undefined, {
+        placement: "top-right",
+        durationMs: 8000,
+        slot: "update",
+        data: { "data-upd-toast": "", "data-upd-toast-state": "applied" },
+      });
+    }
+  }, [updatePhase, pushToast, tr]);
 
   // 启动失败诊断弹窗：按实例 id 去重排队，一次只弹一条，多个实例同时崩溃时不会连弹
   const [launchFailures, setLaunchFailures] = useState<LaunchDiagnosisEvent[]>([]);

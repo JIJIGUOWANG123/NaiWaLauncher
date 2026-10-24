@@ -3,7 +3,7 @@ import { join, relative, resolve } from "node:path";
 import { access, mkdir, readdir } from "node:fs/promises";
 import { IPC } from "../../shared/ipc";
 import type {
-  CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest, TeraStatus,
+  CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest, TeraHostOptions, TeraStatus,
 } from "../../shared/ipc";
 import type { Account, ApiBackground, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledJava, InstalledModInfo, LanAddress, ChangelogSection, JavaRelease, JavaSourceId, JavaSourceProbe, GithubAcceleratorProbe, WallpaperEntry, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
@@ -178,7 +178,7 @@ export function registerIpc(): void {
 
   // 陶瓦联机（Terracotta）：本地 HTTP API 无 CORS 且只监听 127.0.0.1，端口不外露给渲染进程
   handle<TeraStatus>(IPC.teraStatus, () => terracottaStatus());
-  handle<TeraStatus>(IPC.teraHost, (player?: string) => terracottaHost(player));
+  handle<TeraStatus>(IPC.teraHost, (player?: string, options?: TeraHostOptions) => terracottaHost(player, options));
   handle<TeraStatus>(IPC.teraJoin, (room: string, player?: string) => terracottaJoin(room, player));
   handle<TeraStatus>(IPC.teraReset, () => terracottaReset());
   handle<TeraStatus>(IPC.teraStop, () => terracottaStop());

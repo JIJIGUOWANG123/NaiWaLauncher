@@ -445,6 +445,11 @@ export interface UpdateCheckResult {
   assetUrl?: string;
   /** 安装版更新包（Release 里的 NaiWaLauncher-Setup.exe，固定名）；安装版点更新用它装回原目录。 */
   setupUrl?: string;
+  /**
+   * 资产清单未知：本次走的是镜像通道（只有 package.json 的 version），没拿到 Release 的 assets。
+   * 此时 assetUrl/setupUrl 是按固定文件名拼的 latest/download 直链——多半能下，但没被清单证实过。
+   */
+  assetsUnknown?: boolean;
   /** 实际取数的通道（便于排查）。 */
   channel: "github-api" | "gh-proxy" | "jsdelivr" | "sakuramoe" | "raw" | "none";
   /** 检查失败时的原因。 */

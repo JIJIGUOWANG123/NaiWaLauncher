@@ -5,7 +5,7 @@ import { copyText } from "../lib/clipboard";
 import { useT } from "../lib/i18n";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
-import { Field, TextInput } from "../components/Form";
+import { Field, Segmented, TextInput } from "../components/Form";
 import { Modal } from "../components/Modal";
 import { OfflineLanNotice } from "../components/OfflineLanNotice";
 import { IconAlert, IconInfo, IconLink, IconRefresh } from "../components/icons";
@@ -13,6 +13,10 @@ import { IconAlert, IconInfo, IconLink, IconRefresh } from "../components/icons"
 /** 主进程内部 500ms 轮询 /state，这里 700ms 读一次合并后的快照。 */
 const POLL_MS = 700;
 const PROJECT_URL = "https://github.com/burningtnt/Terracotta";
+/** 专用服务器默认端口（与主进程的 DEFAULT_SERVER_PORT 保持一致）。 */
+const DEFAULT_SERVER_PORT = 25565;
+
+type HostMode = "lan" | "server";
 
 /**
  * AGPL-3.0 例外条款要求「在用户界面明显处标识本作品的版权信息」：
@@ -77,6 +81,8 @@ export function NetTeraTab() {
   const [status, setStatus] = useState<TeraStatus>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [player, setPlayer] = useState("");
+  const [hostMode, setHostMode] = useState<HostMode>("lan");
+  const [serverPort, setServerPort] = useState(String(DEFAULT_SERVER_PORT));
   const [roomInput, setRoomInput] = useState("");
   const [logOpen, setLogOpen] = useState(false);
   const [logText, setLogText] = useState("");
@@ -151,13 +157,25 @@ export function NetTeraTab() {
 
   const state = status.state;
   const isException = state === "exception";
+  const portNumber = Number(serverPort);
+  const portOk = Number.isInteger(portNumber) && portNumber >= 1 && portNumber <= 65535;
+  // 跑起来之后按主进程回报的实际分享方式显示，否则跟随用户当前选择
+  const shareMode: HostMode = status.running && status.mode ? status.mode : hostMode;
+  const sharePort = status.running && status.serverPort ? status.serverPort : portOk ? portNumber : DEFAULT_SERVER_PORT;
+  const host = (): void => {
+    const options = hostMode === "server" ? { mode: "server" as const, serverPort: portNumber } : { mode: "lan" as const };
+    void run(
+      () => api.tera.host(player.trim() || undefined, options),
+      tr(hostMode === "server" ? "pages.netTera.hostStartedServer" : "pages.netTera.hostStarted"),
+    );
+  };
   const exceptionKey = status.exceptionType !== undefined && status.exceptionType >= 0 ? EXCEPTION_SUFFIX[status.exceptionType] : undefined;
   const stateText = tr("pages.netTera." + (STATE_SUFFIX[state] ?? "stateWaiting"));
   // 房客判定：secondary 表示自己不是房主，guest-* 状态说明正在加入别人的房间。
   const isGuest = status.secondary || state.startsWith("guest");
 
   return (
-    <div className="net-tera" data-tera-tab>
+    <div className="net-tera" data-tera-tab data-tera-mode={shareMode} data-tera-server-port={String(sharePort)}>
       <OfflineLanNotice side={isGuest ? "guest" : "host"} />
 
       <p className="net-tera-notice" data-tera-notice>
@@ -218,6 +236,12 @@ export function NetTeraTab() {
           </p>
         ) : null}
 
+        {status.broadcastError ? (
+          <p className="net-tera-warn" role="alert" data-tera-broadcast-error>
+            {status.broadcastError}
+          </p>
+        ) : null}
+
         {isException ? (
           <div className="net-tera-exception" role="alert" data-tera-exception={status.exceptionType ?? -1}>
             <IconAlert size={16} />
@@ -245,6 +269,35 @@ export function NetTeraTab() {
             <div className="panel-head">
               <h2 className="panel-title">{tr("pages.netTera.hostTitle")}</h2>
             </div>
+            <Field label={tr("pages.netTera.modeLabel")}>
+              <div data-tera-mode={hostMode}>
+                <Segmented
+                  value={hostMode}
+                  options={[
+                    { value: "lan", label: tr("pages.netTera.modeLan") },
+                    { value: "server", label: tr("pages.netTera.modeServer") },
+                  ]}
+                  onChange={setHostMode}
+                />
+              </div>
+            </Field>
+            {hostMode === "server" ? (
+              <Field
+                label={tr("pages.netTera.serverPortLabel")}
+                hint={portOk ? tr("pages.netTera.serverPortHint") : tr("pages.netTera.serverPortBad")}
+              >
+                <TextInput
+                  value={serverPort}
+                  aria-label={tr("pages.netTera.serverPortLabel")}
+                  inputMode="numeric"
+                  spellCheck={false}
+                  maxLength={5}
+                  className="net-tera-input net-tera-port"
+                  data-tera-port-input
+                  onChange={(event) => setServerPort(event.target.value.replace(/[^0-9]/g, "").slice(0, 5))}
+                />
+              </Field>
+            ) : null}
             <Field label={tr("pages.netTera.playerLabel")} hint={tr("pages.netTera.playerHint")}>
               <TextInput
                 value={player}
@@ -256,13 +309,16 @@ export function NetTeraTab() {
                 onChange={(event) => setPlayer(event.target.value)}
               />
             </Field>
-            <p className="net-note">{tr("pages.netTera.hostHint")}</p>
+            <p className="net-note">
+              {hostMode === "server" ? tr("pages.netTera.modeServerHint") : tr("pages.netTera.hostHint")}
+            </p>
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => void run(() => api.tera.host(player.trim() || undefined), tr("pages.netTera.hostStarted"))}
-              disabled={busy}
+              onClick={host}
+              disabled={busy || (hostMode === "server" && !portOk)}
               data-tera-host
+              data-action="tera-host"
             >
               {busy ? tr("pages.netTera.starting") : tr("pages.netTera.hostAction")}
             </button>
@@ -315,6 +371,11 @@ export function NetTeraTab() {
             </button>
           </div>
           <p className="net-note">{tr("pages.netTera.inviteHint")}</p>
+          {status.mode === "server" && status.serverPort ? (
+            <p className="net-tera-share" data-tera-shared>
+              {tr("pages.netTera.sharedLocal", { address: "127.0.0.1:" + status.serverPort })}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
