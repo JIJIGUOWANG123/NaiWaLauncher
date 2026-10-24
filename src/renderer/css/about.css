@@ -106,6 +106,8 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(246px, 1fr));
   gap: 12px;
+  /* 卡片变多后每行等高：网格项默认 stretch，说明文字撑满剩余高度，同一行底边对齐 */
+  align-items: stretch;
 }
 
 .about-card {
@@ -146,6 +148,7 @@
 }
 
 .about-card-desc {
+  flex: 1 1 auto;
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-dim);

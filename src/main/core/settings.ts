@@ -47,7 +47,7 @@ export function defaults(): Settings {
   return {
     downloadSource: "auto",
     connectionsPerFile: 4,
-    concurrentDownloads: 12,
+    concurrentDownloads: 8,
     // 内置默认 Key，可在设置中替换
     curseforgeApiKey: "",
     modProvider: "modrinth",

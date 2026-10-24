@@ -6,7 +6,7 @@ import { useT } from "../lib/i18n";
 import { errorMessage } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
 import { Field, Segmented, TextInput } from "../components/Form";
-import { Modal } from "../components/Modal";
+import { ConfirmDialog, Modal } from "../components/Modal";
 import { OfflineLanNotice } from "../components/OfflineLanNotice";
 import { IconAlert, IconInfo, IconLink, IconRefresh } from "../components/icons";
 
@@ -17,6 +17,17 @@ const PROJECT_URL = "https://github.com/burningtnt/Terracotta";
 const DEFAULT_SERVER_PORT = 25565;
 
 type HostMode = "lan" | "server";
+
+/** 端口软检查结果：未检查 / 正在监听 / 没有监听 / 无法检查。 */
+type PortState = "unknown" | "listening" | "closed" | "error";
+
+/** 端口检查结果 → i18n 键尾。 */
+const PORT_SUFFIX: Record<PortState, string> = {
+  unknown: "portStateUnknown",
+  listening: "portStateListening",
+  closed: "portStateClosed",
+  error: "portStateError",
+};
 
 /**
  * AGPL-3.0 例外条款要求「在用户界面明显处标识本作品的版权信息」：
@@ -87,6 +98,9 @@ export function NetTeraTab() {
   const [logOpen, setLogOpen] = useState(false);
   const [logText, setLogText] = useState("");
   const [logLoading, setLogLoading] = useState(false);
+  const [portState, setPortState] = useState<PortState>("unknown");
+  const [portChecking, setPortChecking] = useState(false);
+  const [confirmHost, setConfirmHost] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -122,6 +136,25 @@ export function NetTeraTab() {
     },
     [push],
   );
+
+  /**
+   * 软检查本机端口是否在监听（复用主进程 net.portCheck）。
+   * 只回报结果用于提示与建房前确认，永不抛错：接口失败按 error 处理，由调用方放行建房。
+   */
+  const checkPort = useCallback(async (port: number): Promise<PortState> => {
+    setPortChecking(true);
+    try {
+      const open = await api.net.portCheck(port);
+      const next: PortState = open ? "listening" : "closed";
+      setPortState(next);
+      return next;
+    } catch {
+      setPortState("error");
+      return "error";
+    } finally {
+      setPortChecking(false);
+    }
+  }, []);
 
   /** 优先走主进程剪贴板（file:// 下渲染进程没有 navigator.clipboard 权限），失败再退回浏览器实现。 */
   const copy = async (text: string): Promise<void> => {
@@ -162,12 +195,28 @@ export function NetTeraTab() {
   // 跑起来之后按主进程回报的实际分享方式显示，否则跟随用户当前选择
   const shareMode: HostMode = status.running && status.mode ? status.mode : hostMode;
   const sharePort = status.running && status.serverPort ? status.serverPort : portOk ? portNumber : DEFAULT_SERVER_PORT;
-  const host = (): void => {
+  /** 真正发起建房：软检查通过（或无需检查）后的唯一出口。 */
+  const startHost = (): void => {
     const options = hostMode === "server" ? { mode: "server" as const, serverPort: portNumber } : { mode: "lan" as const };
     void run(
       () => api.tera.host(player.trim() || undefined, options),
       tr(hostMode === "server" ? "pages.netTera.hostStartedServer" : "pages.netTera.hostStarted"),
     );
+  };
+  /**
+   * 「创建房间」入口：专用服务器模式先做一次软检查，绝不硬性阻止建房。
+   * - closed：弹确认框并停在原地（此时不调用 host），用户确认后走 startHost；
+   * - listening / error：直接建房，不打扰。
+   */
+  const host = async (): Promise<void> => {
+    if (hostMode === "server") {
+      const result = await checkPort(portNumber);
+      if (result === "closed") {
+        setConfirmHost(true);
+        return;
+      }
+    }
+    startHost();
   };
   const exceptionKey = status.exceptionType !== undefined && status.exceptionType >= 0 ? EXCEPTION_SUFFIX[status.exceptionType] : undefined;
   const stateText = tr("pages.netTera." + (STATE_SUFFIX[state] ?? "stateWaiting"));
@@ -284,18 +333,45 @@ export function NetTeraTab() {
             {hostMode === "server" ? (
               <Field
                 label={tr("pages.netTera.serverPortLabel")}
-                hint={portOk ? tr("pages.netTera.serverPortHint") : tr("pages.netTera.serverPortBad")}
+                hint={
+                  !portOk
+                    ? tr("pages.netTera.serverPortBad")
+                    : portState === "error"
+                      ? tr("pages.netTera.portCheckErrorHint")
+                      : tr("pages.netTera.serverPortHint")
+                }
               >
-                <TextInput
-                  value={serverPort}
-                  aria-label={tr("pages.netTera.serverPortLabel")}
-                  inputMode="numeric"
-                  spellCheck={false}
-                  maxLength={5}
-                  className="net-tera-input net-tera-port"
-                  data-tera-port-input
-                  onChange={(event) => setServerPort(event.target.value.replace(/[^0-9]/g, "").slice(0, 5))}
-                />
+                <div className="net-tera-port-row">
+                  <TextInput
+                    value={serverPort}
+                    aria-label={tr("pages.netTera.serverPortLabel")}
+                    inputMode="numeric"
+                    spellCheck={false}
+                    maxLength={5}
+                    className="net-tera-input net-tera-port"
+                    data-tera-port-input
+                    onChange={(event) => {
+                      setServerPort(event.target.value.replace(/[^0-9]/g, "").slice(0, 5));
+                      // 端口值变了，上一次的检查结论作废
+                      setPortState("unknown");
+                    }}
+                  />
+                  <span className="badge net-tera-port-badge" data-tera-port-state={portState} data-tera-port-badge>
+                    {tr("pages.netTera." + PORT_SUFFIX[portState])}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => void checkPort(portNumber)}
+                    disabled={portChecking || !portOk}
+                    data-action="tera-port-check"
+                    data-tera-port-check
+                  >
+                    {portChecking
+                      ? tr("pages.netTera.portChecking")
+                      : tr(portState === "unknown" ? "pages.netTera.portCheck" : "pages.netTera.portRecheck")}
+                  </button>
+                </div>
               </Field>
             ) : null}
             <Field label={tr("pages.netTera.playerLabel")} hint={tr("pages.netTera.playerHint")}>
@@ -315,7 +391,7 @@ export function NetTeraTab() {
             <button
               type="button"
               className="btn btn-primary"
-              onClick={host}
+              onClick={() => void host()}
               disabled={busy || (hostMode === "server" && !portOk)}
               data-tera-host
               data-action="tera-host"
@@ -430,6 +506,19 @@ export function NetTeraTab() {
           </button>
         </span>
       </footer>
+
+      {/* 端口没在监听时的软确认：确认后照常建房，取消则停在原地 */}
+      <ConfirmDialog
+        open={confirmHost}
+        title={tr("pages.netTera.portClosedTitle")}
+        message={tr("pages.netTera.portClosedConfirm", { port: String(portNumber) })}
+        confirmText={tr("pages.netTera.portClosedContinue")}
+        onCancel={() => setConfirmHost(false)}
+        onConfirm={() => {
+          setConfirmHost(false);
+          startHost();
+        }}
+      />
 
       <Modal
         open={logOpen}

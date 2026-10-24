@@ -1387,9 +1387,9 @@ export const pagesDict: Record<string, { "zh-CN": string; "en-US": string; "ja-J
   "pages.otherSettings.connectionsFormat": D("{value} 条", "{value}", "{value} 本"),
   "pages.otherSettings.threadsLabel": D("多线程下载（文件并发数）", "Multi-threaded downloads (file concurrency)", "マルチスレッドダウンロード（ファイル同時数）"),
   "pages.otherSettings.threadsHint": D(
-    "多个文件同时下载（1–32，默认 12），安装整合包/资源时提速明显",
-    "How many files download at once (1–32, default 12); a big win when installing modpacks",
-    "同時にダウンロードするファイル数（1〜32、既定 12）。MOD パックの導入時に効果的です",
+    "一次同时下载几个文件（1–32，默认 8），安装整合包/资源时提速明显；设太大会被下载站限速",
+    "How many files download at once (1–32, default 8); a big win when installing modpacks, but too high may hit CDN rate limits",
+    "同時にダウンロードするファイル数（1〜32、既定 8）。MOD パック導入時に効果的ですが、大きすぎると CDN の制限に当たります",
   ),
   "pages.otherSettings.threadsFormat": D("{value} 个", "{value}", "{value} 個"),
   "pages.otherSettings.parallelNote": D(

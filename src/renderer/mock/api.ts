@@ -875,8 +875,14 @@ export function createMockApi(): NaiwaApi {
       portCheck: async (port: number) => {
         trace("net.portCheck", { port });
         await sleep(420);
+        const hooks = globalThis as {
+          __naiwaMockPortListening?: boolean;
+          __naiwaMockPortCheckFail?: boolean;
+        };
+        // 自检钩子：__naiwaMockPortCheckFail 模拟接口报错（陶瓦页软检查应放行建房）。
+        if (hooks.__naiwaMockPortCheckFail) throw new Error("端口检查失败：无法枚举本机监听端口");
         // 自检钩子：__naiwaMockPortListening 控制「已开房 / 未开房」两种分支。
-        return Boolean((globalThis as { __naiwaMockPortListening?: boolean }).__naiwaMockPortListening);
+        return Boolean(hooks.__naiwaMockPortListening);
       },
       natfrpUser: async (): Promise<NatfrpUser> => {
         trace("net.natfrpUser");

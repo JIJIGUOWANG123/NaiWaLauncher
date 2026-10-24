@@ -949,6 +949,25 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
     "専用サーバーのポートをブロードキャスト中です。陶瓦が認識するまでお待ちください…",
   ),
   "pages.netTera.sharedLocal": D("已分享 {address}", "Sharing {address}", "{address} を共有中"),
+  "pages.netTera.portCheck": D("检查端口", "Check port", "ポートを確認"),
+  "pages.netTera.portRecheck": D("重新检查", "Check again", "再確認"),
+  "pages.netTera.portChecking": D("检查中…", "Checking…", "確認中…"),
+  "pages.netTera.portStateUnknown": D("未检查", "Not checked", "未確認"),
+  "pages.netTera.portStateListening": D("正在监听", "Listening", "待ち受け中"),
+  "pages.netTera.portStateClosed": D("没有监听", "Not listening", "待ち受けなし"),
+  "pages.netTera.portStateError": D("无法检查", "Check failed", "確認できません"),
+  "pages.netTera.portCheckErrorHint": D(
+    "无法检查端口：不影响创建房间，但请确认服务器已经在运行",
+    "The port could not be checked. You can still create the room, but make sure the server is running.",
+    "ポートを確認できませんでした。ルームは作成できますが、サーバーが起動しているか確認してください。",
+  ),
+  "pages.netTera.portClosedTitle": D("端口没有在监听", "The port is not listening", "ポートが待ち受けていません"),
+  "pages.netTera.portClosedConfirm": D(
+    "本机 {port} 端口现在没有在监听，服务器可能还没启动；继续创建房间的话房客会连不上。要继续吗？",
+    "Nothing is listening on port {port} right now, so the server may not be started yet; guests will not be able to connect if you create the room. Continue anyway?",
+    "この端末のポート {port} は待ち受けていません。サーバーがまだ起動していない可能性があり、このままルームを作成するとゲストは接続できません。続行しますか？",
+  ),
+  "pages.netTera.portClosedContinue": D("仍然创建房间", "Create anyway", "このまま作成"),
 
   // ---- 启动设置：信任 Windows 证书库 ----
   "pages.launchSettings.javaTrustLabel": D("Java 证书库", "Java certificates", "Java 証明書"),
@@ -996,6 +1015,50 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
   "pages.about.role.net": D("联机能力提供", "Multiplayer tooling", "マルチプレイ提供"),
   "pages.about.team.sakura": D("樱花穿透", "Sakura Frp", "Sakura Frp"),
   "pages.about.team.terracotta": D("陶瓦联机", "Terracotta", "Terracotta"),
+
+  // ---- 关于页 · 能力卡（0.3.4–0.3.9 新增能力） ----
+  "pages.about.capability.net": D("三种联机方式", "Three ways to play together", "3つのマルチプレイ方法"),
+  "pages.about.capability.netDesc": D(
+    "局域网直连、樱花穿透与陶瓦联机的 P2P 邀请码，专用服务器也能分享出去；会按实例加载器推荐对应的 LAN 模组，并提示是否已安装。",
+    "LAN direct connect, Sakura Frp tunnels and Terracotta P2P invite codes — dedicated servers can be shared too. It recommends the matching LAN mod for the instance loader and tells you whether it is installed.",
+    "LAN 直結・Sakura Frp・Terracotta の P2P 招待コードに対応し、専用サーバーも共有できます。インスタンスのローダーに合う LAN MOD を提案し、導入済みかどうかも表示します。",
+  ),
+  "pages.about.capability.background": D("个性化背景", "Personalized background", "背景のカスタマイズ"),
+  "pages.about.capability.backgroundDesc": D(
+    "本地图片或视频、随机图 API、Steam 壁纸引擎三种来源，各自独立开关与播放方式（顺序／随机），还能每次启动换一张。",
+    "Local images or videos, random-image APIs and Steam Wallpaper Engine — each source has its own switch and play mode (in order or shuffled), and the launcher can pick a new one on every start.",
+    "ローカル画像・動画、ランダム画像 API、Steam の Wallpaper Engine の3種類。それぞれ個別のオン／オフと再生方法（順番・ランダム）を設定でき、起動のたびに切り替えることもできます。",
+  ),
+  "pages.about.capability.javaSources": D("Java 多源下载", "Java from five sources", "Java のマルチソース取得"),
+  "pages.about.capability.javaSourcesDesc": D(
+    "BellSoft、Adoptium、清华 TUNA、Azul Zulu、Oracle JDK 五个源自动测速挑最快的；已装 JDK 可一键卸载，系统 JDK 能直接打开目录。",
+    "BellSoft, Adoptium, Tsinghua TUNA, Azul Zulu and Oracle JDK — it speed-tests the five sources and picks the fastest. Installed JDKs can be removed in one click, and system JDKs open straight in their folder.",
+    "BellSoft・Adoptium・清華 TUNA・Azul Zulu・Oracle JDK の5つの取得元から自動で速度を測って最速を選びます。導入済み JDK はワンクリックで削除でき、システムの JDK はフォルダーを直接開けます。",
+  ),
+  "pages.about.capability.github": D("GitHub 加速下载", "GitHub download accelerator", "GitHub ダウンロード高速化"),
+  "pages.about.capability.githubDesc": D(
+    "粘贴 GitHub 地址即可加速下载，四个节点自动测速或手动锁定，文件默认存到启动器根目录的 DL，进度在「管理」页看。",
+    "Paste a GitHub link and it downloads through an accelerator — four nodes are speed-tested automatically or you pin one by hand. Files land in the DL folder next to the launcher and progress shows on the Manage page.",
+    "GitHub の URL を貼るだけで高速化して取得します。4つのノードを自動で速度測定するか手動で固定でき、ファイルは既定でランチャー直下の DL に保存され、進捗は「管理」ページで確認できます。",
+  ),
+  "pages.about.capability.diagnose": D("启动失败诊断", "Launch failure diagnosis", "起動失敗の診断"),
+  "pages.about.capability.diagnoseDesc": D(
+    "游戏异常退出会自动分析日志，告诉你原因（显卡驱动、证书、Java 版本、内存、模组），列出可能相关的模组，还能一键导出诊断包。",
+    "When the game crashes it reads the log and tells you why — graphics driver, certificates, Java version, memory or mods — lists the mods that may be involved, and exports a diagnosis package in one click.",
+    "ゲームが異常終了するとログを自動で解析し、原因（GPU ドライバー、証明書、Java のバージョン、メモリ、MOD）を伝えます。関連しそうな MOD を一覧し、診断パッケージをワンクリックで書き出せます。",
+  ),
+  "pages.about.capability.languages": D("三语界面", "Three languages", "3言語のインターフェース"),
+  "pages.about.capability.languagesDesc": D(
+    "简体中文、English 与日本語，切换后立即生效，连主进程弹出的提示文案也一起换。",
+    "Simplified Chinese, English and Japanese — switching applies immediately, including the prompts the main process shows.",
+    "簡体字中国語・English・日本語に対応。切り替えるとすぐ反映され、メインプロセスが表示する通知も一緒に切り替わります。",
+  ),
+  "pages.about.capability.updateMode": D("更新方式可选", "Choose how updates land", "更新方法を選択"),
+  "pages.about.capability.updateModeDesc": D(
+    "手动：提示后你点了才更新；自动：后台下载安装，有游戏在跑就等你退出再装。",
+    "Manual: the launcher only tells you, and nothing happens until you click. Automatic: it downloads and installs in the background, and waits for a running game to exit.",
+    "手動：通知だけを出し、押したときだけ更新します。自動：バックグラウンドで取得とインストールを行い、ゲーム実行中なら終了を待ってから適用します。",
+  ),
 
   // ---- 设置页：更新方式 ----
   "settings.updateMode": D("更新方式", "Update checks", "更新の確認"),
@@ -1186,5 +1249,24 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
     "同时装着 {count} 个联机模组，它们会互相冲突（重复开端口、服务端可能拒绝启动）。建议只保留推荐的那个：先逐个卸载，再一键安装 {recommended}。",
     "{count} LAN mods are installed at once and they conflict (duplicate port binding, the server may refuse to start). Keep only the recommended one: remove them one by one, then install {recommended}.",
     "LAN MOD が {count} 個同時に入っていて競合します（ポートの二重開放、サーバーが起動しない場合もあります）。推奨のものだけ残してください：1 つずつ削除してから {recommended} を導入します。",
+  ),
+
+  // ---- 下载提示：开始下载（单个用标题，多个用计数） ----
+  "pages.dlToast.started": D("开始下载：{title}", "Download started: {title}", "ダウンロード開始：{title}"),
+  "pages.dlToast.startedCount": D(
+    "开始下载 {n} 个文件",
+    "Downloading {n} files",
+    "{n} 個のファイルをダウンロード中です",
+  ),
+  // ---- 下载提示：完成 / 失败的计数版本（合并多条时用） ----
+  "pages.dlToast.doneCount": D(
+    "{n} 个文件下载完成",
+    "{n} files downloaded",
+    "{n} 個のファイルのダウンロードが完了しました",
+  ),
+  "pages.dlToast.failedCount": D(
+    "{n} 个文件下载失败",
+    "{n} files failed to download",
+    "{n} 個のファイルのダウンロードに失敗しました",
   ),
 };

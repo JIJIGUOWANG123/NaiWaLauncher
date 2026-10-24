@@ -10,6 +10,8 @@ type Placement = "top-center" | "top-right";
 export interface ToastAction {
   label: string;
   onClick(): void;
+  /** 附加到动作按钮上的 data-* 属性，便于自检（如 data-action="dl-toast-view"）。 */
+  data?: Record<string, string>;
 }
 
 /** 位置与节奏的额外选项：不给就是原来的顶部居中提示条。 */
@@ -120,6 +122,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 className="toast-action"
+                {...(item.action.data ?? {})}
                 onClick={(event) => {
                   // 点动作按钮不能顺带触发整条 toast 的点击（那会先卸载掉按钮）。
                   event.stopPropagation();

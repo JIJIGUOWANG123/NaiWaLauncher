@@ -3,11 +3,10 @@ import type { DownloadSourceId, ModProviderId, Settings, SourceProbe } from "../
 import { api } from "../lib/api";
 import { formatLatency } from "../lib/format";
 import { usePersist } from "../lib/persist";
-import { useSliderDraft } from "../lib/useSliderDraft";
 import { useApp } from "../lib/store";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { useToast } from "../components/Toast";
-import { Field, Segmented, Slider, TextInput, Toggle } from "../components/Form";
+import { Field, Segmented, TextInput, Toggle } from "../components/Form";
 import { LANGUAGES, translate, useT, type Lang } from "../lib/i18n";
 import { ErrorState, LoadingState } from "../components/State";
 import { IconEye, IconEyeOff, IconInfo, IconZap } from "../components/icons";
@@ -80,13 +79,6 @@ export function SettingsPage() {
       setSavingWallpaper(false);
     }
   };
-
-  const [connectionsDraft, setConnectionsDraft] = useSliderDraft(settings?.connectionsPerFile ?? 4, (value) => {
-    void persist({ connectionsPerFile: value }, tr("settings.connPerFile"));
-  });
-  const [fileConcurrencyDraft, setFileConcurrencyDraft] = useSliderDraft(settings?.concurrentDownloads ?? 12, (value) => {
-    void persist({ concurrentDownloads: value }, tr("settings.fileConcurrency"));
-  });
 
   useEffect(() => {
     if (settings) setKeyDraft(settings.curseforgeApiKey);
@@ -223,36 +215,6 @@ export function SettingsPage() {
                 </button>
               );
             })}
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-head">
-            <h2 className="panel-title">{tr("settings.group.performance")}</h2>
-            <span className="panel-count">{tr("settings.rangeDownload")}</span>
-          </div>
-          <div className="form-grid">
-            <Field label={tr("settings.connPerFile")} hint={tr("settings.connPerFileHint")}>
-              <Slider
-                value={connectionsDraft}
-                min={1}
-                max={16}
-                onChange={setConnectionsDraft}
-                format={(value) => tr("settings.unit.connections", { value })}
-              />
-            </Field>
-            <Field label={tr("settings.fileConcurrency")} hint={tr("settings.fileConcurrencyHint")}>
-              <Slider
-                value={fileConcurrencyDraft}
-                min={1}
-                max={32}
-                onChange={setFileConcurrencyDraft}
-                format={(value) => tr("settings.unit.files", { value })}
-              />
-            </Field>
-            <p className="field-hint dl-parallel-note" data-dl-parallel-note>
-              {tr("settings.connFormula")}
-            </p>
           </div>
         </div>
 

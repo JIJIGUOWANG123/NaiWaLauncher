@@ -11,11 +11,13 @@ import { useT } from "../lib/i18n";
 import { useToast } from "../components/Toast";
 import { ConfirmDialog } from "../components/Modal";
 import {
+  IconAlert,
   IconBook,
   IconChevronRight,
   IconGithub,
   IconDownload,
   IconFolder,
+  IconImage,
   IconInstances,
   IconJava,
   IconLink,
@@ -25,7 +27,9 @@ import {
   IconRefresh,
   IconRocket,
   IconSearch,
+  IconSliders,
   IconUser,
+  IconWifi,
   IconZap,
 } from "../components/icons";
 
@@ -45,13 +49,22 @@ const TERRACOTTA_URL = "https://github.com/burningtnt/Terracotta";
 /** 工具提供方走官网（比仓库说明更能说明它是什么）。 */
 const DEEPSEEK_URL = "https://www.deepseek.com/";
 
+/** 能力卡：capKey 同时作为自检用的 data-about-capability 属性。 */
 const CAPABILITIES = [
-  { Icon: IconPackage, titleKey: "about.capability.fabric", descKey: "about.capability.fabricDesc" },
-  { Icon: IconMods, titleKey: "about.capability.mods", descKey: "about.capability.modsDesc" },
-  { Icon: IconInstances, titleKey: "about.capability.instances", descKey: "about.capability.instancesDesc" },
-  { Icon: IconSearch, titleKey: "about.capability.search", descKey: "about.capability.searchDesc" },
-  { Icon: IconJava, titleKey: "about.capability.java", descKey: "about.capability.javaDesc" },
-  { Icon: IconDownload, titleKey: "about.capability.download", descKey: "about.capability.downloadDesc" },
+  { capKey: "fabric", Icon: IconPackage, titleKey: "about.capability.fabric", descKey: "about.capability.fabricDesc" },
+  { capKey: "mods", Icon: IconMods, titleKey: "about.capability.mods", descKey: "about.capability.modsDesc" },
+  { capKey: "instances", Icon: IconInstances, titleKey: "about.capability.instances", descKey: "about.capability.instancesDesc" },
+  { capKey: "search", Icon: IconSearch, titleKey: "about.capability.search", descKey: "about.capability.searchDesc" },
+  { capKey: "java", Icon: IconJava, titleKey: "about.capability.java", descKey: "about.capability.javaDesc" },
+  { capKey: "download", Icon: IconDownload, titleKey: "about.capability.download", descKey: "about.capability.downloadDesc" },
+  // 0.3.4–0.3.9 新增能力，文案在 lib/i18n-extra.ts 的 pages.about.capability.*
+  { capKey: "net", Icon: IconWifi, titleKey: "pages.about.capability.net", descKey: "pages.about.capability.netDesc" },
+  { capKey: "background", Icon: IconImage, titleKey: "pages.about.capability.background", descKey: "pages.about.capability.backgroundDesc" },
+  { capKey: "javaSources", Icon: IconSliders, titleKey: "pages.about.capability.javaSources", descKey: "pages.about.capability.javaSourcesDesc" },
+  { capKey: "github", Icon: IconGithub, titleKey: "pages.about.capability.github", descKey: "pages.about.capability.githubDesc" },
+  { capKey: "diagnose", Icon: IconAlert, titleKey: "pages.about.capability.diagnose", descKey: "pages.about.capability.diagnoseDesc" },
+  { capKey: "languages", Icon: IconBook, titleKey: "pages.about.capability.languages", descKey: "pages.about.capability.languagesDesc" },
+  { capKey: "updateMode", Icon: IconRefresh, titleKey: "pages.about.capability.updateMode", descKey: "pages.about.capability.updateModeDesc" },
 ];
 
 const LINKS = [
@@ -323,10 +336,10 @@ export function AboutPage() {
       ) : null}
 
       <div className="about-cards">
-        {CAPABILITIES.map(({ Icon, titleKey, descKey }) => {
+        {CAPABILITIES.map(({ capKey, Icon, titleKey, descKey }) => {
           const title = tr(titleKey);
           return (
-          <article className="about-card" data-about-card key={titleKey}>
+          <article className="about-card" data-about-card data-about-capability={capKey} key={titleKey}>
             <div className="about-card-head">
               <span className="about-card-icon">
                 <Icon size={17} />

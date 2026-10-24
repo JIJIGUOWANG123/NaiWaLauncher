@@ -44,6 +44,74 @@ export function App() {
   );
 }
 
+/** 下载提示的聚合窗口：窗口期内同一状态的任务合并成一条提示。 */
+const DL_TOAST_WINDOW_MS = 500;
+
+type DlToastKind = "started" | "done" | "failed";
+
+/** 一个窗口期内同一状态的合并结果。 */
+export interface DlToastBatch {
+  kind: DlToastKind;
+  count: number;
+  /** 首个任务的标题：只有 1 个时用它，多个时改走计数文案。 */
+  title: string;
+}
+
+/**
+ * 500ms 聚合窗口：第一个事件开窗，窗口结束时把收集到的状态合成一批交出去。
+ * 优先级 failed > done > started：同一窗口里既有完成又有失败时只报失败，避免重要信息被合并盖掉。
+ */
+export function createDlToastBatcher(onFlush: (batch: DlToastBatch) => void, windowMs = DL_TOAST_WINDOW_MS) {
+  const pending = new Map<DlToastKind, { count: number; title: string }>();
+  let timer: number | undefined;
+  const flush = () => {
+    timer = undefined;
+    const kind = (["failed", "done", "started"] as const).find((candidate) => pending.has(candidate));
+    if (!kind) return;
+    const batch = pending.get(kind)!;
+    pending.clear();
+    onFlush({ kind, count: batch.count, title: batch.title });
+  };
+  return {
+    add(kind: DlToastKind, title: string) {
+      const current = pending.get(kind);
+      if (current) current.count += 1;
+      else pending.set(kind, { count: 1, title });
+      // 固定窗口（不随新事件重置），这样长批次也能按 500ms 节奏持续汇报
+      if (timer === undefined) timer = window.setTimeout(flush, windowMs);
+    },
+    dispose() {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = undefined;
+      pending.clear();
+    },
+  };
+}
+
+/** 合并结果 → toast 的文案 / 语气 / 自检属性（data-dl-toast-state 用 started/done/failed）。 */
+export function dlToastContent(
+  batch: DlToastBatch,
+  tr: (key: string, vars?: Record<string, string | number>) => string,
+) {
+  const many = batch.count > 1;
+  const key = batch.kind === "started"
+    ? (many ? "pages.dlToast.startedCount" : "pages.dlToast.started")
+    : batch.kind === "done"
+      ? (many ? "pages.dlToast.doneCount" : "pages.dlToast.done")
+      : (many ? "pages.dlToast.failedCount" : "pages.dlToast.failed");
+  const tone: "success" | "error" | "info" =
+    batch.kind === "done" ? "success" : batch.kind === "failed" ? "error" : "info";
+  return {
+    message: tr(key, { title: batch.title, n: batch.count }),
+    tone,
+    data: {
+      "data-dl-toast": "",
+      "data-dl-toast-state": batch.kind,
+      "data-dl-toast-count": String(batch.count),
+    },
+  };
+}
+
 function Shell() {
   const { page, booted, settings, iconUrl, navigate, updatePhase } = useApp();
   const { push: pushToast } = useToast();
@@ -178,34 +246,54 @@ function Shell() {
     ? apiBg?.kind === "video"
     : (isVideoFile(playback.name) || isVideoFile(bgUrl));
 
-  // 下载任务收尾提示：status 变成 done/failed 时在右上角浮一条，几秒后自己淡出。
+  // 下载提示：开始 / 完成 / 失败都在右上角浮一条，带「查看」直接跳「管理」页。
+  // 一次安装会瞬间创建几十个任务，所以按 500ms 窗口合并：同一窗口内只弹一条，
+  // 多个时文案改用计数（「开始下载 5 个文件」）；失败优先级最高，合并不会盖掉失败。
   // slot 固定为 "download"：同一时间只有一条，新的直接顶掉旧的（不叠加），也不阻塞任何操作。
   const jobStatuses = useRef(new Map<string, DownloadJob["status"]>());
   useEffect(() => {
-    return api.downloads.onChanged((jobs) => {
+    const batcher = createDlToastBatcher((batch) => {
+      const { message, tone, data } = dlToastContent(batch, tr);
+      pushToast(
+        message,
+        tone,
+        { label: tr("pages.dlToast.view"), onClick: () => navigate("downloads"), data: { "data-action": "dl-toast-view" } },
+        { placement: "top-right", durationMs: 3500, slot: "download", data },
+      );
+    });
+    // 先把磁盘上已有的任务记成基线：重启后恢复的记录只补记状态，不补弹「开始下载」。
+    void api.downloads
+      .list()
+      .then((jobs) => {
+        for (const job of jobs) {
+          if (!jobStatuses.current.has(job.id)) jobStatuses.current.set(job.id, job.status);
+        }
+      })
+      .catch(() => {
+        // 读失败就不做基线，宁可多弹一条合并提示，也不能漏掉真正的开始/失败
+      });
+    const off = api.downloads.onChanged((jobs) => {
       const seen = jobStatuses.current;
       const next = new Map<string, DownloadJob["status"]>();
       for (const job of jobs) {
         next.set(job.id, job.status);
         const previous = seen.get(job.id);
-        // 第一次见到的任务（重启后从磁盘恢复的记录）只记基线，不补弹提示
-        if (previous === undefined || previous === job.status) continue;
-        if (job.status !== "done" && job.status !== "failed") continue;
-        const ok = job.status === "done";
-        pushToast(
-          tr(ok ? "pages.dlToast.done" : "pages.dlToast.failed", { title: job.title }),
-          ok ? "success" : "error",
-          { label: tr("pages.dlToast.view"), onClick: () => navigate("downloads") },
-          {
-            placement: "top-right",
-            durationMs: 3500,
-            slot: "download",
-            data: { "data-dl-toast": "", "data-dl-toast-state": ok ? "done" : "failed" },
-          },
-        );
+        // 基线之后才出现的任务就是「开始下载」；基线里的老任务只补记状态
+        if (previous === undefined) {
+          batcher.add("started", job.title);
+          continue;
+        }
+        if (previous === job.status) continue;
+        if (job.status === "running") batcher.add("started", job.title);
+        else if (job.status === "done") batcher.add("done", job.title);
+        else if (job.status === "failed") batcher.add("failed", job.title);
       }
       jobStatuses.current = next;
     });
+    return () => {
+      batcher.dispose();
+      off();
+    };
   }, [navigate, pushToast, tr]);
 
   // 主进程推送的更新阶段：检查/下载/安装在后台跑，这里只用右上角 toast 交代进度（不阻塞、不弹对话框）

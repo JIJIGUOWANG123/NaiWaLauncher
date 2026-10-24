@@ -649,6 +649,42 @@
   letter-spacing: 0.12em;
 }
 
+/* 端口软检查：输入框 + 状态徽标 + 重新检查按钮同一行 */
+.net-tera-port-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.net-tera-port-badge {
+  flex: none;
+}
+
+.net-tera-port-badge[data-tera-port-state="unknown"] {
+  border-color: var(--line);
+  background: var(--surface-recess);
+  color: var(--text-dim);
+}
+
+.net-tera-port-badge[data-tera-port-state="listening"] {
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--ok);
+}
+
+.net-tera-port-badge[data-tera-port-state="closed"] {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+.net-tera-port-badge[data-tera-port-state="error"] {
+  border-color: color-mix(in srgb, var(--accent-2) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+  color: var(--accent-2);
+}
+
 /* 专用服务器模式在邀请码下方追加的「已分享 127.0.0.1:端口」 */
 .net-tera-share {
   display: inline-flex;
