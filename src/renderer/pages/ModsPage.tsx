@@ -7,7 +7,8 @@ import { api } from "../lib/api";
 import { formatAgo, formatCount, formatDate, loaderLabel } from "../lib/format";
 import {
   KIND_BADGE_KEY, KIND_DIR, KIND_FILE_ACTION_KEY, KIND_INSTALL_LABEL_KEY, KIND_PLACEHOLDER_KEY,
-  KIND_TABS, SORT_OPTIONS_KEY, TARGET_GROUP_LABEL_KEY, checkPluginPlatform, isBackendKind, kindLabel, loaderOptionLabel,
+  KIND_TABS, SORT_OPTIONS_KEY, TARGET_GROUP_LABEL_KEY, checkPluginPlatform, instanceTargetGate, isBackendKind,
+  kindLabel, loaderOptionLabel, needsVersionPick,
   serverCapabilitiesOf, serverContentKindOf, serverTargetGateFor, sourceBadge, showsLoader, showsResolution,
   targetGroupsOf,
   type KindFilesRequest, type KindInstallRequest, type KindSearchRequest, type ModSort,
@@ -464,8 +465,13 @@ export function ModsPage() {
   /**
    * 「安装到…」弹窗：记下要装的项目（可能已经指定了某个文件）。
    * 卡片上的安装按钮与详情面板的安装入口都走它，实例 / 服务端在弹窗里分组选。
+   * instance 有值 = 已经选好实例，同一个弹窗进入第二步「挑版本」（file 非空时不需要这一步）。
    */
-  const [targetModal, setTargetModal] = useState<{ mod: ModSearchResult; file: ModFileInfo | null } | null>(null);
+  const [targetModal, setTargetModal] = useState<{
+    mod: ModSearchResult; file: ModFileInfo | null; instance?: InstanceMeta;
+  } | null>(null);
+  /** 第二步「挑版本」空列表/失败时已经自动退回过的那一个目标：同一个目标只退一次。 */
+  const versionFallbackRef = useRef("");
   /** 整合包「安装并创建实例」的确认弹窗（进行中的条目在 installs 队列里）。 */
   const [packConfirm, setPackConfirm] = useState<ModSearchResult | null>(null);
   /** 下载记录快照：进度按记录自己的重试参数对回条目，谁的进度显示在谁身上。 */
@@ -629,6 +635,15 @@ export function ModsPage() {
       : !serverTarget && kind !== "plugin" && currentInstance
         ? { kind: "instance", name: currentInstance.name }
         : null;
+  /**
+   * 当前实例能不能装这个类型：原版实例 + 模组/光影 → 卡片按钮与弹窗里那一项都置灰。
+   * 没选实例时为 null（按钮照常点开弹窗，让用户在里面挑一个带加载器的实例）。
+   */
+  const instanceGate = currentInstance && !serverTarget
+    ? instanceTargetGate(kind, currentInstance.loader)
+    : null;
+  const instanceBlocked = instanceGate !== null && !instanceGate.allowed;
+  const instanceBlockHint = instanceBlocked && instanceGate?.reasonKey ? tr(instanceGate.reasonKey) : null;
   /** 卡片安装按钮文案：选过目标就显示目标名，没选就是「安装到实例 / 安装到服务端」。 */
   const installTargetLabel = kind === "plugin"
     ? (pluginServer
@@ -811,6 +826,26 @@ export function ModsPage() {
       selected?.projectId, detailKind, currentInstance?.mcVersion, currentInstance?.loader,
       serverTarget, pluginServer?.meta.mcVersion,
     ],
+  );
+
+  /**
+   * 第二步「挑版本」：该实例的 MC 版本 + 加载器下可用的文件。
+   * 列表为空或请求失败时退回旧行为（file=null，由主进程挑最新），见下面的 fallback effect。
+   */
+  const targetVersions = useAsync<ModFileInfo[]>(
+    () => {
+      const modal = targetModal;
+      if (!modal || !modal.instance) return Promise.resolve([] as ModFileInfo[]);
+      return api.mods.files({
+        provider: modal.mod.provider,
+        projectId: modal.mod.projectId,
+        kind: detailKind,
+        gameVersion: modal.instance.mcVersion,
+        loader: modal.instance.loader,
+        limit: 30,
+      });
+    },
+    [targetModal?.mod.projectId, targetModal?.instance?.id, detailKind],
   );
 
   /**
@@ -1292,13 +1327,44 @@ export function ModsPage() {
     await runServerInstall(mod, pluginServer.meta.id, pluginServer.meta.name, file);
   };
 
-  /** 弹窗里选实例：切到该实例，把内容装进去（弹窗里带了文件就用那个文件）。 */
-  const pickTargetInstance = async (mod: ModSearchResult, instance: InstanceMeta, file: ModFileInfo | null) => {
+  /** 真正落那一单：切到该实例并把选好的文件装进去（file=null 表示交给主进程挑最新）。 */
+  const pickTargetVersion = async (mod: ModSearchResult, instance: InstanceMeta, file: ModFileInfo | null) => {
     setTargetModal(null);
     setServerId("");
     setCurrentInstanceId(instance.id);
     await installContent(mod, instance, file);
   };
+
+  /**
+   * 弹窗里选实例：已经带了文件（详情面板某一行点的安装）就直接装到该实例；
+   * 否则留在同一个弹窗里切到第二步「挑版本」，由用户点某一项再装。
+   */
+  const pickTargetInstance = async (mod: ModSearchResult, instance: InstanceMeta, file: ModFileInfo | null) => {
+    if (file === null && needsVersionPick(detailKind)) {
+      /* 每次新进第二步都重新给一次自动退回的机会（上一次装完后 ref 里还留着旧目标）。 */
+      versionFallbackRef.current = "";
+      setTargetModal({ mod, file: null, instance });
+      return;
+    }
+    await pickTargetVersion(mod, instance, file);
+  };
+
+  /**
+   * 第二步拿不到可用文件（列表空 / 请求失败）：退回 0.4.2 的自动挑最新并说明一句。
+   * 用 ref 记住已经退过的目标，避免 effect 重入时重复下单。
+   */
+  useEffect(() => {
+    const modal = targetModal;
+    if (!modal?.instance || targetVersions.loading) return;
+    if (!targetVersions.error && (targetVersions.data ?? []).length > 0) return;
+    const key = `${modal.mod.provider}:${modal.mod.projectId}:${modal.instance.id}`;
+    if (versionFallbackRef.current === key) return;
+    versionFallbackRef.current = key;
+    push(tr("pages.mods.targetVersionFallback"), "info");
+    void pickTargetVersion(modal.mod, modal.instance, null);
+    // pickTargetVersion 只读 state setter，不进依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetModal, targetVersions.loading, targetVersions.error, targetVersions.data, push, tr]);
 
   /** 弹窗里选服务端：先按该核心的能力门禁校验，再切目标并装进对应目录。 */
   const pickTargetServer = async (mod: ModSearchResult, entry: ServerEntry, file: ModFileInfo | null) => {
@@ -1344,10 +1410,15 @@ export function ModsPage() {
     if (currentInstance) await installContent(mod, currentInstance, null);
   };
 
-  /** 卡片按钮 title：有目标就说明会装到哪；没目标就说明点了是去选目标（被门禁拦住时先给原因）。 */
-  const installTargetTitle = serverBlockHint ?? (installTarget
+  /** 卡片按钮 title：被门禁拦住时先给原因；有目标就说明会装到哪；没目标就说明点了是去选目标。 */
+  const installTargetTitle = instanceBlockHint ?? serverBlockHint ?? (installTarget
     ? tr("pages.mods.installToNamed", { name: installTarget.name })
     : tr("pages.mods.chooseInstallTarget"));
+
+  /** 弹窗第二步的目标实例（null = 还停在「选目标」这一步）。 */
+  const versionInstance: InstanceMeta | null = targetModal?.instance ?? null;
+  /** 第二步的文件列表：data 还没回来时按空数组处理，渲染不用再判空。 */
+  const versionFiles: ModFileInfo[] = targetVersions.data ?? [];
 
   /**
    * 整合包：不需要选实例，入队后由主进程新建实例（名字取整合包名）。
@@ -1967,9 +2038,10 @@ export function ModsPage() {
                           data-target-name={installTarget?.name}
                           data-install-direct={installTarget ? "1" : "0"}
                           data-server-blocked={serverTarget && serverBlocked ? "1" : undefined}
+                          data-install-blocked={instanceBlocked ? "1" : undefined}
                           aria-haspopup={installTarget === null ? "dialog" : undefined}
                           aria-expanded={installTarget === null && targetModal !== null && keyOf(targetModal.mod) === key}
-                          disabled={pluginBusyKey === key}
+                          disabled={pluginBusyKey === key || instanceBlocked}
                           title={installTargetTitle}
                           onClick={() => void installFromCard(mod)}
                         >
@@ -2194,26 +2266,88 @@ export function ModsPage() {
           width={520}
           onClose={() => setTargetModal(null)}
           footer={
-            <>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                data-target-modal-browse
-                onClick={() => browseOnly(targetModal.mod)}
-              >
-                {tr("pages.mods.browseOnly")}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                data-target-modal-cancel
-                onClick={() => setTargetModal(null)}
-              >
-                {tr("pages.common.cancel")}
-              </button>
-            </>
+            /* 第二步没有「仅浏览」，换成「上一步」：退回选目标，已经选中的实例仍在。 */
+            versionInstance ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  data-target-version-back
+                  onClick={() => setTargetModal({ mod: targetModal.mod, file: targetModal.file })}
+                >
+                  {tr("pages.mods.targetVersionBack")}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  data-target-modal-cancel
+                  onClick={() => setTargetModal(null)}
+                >
+                  {tr("pages.common.cancel")}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  data-target-modal-browse
+                  onClick={() => browseOnly(targetModal.mod)}
+                >
+                  {tr("pages.mods.browseOnly")}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  data-target-modal-cancel
+                  onClick={() => setTargetModal(null)}
+                >
+                  {tr("pages.common.cancel")}
+                </button>
+              </>
+            )
           }
         >
+          {versionInstance ? (
+            /* 第二步：该实例的版本/加载器下能用的文件，点哪一项就装哪一项。 */
+            <div className="target-modal" data-target-version-step="1" data-target-modal-kind={detailKind}>
+              <p className="aside-hint" data-target-version-instance>
+                {tr("pages.mods.targetVersionTo", {
+                  name: versionInstance.name,
+                  mc: versionInstance.mcVersion,
+                  loader: loaderLabel(versionInstance.loader, tr),
+                })}
+              </p>
+              {targetVersions.loading ? <SkeletonRows count={4} /> : null}
+              {targetVersions.error ? <ErrorState message={targetVersions.error} onRetry={targetVersions.reload} /> : null}
+              {versionFiles.length > 0 ? (
+                <div className="target-options" data-target-version-list>
+                  {versionFiles.map((file) => (
+                    <button
+                      key={file.fileId}
+                      type="button"
+                      className={`target-option ${file.exactMatch ? "is-selected" : ""}`.trim()}
+                      data-target-version-file={file.fileId}
+                      title={file.name}
+                      onClick={() => void pickTargetVersion(targetModal.mod, versionInstance, file)}
+                    >
+                      <span className="target-option-name">{file.fileName}</span>
+                      <span className="target-option-meta">
+                        {`${file.name} · ${formatDate(file.publishedAt)} · ${tr("pages.mods.downloadCount", {
+                          count: formatCount(file.downloads, tr),
+                        })}`}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {!targetVersions.loading && versionFiles.length === 0 ? (
+                <p className="aside-hint" data-target-version-fallback-hint>
+                  {tr("pages.mods.targetVersionFallback")}
+                </p>
+              ) : null}
+            </div>
+          ) : (
           <div className="target-modal" data-target-modal data-target-modal-kind={detailKind}>
             {targetGroups.map((group) => (
               <section
@@ -2235,10 +2369,17 @@ export function ModsPage() {
                       {tr("pages.mods.targetModalNoInstances")}
                     </p>
                   ) : (
+                    <>
                     <div className="target-options">
                       {instances.map((instance) => {
                         /* 同一项目正在往这个实例装：这一项先禁掉，免得多点一次排队。 */
                         const busy = busyInInstance(targetModal.mod.provider, targetModal.mod.projectId, instance.id);
+                        /* 原版实例装不了模组/光影：同样置灰，并把原因写在副标下面。 */
+                        const gate = instanceTargetGate(kind, instance.loader);
+                        const blocked = busy || !gate.allowed;
+                        const reason = busy
+                          ? tr("pages.mods.targetBusyInstance")
+                          : gate.reasonKey ? tr(gate.reasonKey) : null;
                         const current = !serverTarget && currentInstance?.id === instance.id;
                         const meta = `${instance.mcVersion} · ${loaderLabel(instance.loader, tr)}`;
                         return (
@@ -2249,20 +2390,28 @@ export function ModsPage() {
                             data-target-option
                             data-target-option-kind="instance"
                             data-target-option-id={instance.id}
-                            data-target-option-disabled={busy ? "1" : "0"}
-                            disabled={busy}
-                            title={busy ? tr("pages.mods.targetBusyInstance") : meta}
+                            data-target-option-disabled={blocked ? "1" : "0"}
+                            disabled={blocked}
+                            title={reason ?? meta}
                             onClick={() => void pickTargetInstance(targetModal.mod, instance, targetModal.file)}
                           >
                             <span className="target-option-name">{instance.name}</span>
                             <span className="target-option-meta">{meta}</span>
-                            {busy ? (
-                              <span className="target-option-reason">{tr("pages.mods.targetBusyInstance")}</span>
+                            {reason ? (
+                              <span className="target-option-reason">{reason}</span>
                             ) : null}
                           </button>
                         );
                       })}
                     </div>
+                    {/* 模组/光影但一个带加载器的实例都没有：直接说清要先去建一个。 */}
+                    {(kind === "mod" || kind === "shader")
+                      && !instances.some((instance) => instanceTargetGate(kind, instance.loader).allowed) ? (
+                        <p className="aside-hint" data-target-modal-vanilla-hint>
+                          {tr("pages.mods.targetModalVanillaHint")}
+                        </p>
+                      ) : null}
+                    </>
                   )
                 ) : (servers.data ?? []).length === 0 ? (
                   <p className="aside-hint" data-target-modal-empty="server">
@@ -2307,6 +2456,7 @@ export function ModsPage() {
               </p>
             )}
           </div>
+          )}
         </Modal>
       ) : null}
 

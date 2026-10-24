@@ -73,10 +73,11 @@ ok(/data-target-modal-group=\{group\}/.test(modal), "每组有 data-target-modal
 ok(/data-target-option\b/.test(modal) && /data-target-option-kind="instance"/.test(modal) && /data-target-option-kind="server"/.test(modal), "每项都有 data-target-option + data-target-option-kind");
 ok(/data-target-option-id=\{instance\.id\}/.test(modal) && /data-target-option-id=\{entry\.meta\.id\}/.test(modal), "每项都有 data-target-option-id");
 ok((modal.match(/data-target-option-disabled=/g) || []).length === 2, "每项都有 data-target-option-disabled（实例 / 服务端各一处）");
-ok(/data-target-option-disabled=\{busy \? "1" : "0"\}/.test(modal), "实例项：安装中的那项标记 disabled=1");
+// 0.4.3(B) 起：实例项的门禁 = 安装中 || 原版实例装不了模组/光影（modKind.instanceTargetGate）
+ok(/data-target-option-disabled=\{blocked \? "1" : "0"\}/.test(modal), "实例项：装不进去的那项标记 disabled=1");
 ok(/data-target-option-disabled=\{gate\.allowed \? "0" : "1"\}/.test(modal), "服务端项：按能力门禁标记 disabled");
 ok(/disabled=\{!gate\.allowed\}/.test(modal) && /title=\{!gate\.allowed && reason \? reason : meta\}/.test(modal), "服务端置灰项真的 disabled 且 title 给原因");
-ok(/disabled=\{busy\}/.test(modal) && /target-option-reason/.test(modal), "实例置灰项 disabled 且写出原因文案");
+ok(/disabled=\{blocked\}/.test(modal) && /target-option-reason/.test(modal), "实例置灰项 disabled 且写出原因文案");
 ok(/data-target-modal-browse/.test(modal) && /pages\.mods\.browseOnly/.test(modal), "底部有「不安装，仅浏览」（pages.mods.browseOnly）");
 ok(/data-target-modal-cancel/.test(modal) && /pages\.common\.cancel/.test(modal), "底部有「取消」（pages.common.cancel，三语已有）");
 ok(/data-target-modal-note/.test(modal) && /pages\.mods\.serverTargetUnsupported/.test(modal), "只能装实例的类型：服务端组不出现，带原因说明");
@@ -91,7 +92,8 @@ const cardBtnBlock = cardBtn.slice(0, cardBtn.indexOf("</button>"));
 // 0.4.2(D) 起：有目标就直接装，没目标才弹窗（详见 scripts/res-target-direct-check.js）。
 ok(/aria-haspopup=\{installTarget === null \? "dialog" : undefined\}/.test(cardBtnBlock), "卡片按钮只在没目标时 aria-haspopup=dialog（有目标直装，不是行内菜单）");
 ok(/onClick=\{\(\) => void installFromCard\(mod\)\}/.test(cardBtnBlock), "卡片按钮点击 = installFromCard（有目标直装 / 没目标开弹窗）");
-ok(!/disabled=\{[^}]*noInstance[^}]*\}/.test(cardBtnBlock) && /disabled=\{pluginBusyKey === key\}/.test(cardBtnBlock), "卡片按钮只在安装中禁用（没选目标也能点）");
+// 0.4.3(B) 起：安装中 或 侧栏选中的实例是原版（模组/光影装不进）时禁用，没选目标仍能点开弹窗
+ok(!/disabled=\{[^}]*noInstance[^}]*\}/.test(cardBtnBlock) && /disabled=\{pluginBusyKey === key \|\| instanceBlocked\}/.test(cardBtnBlock), "卡片按钮只在安装中 / 原版实例门禁时禁用（没选目标也能点）");
 ok(/installTargetLabel/.test(cardBtnBlock), "卡片按钮文案来自 installTargetLabel");
 ok(/tr\("pages\.mods\.installToNamed", \{ name: pluginServer\.meta\.name \}\)/s.test(mods) && /tr\("pages\.mods\.installToNamed", \{ name: currentInstance\.name \}\)/s.test(mods), "选中目标后按钮显示目标名（installToNamed）");
 ok(/kind === "plugin"[\s\S]{0,220}pages\.mods\.serverInstall/.test(mods), "插件类型按钮文案 = 安装到服务端（pages.mods.serverInstall）");

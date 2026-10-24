@@ -5,7 +5,7 @@ import { formatCount, formatDate } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { errorMessage, useAsync } from "../lib/useAsync";
 import { Drawer } from "./Drawer";
-import { IconSearch } from "./icons";
+import { IconLink, IconSearch } from "./icons";
 import { ImageLightbox } from "./ImageLightbox";
 import { ErrorState, SkeletonRows } from "./State";
 import { useToast } from "./Toast";
@@ -190,20 +190,51 @@ export function ModDetailPanel({
     }
   };
 
-  /** 头部动作：只给内容类详情（模组/插件/整合包/资源包/光影）用；本面板不承载地图。 */
-  const headActions = data && mcmodKey ? (
-    <button
-      type="button"
-      className="btn btn-ghost btn-sm mod-detail-mcmod"
-      onClick={() => void openMcmod()}
-      title={tr("pages.modDetail.mcmodSearchHint", { name: mcmodKey })}
-      aria-label={tr("pages.modDetail.mcmodSearchHint", { name: mcmodKey })}
-      data-action="mcmod-search"
-      data-mcmod-key={mcmodKey}
-    >
-      <IconSearch size={14} />
-      <span className="mod-detail-mcmod-label">{tr("pages.modDetail.mcmodSearch")}</span>
-    </button>
+  /** 详情页头部「原始页面」：直接在浏览器打开这个资源的发布页（没有 sourceUrl 就不出现）。 */
+  const openSourcePage = async () => {
+    if (!sourceUrl) return;
+    try {
+      await api.app.openExternal(sourceUrl);
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    }
+  };
+
+  /**
+   * 头部动作：只给内容类详情（模组/插件/整合包/资源包/光影）用；本面板不承载地图。
+   * 顺序即 DOM 顺序：「原始页面」在 MCMOD 搜索左边。
+   */
+  const headActions = data ? (
+    <>
+      {sourceUrl ? (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm mod-detail-source"
+          onClick={() => void openSourcePage()}
+          title={tr("pages.modDetail.openSourcePageHint", { url: sourceUrl })}
+          aria-label={tr("pages.modDetail.openSourcePage")}
+          data-action="open-source-page"
+          data-source-url={sourceUrl}
+        >
+          <IconLink size={14} />
+          <span className="mod-detail-source-label">{tr("pages.modDetail.openSourcePage")}</span>
+        </button>
+      ) : null}
+      {mcmodKey ? (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm mod-detail-mcmod"
+          onClick={() => void openMcmod()}
+          title={tr("pages.modDetail.mcmodSearchHint", { name: mcmodKey })}
+          aria-label={tr("pages.modDetail.mcmodSearchHint", { name: mcmodKey })}
+          data-action="mcmod-search"
+          data-mcmod-key={mcmodKey}
+        >
+          <IconSearch size={14} />
+          <span className="mod-detail-mcmod-label">{tr("pages.modDetail.mcmodSearch")}</span>
+        </button>
+      ) : null}
+    </>
   ) : null;
 
   const footer = data ? (

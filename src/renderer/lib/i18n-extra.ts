@@ -1608,9 +1608,44 @@ export const pagesDictExtra: Record<string, { "zh-CN": string; "en-US": string; 
     "Microsoft 公式サイトでスキン／マントを変更",
   ),
   "pages.skins.officialPriority": D(
-    "正版账号登录时官方皮肤优先显示：启动器不会用本地皮肤盖掉它（本地皮肤库仍可用于离线账号，或手动应用到实例）。",
-    "With a premium account the official skin always wins: the launcher never overlays it with a local skin (the local skin library still works for offline accounts or a manual per-instance apply).",
-    "正規アカウントでログインすると公式スキンが優先されます：ランチャーがローカルスキンで上書きすることはありません（ローカルスキンはオフラインアカウントや手動のインスタンス適用で引き続き使えます）。",
+    "正版账号只显示官方皮肤与披风：要修改请去微软官网。切到离线账号可使用本地皮肤库。",
+    "A premium account only shows the official skin and capes — change them on the Microsoft website. Switch to an offline account to use the local skin library.",
+    "正規アカウントでは公式スキンとマントのみを表示します。変更は Microsoft の公式サイトで行ってください。ローカルスキンを使うにはオフラインアカウントに切り替えてください。",
+  ),
+  "pages.skins.premiumOnlyHint": D(
+    "正版账号只显示官方皮肤与披风；本地皮肤库请切到离线账号使用。",
+    "A premium account only shows the official skin and capes; switch to an offline account to use the local skin library.",
+    "正規アカウントでは公式スキンとマントのみを表示します。ローカルスキンを使うにはオフラインアカウントに切り替えてください。",
+  ),
+  // ---- 资源页三处（0.4.3 B）：原版实例门禁 / 选版本 / 详情页原始页面 ----
+  // 卡片按钮没选目标时的 title：0.4.2 起就引用了这个键，但一直没进词典（显示成键名）
+  "pages.mods.chooseInstallTarget": D("选择安装目标", "Choose an install target", "インストール先を選択"),
+  "pages.mods.instanceVanillaBlocked": D(
+    "原版实例不能装模组/光影",
+    "Vanilla instances can't take mods or shaders",
+    "バニラのインスタンスには MOD もシェーダーも入れられません",
+  ),
+  "pages.mods.targetModalVanillaHint": D(
+    "没有带加载器的实例：先创建一个 Fabric / Forge 等加载器实例，再回来装",
+    "No instance with a loader yet — create a Fabric / Forge (or other) instance first, then install",
+    "ローダー入りのインスタンスがありません。先に Fabric / Forge などのインスタンスを作成してからインストールしてください",
+  ),
+  "pages.mods.targetVersionTo": D(
+    "「{name}」可用版本（{mc} · {loader}）",
+    "Versions for “{name}” ({mc} · {loader})",
+    "「{name}」の利用可能なバージョン（{mc} · {loader}）",
+  ),
+  "pages.mods.targetVersionBack": D("上一步", "Back", "前のステップ"),
+  "pages.mods.targetVersionFallback": D(
+    "拿不到该实例可用的文件列表，改由启动器自动挑最新版本",
+    "Couldn't list files for that instance — the launcher will pick the newest one instead",
+    "そのインスタンス向けのファイル一覧を取得できませんでした。最新バージョンを自動で選びます",
+  ),
+  "pages.modDetail.openSourcePage": D("原始页面", "Original page", "配布ページ"),
+  "pages.modDetail.openSourcePageHint": D(
+    "在浏览器打开原始页面：{url}",
+    "Open the original page in your browser: {url}",
+    "ブラウザーで配布ページを開く：{url}",
   ),
 };
 

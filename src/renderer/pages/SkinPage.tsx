@@ -146,6 +146,8 @@ export function SkinPage() {
 
   /** 当前选中的账号是不是微软正版：只有它才有官方皮肤/披风接口。 */
   const microsoftAccount = account?.type === "microsoft" ? account : null;
+  /** 正版账号只显示「微软正版皮肤 + 披风」：本地库与「应用到实例」整块不挂载，它们的请求也就不发。 */
+  const premiumOnly = microsoftAccount !== null;
 
   /** 读官方档案；失败只 toast（profile.error 也已经带可读文案），不弹阻塞框。 */
   const loadMojang = useCallback(async (id: string) => {
@@ -172,7 +174,8 @@ export function SkinPage() {
   }, [loadMojang, microsoftAccount?.id]);
 
   const load = useCallback(async () => {
-    if (!accountId) {
+    // 正版账号看不到本地皮肤库：连列表都不取（清空缓存，切回离线账号时会重取）。
+    if (!accountId || premiumOnly) {
       setSkins([]);
       return;
     }
@@ -185,7 +188,7 @@ export function SkinPage() {
     } finally {
       setLoading(false);
     }
-  }, [accountId]);
+  }, [accountId, premiumOnly]);
 
   useEffect(() => {
     void load();
@@ -208,8 +211,9 @@ export function SkinPage() {
   const readonly = account?.type === "yggdrasil";
   // 账号当前皮肤（微软走 profile.skins、第三方走皮肤站 profile 接口、离线一般没有）。
   const accountSkin = useAsync(
-    () => (account ? api.accounts.skin(account.id) : Promise.resolve(null)),
-    [account?.id],
+    // 正版账号页面上没有本地预览，没必要再问一次皮肤站/账号皮肤。
+    () => (account && !premiumOnly ? api.accounts.skin(account.id) : Promise.resolve(null)),
+    [account?.id, premiumOnly],
   );
   const accountTexture = useMemo<PreviewTexture | null>(() => {
     const info = accountSkin.data;
@@ -243,8 +247,8 @@ export function SkinPage() {
     : null;
 
   const loadCapes = useCallback(async () => {
-    // 只读账号也要拿到列表（卡片灰化展示），只是不能选。
-    if (!accountId) {
+    // 只读账号也要拿到列表（卡片灰化展示），只是不能选；正版账号整块披风面板不挂载，不必取。
+    if (!accountId || premiumOnly) {
       setCapes([]);
       return;
     }
@@ -253,7 +257,7 @@ export function SkinPage() {
     } catch (err: unknown) {
       push(errorMessage(err), "error");
     }
-  }, [accountId, push]);
+  }, [accountId, premiumOnly, push]);
 
   useEffect(() => {
     void loadCapes();
@@ -279,6 +283,11 @@ export function SkinPage() {
 
   /** 拖放与「添加皮肤」卡片共用这一条导入链路（都走 skinsLocal.import）。 */
   const importFiles = async (files: File[]) => {
+    // 正版账号看不到本地皮肤库：拖进来的文件不导入，免得写进用户看不见的库里。
+    if (premiumOnly) {
+      push(tr("pages.skins.premiumOnlyHint"), "info");
+      return;
+    }
     // 导入的皮肤属于「已保存皮肤」：在内置 tab 里拖放时，导入完自动切过去，否则用户看不到结果
     if (tab !== "saved") setTab("saved");
     if (readonly) {
@@ -602,9 +611,10 @@ export function SkinPage() {
     <section
       className={`page skin-page ${dragging ? "is-dragging" : ""}`}
       data-skin-page
+      data-skin-premium={premiumOnly ? "true" : undefined}
       // 整页都能接住拖进来的 PNG：拖到卡片、网格或空白处都一样；第三方账号只读模式下不收拖放。
       onDragOver={(event) => {
-        if (readonly) return;
+        if (readonly || premiumOnly) return;
         event.preventDefault();
         setDragging(true);
       }}
@@ -649,131 +659,136 @@ export function SkinPage() {
         </div>
       ) : null}
 
-      <div className="skin-toolbar">
-        <Select
-          value={applyInstanceId}
-          options={instanceOptions}
-          onChange={setApplyInstanceId}
-          ariaLabel={tr("pages.skin.targetInstance")}
-          placeholder={instances.length === 0 ? tr("pages.skin.noInstances") : tr("pages.skin.pickInstance")}
-        />
-        <button
-          type="button"
-          className="btn btn-primary"
-          data-action="apply-skin"
-          onClick={() => void applyToInstance()}
-          disabled={readonly || applying || !applyInstanceId || !accountId}
-          title={readonly ? tr("pages.skin.noLocalApply") : undefined}
-        >
-          {applying ? tr("pages.skin.applying") : tr("pages.skin.applyToInstance")}
-        </button>
-        <p className="skin-toolbar-hint">
-          {readonly ? tr("pages.skin.readonlyApplyHint") : tr("pages.skin.applyHint")}
-        </p>
-      </div>
-
-      {applyResult ? (
-        <div className={`skin-apply-hint ${applyResult.modInstalled ? "is-ok" : "is-warn"}`} data-skin-apply-hint>
-          <span>
-            {applyResult.message ??
-              tr(applyResult.applied ? "pages.skin.skinWritten" : "pages.skin.skinNotWritten")}
-          </span>
-          {applyResult.modInstalled ? null : (
+      {/* 正版账号只显示「微软正版皮肤 + 披风」：应用到实例、本地皮肤库、本地披风库整块不挂载（不挂载就不会触发它们的请求） */}
+      {premiumOnly ? null : (
+        <>
+          <div className="skin-toolbar" data-skin-toolbar>
+            <Select
+              value={applyInstanceId}
+              options={instanceOptions}
+              onChange={setApplyInstanceId}
+              ariaLabel={tr("pages.skin.targetInstance")}
+              placeholder={instances.length === 0 ? tr("pages.skin.noInstances") : tr("pages.skin.pickInstance")}
+            />
             <button
               type="button"
-              className="btn btn-sm btn-ghost"
-              data-action="ensure-skin-mod"
-              onClick={() => void ensureMod()}
-              disabled={ensuring || !applyInstanceId}
+              className="btn btn-primary"
+              data-action="apply-skin"
+              onClick={() => void applyToInstance()}
+              disabled={readonly || applying || !applyInstanceId || !accountId}
+              title={readonly ? tr("pages.skin.noLocalApply") : undefined}
             >
-              {ensuring ? tr("pages.skin.installingMod") : tr("pages.skin.installCsl")}
+              {applying ? tr("pages.skin.applying") : tr("pages.skin.applyToInstance")}
             </button>
-          )}
-        </div>
-      ) : null}
-
-      <div className="skin-layout">
-        <section className="panel skin-stage" data-skin-preview-source={previewTexture?.source ?? "none"}>
-          <span className="skin-name" data-skin-name>{account?.name ?? tr("pages.skin.noAccountSelected")}</span>
-          <SkinDoll texture={previewTexture} cape={previewCape} emptyHint={tr("pages.skin.noPreviewSkin")} />
-          <p className="skin-rotate-hint" data-skin-hint>{tr("pages.skin.dragToRotate")}</p>
-          {readonly ? (
-            <p className="skin-account-hint" data-skin-account-hint>
-              {accountSkin.loading
-                ? tr("pages.skin.loadingServerSkin")
-                : previewTexture
-                  ? tr("pages.skin.serverSkinHint")
-                  : tr("pages.skin.serverSkinMissing", { error: accountSkin.error ?? tr("pages.skin.serverSkinNoError") })}
+            <p className="skin-toolbar-hint">
+              {readonly ? tr("pages.skin.readonlyApplyHint") : tr("pages.skin.applyHint")}
             </p>
-          ) : null}
-        </section>
-
-        <section className={`panel skin-library ${dragging ? "is-dragging" : ""}`} data-skin-library>
-          <div className="segmented skin-tabs" role="tablist" aria-label={tr("pages.skin.skinListAria")}>
-            {(["saved", "official"] as SkinTab[]).map((key) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={tab === key}
-                className={`segmented-item ${tab === key ? "active" : ""}`.trim()}
-                data-skin-tab={key}
-                onClick={() => setTab(key)}
-              >
-                {tr(TAB_LABEL_KEY[key])} {key === "saved" ? userSkins.length : officialSkins.length}
-              </button>
-            ))}
           </div>
 
-          <button
-            type="button"
-            className="skin-fold"
-            data-skin-fold={tab}
-            aria-expanded={foldOpen}
-            onClick={() => setFoldOpen((value) => !value)}
-          >
-            <span className="field-label">{tr(TAB_LABEL_KEY[tab])}</span>
-            <span className="panel-count">
-              {tr("pages.skin.countSkins", {
-                count: listSkins.length,
-                extra: tab === "official" ? tr("pages.skin.officialReadonlySuffix") : "",
-              })}
-            </span>
-            <IconChevronDown size={15} className={`skin-fold-icon ${foldOpen ? "is-open" : ""}`.trim()} />
-          </button>
-
-          {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}
-          {!error && loading && skins === null ? <SkeletonCards count={2} /> : null}
-
-          {foldOpen && !error ? (
-            <>
-              {skins !== null && listSkins.length === 0 ? (
-                <EmptyState
-                  title={tr(tab === "saved" ? "pages.skin.emptySavedSkins" : "pages.skin.emptyBuiltinSkins")}
-                  hint={tr(tab === "saved" ? "pages.skin.emptySavedSkinsHint" : "pages.skin.emptyBuiltinSkinsHint")}
-                />
-              ) : null}
-              <div className="skin-grid" data-skin-grid>
-                {listSkins.map(renderCard)}
-                {/* 「添加皮肤」只属于用户自己的皮肤库：内置皮肤内嵌在程序里，用户既找不到也不该改它 */}
-                {readonly || tab !== "saved" ? null : (
-                  <button
-                    type="button"
-                    className="skin-add"
-                    data-skin-add
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={importing}
-                  >
-                    <IconPlus size={18} />
-                    <span>{importing ? tr("pages.skin.importing") : tr("pages.skin.addSkin")}</span>
-                    <span className="skin-add-hint">{tr("pages.skin.addSkinHint")}</span>
-                  </button>
-                )}
-              </div>
-            </>
+          {applyResult ? (
+            <div className={`skin-apply-hint ${applyResult.modInstalled ? "is-ok" : "is-warn"}`} data-skin-apply-hint>
+              <span>
+                {applyResult.message ??
+                  tr(applyResult.applied ? "pages.skin.skinWritten" : "pages.skin.skinNotWritten")}
+              </span>
+              {applyResult.modInstalled ? null : (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  data-action="ensure-skin-mod"
+                  onClick={() => void ensureMod()}
+                  disabled={ensuring || !applyInstanceId}
+                >
+                  {ensuring ? tr("pages.skin.installingMod") : tr("pages.skin.installCsl")}
+                </button>
+              )}
+            </div>
           ) : null}
-        </section>
-      </div>
+
+          <div className="skin-layout" data-skin-layout>
+            <section className="panel skin-stage" data-skin-preview-source={previewTexture?.source ?? "none"}>
+              <span className="skin-name" data-skin-name>{account?.name ?? tr("pages.skin.noAccountSelected")}</span>
+              <SkinDoll texture={previewTexture} cape={previewCape} emptyHint={tr("pages.skin.noPreviewSkin")} />
+              <p className="skin-rotate-hint" data-skin-hint>{tr("pages.skin.dragToRotate")}</p>
+              {readonly ? (
+                <p className="skin-account-hint" data-skin-account-hint>
+                  {accountSkin.loading
+                    ? tr("pages.skin.loadingServerSkin")
+                    : previewTexture
+                      ? tr("pages.skin.serverSkinHint")
+                      : tr("pages.skin.serverSkinMissing", { error: accountSkin.error ?? tr("pages.skin.serverSkinNoError") })}
+                </p>
+              ) : null}
+            </section>
+
+            <section className={`panel skin-library ${dragging ? "is-dragging" : ""}`} data-skin-library>
+              <div className="segmented skin-tabs" role="tablist" aria-label={tr("pages.skin.skinListAria")}>
+                {(["saved", "official"] as SkinTab[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === key}
+                    className={`segmented-item ${tab === key ? "active" : ""}`.trim()}
+                    data-skin-tab={key}
+                    onClick={() => setTab(key)}
+                  >
+                    {tr(TAB_LABEL_KEY[key])} {key === "saved" ? userSkins.length : officialSkins.length}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                className="skin-fold"
+                data-skin-fold={tab}
+                aria-expanded={foldOpen}
+                onClick={() => setFoldOpen((value) => !value)}
+              >
+                <span className="field-label">{tr(TAB_LABEL_KEY[tab])}</span>
+                <span className="panel-count">
+                  {tr("pages.skin.countSkins", {
+                    count: listSkins.length,
+                    extra: tab === "official" ? tr("pages.skin.officialReadonlySuffix") : "",
+                  })}
+                </span>
+                <IconChevronDown size={15} className={`skin-fold-icon ${foldOpen ? "is-open" : ""}`.trim()} />
+              </button>
+
+              {error ? <ErrorState message={error} onRetry={() => void load()} /> : null}
+              {!error && loading && skins === null ? <SkeletonCards count={2} /> : null}
+
+              {foldOpen && !error ? (
+                <>
+                  {skins !== null && listSkins.length === 0 ? (
+                    <EmptyState
+                      title={tr(tab === "saved" ? "pages.skin.emptySavedSkins" : "pages.skin.emptyBuiltinSkins")}
+                      hint={tr(tab === "saved" ? "pages.skin.emptySavedSkinsHint" : "pages.skin.emptyBuiltinSkinsHint")}
+                    />
+                  ) : null}
+                  <div className="skin-grid" data-skin-grid>
+                    {listSkins.map(renderCard)}
+                    {/* 「添加皮肤」只属于用户自己的皮肤库：内置皮肤内嵌在程序里，用户既找不到也不该改它 */}
+                    {readonly || tab !== "saved" ? null : (
+                      <button
+                        type="button"
+                        className="skin-add"
+                        data-skin-add
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={importing}
+                      >
+                        <IconPlus size={18} />
+                        <span>{importing ? tr("pages.skin.importing") : tr("pages.skin.addSkin")}</span>
+                        <span className="skin-add-hint">{tr("pages.skin.addSkinHint")}</span>
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : null}
+            </section>
+          </div>
+        </>
+      )}
 
       {/* 微软正版：官方档案里的皮肤与披风（账号在 Mojang 那边，进游戏即生效） */}
       <section
@@ -857,17 +872,6 @@ export function SkinPage() {
                     <IconRefresh size={14} />
                     {mojangBusy === "refresh" ? tr("pages.skins.refreshing") : tr("pages.skins.refresh")}
                   </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    data-action="mojang-cape-remove"
-                    onClick={() => void applyMojangCape(null)}
-                    disabled={mojangActiveCape === null || mojangCapeBusy !== null}
-                    title={tr("pages.skins.capeRemove")}
-                  >
-                    <IconTrash size={14} />
-                    {tr("pages.skins.capeRemove")}
-                  </button>
                 </div>
               </div>
 
@@ -927,141 +931,146 @@ export function SkinPage() {
         )}
       </section>
 
-      <section className="panel skin-capes" data-skin-capes>
-        <div className="panel-head">
-          <h2 className="panel-title">{tr("pages.skin.capesTitle")}</h2>
-          <span className="panel-count">
-            {capeEditable
-              ? tr("pages.skin.capeCountEditable", { saved: userCapes.length, builtin: officialCapes.length })
-              : tr("pages.skin.capeCountReadonly")}
-          </span>
-        </div>
-
-        <div className="skin-cape-current">
-          {previewCape ? (
-            <img className="skin-cape-thumb" src={previewCape.url} alt="" width={66} height={33} />
-          ) : (
-            <span className="skin-cape-thumb skin-cape-thumb-empty" data-skin-cape-empty aria-hidden="true" />
-          )}
-          <div className="skin-cape-current-text">
-            <span className="skin-cape-name" data-skin-cape-name>
-              {previewCape
-                ? (previewCape.source === "local"
-                  ? previewCape.label
-                  : (capeReadonlyType === "microsoft"
-                    ? tr("pages.skin.officialCape")
-                    : tr("pages.skin.serverCape")))
-                : (capeReadonlyType ? tr("pages.skin.noCapeForAccount") : tr("pages.skin.noCapeSet"))}
+      {/* ④ 本地披风库：正版账号整块不挂载（与本地皮肤库同理） */}
+      {premiumOnly ? null : (
+        <section className="panel skin-capes" data-skin-capes>
+          <div className="panel-head">
+            <h2 className="panel-title">{tr("pages.skin.capesTitle")}</h2>
+            <span className="panel-count">
+              {capeEditable
+                ? tr("pages.skin.capeCountEditable", { saved: userCapes.length, builtin: officialCapes.length })
+                : tr("pages.skin.capeCountReadonly")}
             </span>
-            {capeReadonlyType ? (
-              <p className="skin-account-hint" data-cape-readonly={capeReadonlyType}>
-                {tr(CAPE_READONLY_HINT_KEY[capeReadonlyType])}
-              </p>
-            ) : (
-              <p className="skin-account-hint">{tr("pages.skin.capeLocalHint")}</p>
-            )}
           </div>
-        </div>
 
-        {/* 与皮肤同款两段：已保存（用户导入，可增删）/ 内置（随程序分发，只读） */}
-        <div className="segmented skin-tabs" role="tablist" aria-label={tr("pages.skin.capeListAria")}>
-          {(["saved", "official"] as CapeTab[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={capeTab === key}
-              className={`segmented-item ${capeTab === key ? "active" : ""}`.trim()}
-              data-cape-tab={key}
-              onClick={() => setCapeTab(key)}
-            >
-              {tr(CAPE_TAB_LABEL_KEY[key])} {key === "saved" ? userCapes.length : officialCapes.length}
-            </button>
-          ))}
-        </div>
+          <div className="skin-cape-current">
+            {previewCape ? (
+              <img className="skin-cape-thumb" src={previewCape.url} alt="" width={66} height={33} />
+            ) : (
+              <span className="skin-cape-thumb skin-cape-thumb-empty" data-skin-cape-empty aria-hidden="true" />
+            )}
+            <div className="skin-cape-current-text">
+              <span className="skin-cape-name" data-skin-cape-name>
+                {previewCape
+                  ? (previewCape.source === "local"
+                    ? previewCape.label
+                    : (capeReadonlyType === "microsoft"
+                      ? tr("pages.skin.officialCape")
+                      : tr("pages.skin.serverCape")))
+                  : (capeReadonlyType ? tr("pages.skin.noCapeForAccount") : tr("pages.skin.noCapeSet"))}
+              </span>
+              {capeReadonlyType ? (
+                <p className="skin-account-hint" data-cape-readonly={capeReadonlyType}>
+                  {tr(CAPE_READONLY_HINT_KEY[capeReadonlyType])}
+                </p>
+              ) : (
+                <p className="skin-account-hint">{tr("pages.skin.capeLocalHint")}</p>
+              )}
+            </div>
+          </div>
 
-        {capes !== null && listCapes.length === 0 ? (
-          <EmptyState
-            title={tr(capeTab === "saved" ? "pages.skin.emptySavedCapes" : "pages.skin.emptyBuiltinCapes")}
-            hint={
-              capeTab === "saved"
-                ? tr(capeEditable ? "pages.skin.emptySavedCapesHint" : "pages.skin.emptyCapeReadonlyHint")
-                : tr("pages.skin.emptyBuiltinCapesHint")
-            }
-          />
-        ) : null}
-
-        <div className="skin-grid skin-cape-grid" data-cape-grid>
-          {listCapes.map((item) => {
-            // 微软 / 第三方：整块只读——卡片灰化，点一下只说明原因，不发请求。
-            const locked = !capeEditable;
-            const lockedHint = capeReadonlyType ? tr(CAPE_READONLY_HINT_KEY[capeReadonlyType]) : tr("pages.skin.pickAccountFirst");
-            return (
-              <div
-                key={item.fileName}
-                className={`skin-card ${item.active ? "is-active" : ""} ${locked ? "is-locked" : ""}`.trim()}
-                data-cape-card={item.fileName}
-                data-cape-source={item.source}
-                data-cape-locked={locked ? "true" : undefined}
+          {/* 与皮肤同款两段：已保存（用户导入，可增删）/ 内置（随程序分发，只读） */}
+          <div className="segmented skin-tabs" role="tablist" aria-label={tr("pages.skin.capeListAria")}>
+            {(["saved", "official"] as CapeTab[]).map((key) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={capeTab === key}
+                className={`segmented-item ${capeTab === key ? "active" : ""}`.trim()}
+                data-cape-tab={key}
+                onClick={() => setCapeTab(key)}
               >
-                <button
-                  type="button"
-                  className="skin-card-main"
-                  data-action="select-cape"
-                  onClick={() => {
-                    if (locked) {
-                      push(lockedHint, "info");
-                      return;
-                    }
-                    void selectCape(item.fileName);
-                  }}
-                  disabled={capeBusy === item.fileName}
-                  aria-disabled={locked || undefined}
-                  title={locked ? lockedHint : `${item.fileName} · ${item.width}×${item.height}`}
+                {tr(CAPE_TAB_LABEL_KEY[key])} {key === "saved" ? userCapes.length : officialCapes.length}
+              </button>
+            ))}
+          </div>
+
+          {capes !== null && listCapes.length === 0 ? (
+            <EmptyState
+              title={tr(capeTab === "saved" ? "pages.skin.emptySavedCapes" : "pages.skin.emptyBuiltinCapes")}
+              hint={
+                capeTab === "saved"
+                  ? tr(capeEditable ? "pages.skin.emptySavedCapesHint" : "pages.skin.emptyCapeReadonlyHint")
+                  : tr("pages.skin.emptyBuiltinCapesHint")
+              }
+            />
+          ) : null}
+
+          <div className="skin-grid skin-cape-grid" data-cape-grid>
+            {listCapes.map((item) => {
+              // 微软 / 第三方：整块只读——卡片灰化，点一下只说明原因，不发请求。
+              const locked = !capeEditable;
+              const lockedHint = capeReadonlyType ? tr(CAPE_READONLY_HINT_KEY[capeReadonlyType]) : tr("pages.skin.pickAccountFirst");
+              return (
+                <div
+                  key={item.fileName}
+                  className={`skin-card ${item.active ? "is-active" : ""} ${locked ? "is-locked" : ""}`.trim()}
+                  data-cape-card={item.fileName}
+                  data-cape-source={item.source}
+                  data-cape-locked={locked ? "true" : undefined}
                 >
-                  <img className="skin-cape-thumb" src={skinImageUrl(item.path)} alt="" width={64} height={32} />
-                  <span className="skin-card-name">{item.name}</span>
-                  <span className="skin-card-meta">
-                    {item.source === "official" ? tr("pages.skin.builtinReadonlyMeta") : ""}
-                    {item.width}×{item.height}
-                  </span>
-                </button>
-                {item.active ? <span className="badge skin-active-tag">{tr("pages.skin.inUse")}</span> : null}
-                {/* 内置披风没有删除入口（与内置皮肤一致），只读账号也不给删 */}
-                {capeEditable && item.source === "user" ? (
                   <button
                     type="button"
-                    className="skin-card-del"
-                    data-action="delete-cape"
-                    onClick={() => setCapeToDelete(item.fileName)}
+                    className="skin-card-main"
+                    data-action="select-cape"
+                    onClick={() => {
+                      if (locked) {
+                        push(lockedHint, "info");
+                        return;
+                      }
+                      void selectCape(item.fileName);
+                    }}
                     disabled={capeBusy === item.fileName}
-                    title={tr("pages.skin.deleteCapeFromLibrary")}
+                    aria-disabled={locked || undefined}
+                    title={locked ? lockedHint : `${item.fileName} · ${item.width}×${item.height}`}
                   >
-                    <IconTrash size={14} />
-                    {tr("pages.common.delete")}
+                    <img className="skin-cape-thumb" src={skinImageUrl(item.path)} alt="" width={64} height={32} />
+                    <span className="skin-card-name">{item.name}</span>
+                    <span className="skin-card-meta">
+                      {item.source === "official" ? tr("pages.skin.builtinReadonlyMeta") : ""}
+                      {item.width}×{item.height}
+                    </span>
                   </button>
-                ) : null}
-              </div>
-            );
-          })}
-          {/* 「添加披风」只属于用户自己的披风库：内置披风随程序分发，用户不该改它 */}
-          {capeEditable && capeTab === "saved" ? (
-            <button
-              type="button"
-              className="skin-add skin-cape-add"
-              data-cape-add
-              onClick={() => capeInputRef.current?.click()}
-              disabled={capeImporting}
-              title={tr(CAPE_RULE_KEY)}
-            >
-              <IconPlus size={18} />
-              <span>{capeImporting ? tr("pages.skin.importing") : tr("pages.skin.addCape")}</span>
-              <span className="skin-add-hint">{tr(CAPE_RULE_KEY)}</span>
-            </button>
-          ) : null}
-        </div>
-      </section>
+                  {item.active ? <span className="badge skin-active-tag">{tr("pages.skin.inUse")}</span> : null}
+                  {/* 内置披风没有删除入口（与内置皮肤一致），只读账号也不给删 */}
+                  {capeEditable && item.source === "user" ? (
+                    <button
+                      type="button"
+                      className="skin-card-del"
+                      data-action="delete-cape"
+                      onClick={() => setCapeToDelete(item.fileName)}
+                      disabled={capeBusy === item.fileName}
+                      title={tr("pages.skin.deleteCapeFromLibrary")}
+                    >
+                      <IconTrash size={14} />
+                      {tr("pages.common.delete")}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+            {/* 「添加披风」只属于用户自己的披风库：内置披风随程序分发，用户不该改它 */}
+            {capeEditable && capeTab === "saved" ? (
+              <button
+                type="button"
+                className="skin-add skin-cape-add"
+                data-cape-add
+                onClick={() => capeInputRef.current?.click()}
+                disabled={capeImporting}
+                title={tr(CAPE_RULE_KEY)}
+              >
+                <IconPlus size={18} />
+                <span>{capeImporting ? tr("pages.skin.importing") : tr("pages.skin.addCape")}</span>
+                <span className="skin-add-hint">{tr(CAPE_RULE_KEY)}</span>
+              </button>
+            ) : null}
+          </div>
+        </section>
+      )}
 
+      {/* 正版账号下整页只留官方皮肤面板，推荐素材站也一并隐藏（0.4.4） */}
+      {premiumOnly ? null : (
       <footer className="skin-recommend">
         <span>{tr("pages.skin.recommendLittleSkin")}</span>
         <button type="button" className="account-link" data-action="open-littleskin" onClick={() => void openLittleSkin()}>
@@ -1075,6 +1084,7 @@ export function SkinPage() {
           {MCSTAT_URL}
         </button>
       </footer>
+      )}
 
       <input ref={fileInputRef} type="file" accept="image/png" multiple hidden onChange={(event) => void onPickFiles(event)} />
       <input ref={capeInputRef} type="file" accept="image/png" multiple hidden onChange={(event) => void onPickCapeFiles(event)} />

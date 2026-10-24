@@ -2,7 +2,7 @@
 
 <img src="logo.png" width="120" align="right" alt="NaiWa Launcher" />
 
-现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，界面内显示「奶娃启动器 / NaiWa Launcher」。当前版本 **0.4.3**。
+现代化的 Minecraft 启动器（Windows x64）。程序显示名 **NaiWa Launcher**，界面内显示「奶娃启动器 / NaiWa Launcher」。当前版本 **0.4.4**。
 
 主开发者 **奶龙** ｜ 协助开发者 **小七** ｜ 工具提供 **DeepSeek**
 
@@ -53,7 +53,7 @@
 ### 皮肤与披风
 - **本地皮肤/披风**：`NaiWa/skins`、`NaiWa/capes` 下放图片即可给离线账号使用（不必上传到皮肤站）；实例内可不装模组生效（可选本地皮肤 API）
 - **内置皮肤/披风**：随程序分发的只读资源（`resources/skins`、`resources/capes`），界面里只能应用不能修改
-- **微软正版**：只**显示**当前在用的官方皮肤与披风，**不提供修改**——要改请去 [微软官网的皮肤与披风页面](https://www.minecraft.net/zh-hans/msaprofile/mygames/editskin)（启动器里点「去微软官网修改皮肤/披风」会按界面语言打开对应语言版本）；披风列表只显示你拥有的名字，仍可一键切换/移除
+- **微软正版**：选中正版账号后皮肤页**只显示「微软正版皮肤 + 披风」这一个面板**（本地皮肤库、应用到实例、本地披风库都不显示）；只**显示**当前在用的官方皮肤与披风、**不提供修改**——要改请去 [微软官网的皮肤与披风页面](https://www.minecraft.net/zh-hans/msaprofile/mygames/editskin)（按钮会按界面语言打开对应语言版本）；正版账号下推荐素材站栏也一并隐藏；披风列表只显示名字，可切换（不再提供"移除披风"）
 - **官方皮肤优先**：用正版账号启动时启动器不会再注入本地皮肤/披风，避免 CustomSkinLoader 那套把官方皮肤盖掉（离线账号不受影响）
 - 第三方账号：只预览皮肤站上已装好的皮肤；自定义皮肤仅对离线账号开放
 - 推荐素材站：皮肤 <https://littleskin.cn/> ｜ 披风 <https://mcstat.org/zh-Hans/skins/capes>

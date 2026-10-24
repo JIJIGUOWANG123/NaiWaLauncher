@@ -1293,6 +1293,18 @@
   flex: none;
 }
 
+/* ---------- 「原始页面」按钮（0.4.3）：排在 MCMOD 左边，尺寸与它一致 ---------- */
+
+.mod-detail-source {
+  flex: none;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.mod-detail-source svg {
+  flex: none;
+}
+
 /* 窄窗口只留图标：文字 span 收起（aria-label 仍带完整说明，按钮照样可点可聚焦） */
 @media (max-width: 900px) {
   .mod-detail-mcmod {
@@ -1300,6 +1312,14 @@
   }
 
   .mod-detail-mcmod-label {
+    display: none;
+  }
+
+  .mod-detail-source {
+    padding: 5px 8px;
+  }
+
+  .mod-detail-source-label {
     display: none;
   }
 }

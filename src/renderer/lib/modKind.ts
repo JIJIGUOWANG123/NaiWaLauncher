@@ -224,6 +224,27 @@ export function serverTargetGateFor(
   return { allowed: false, reasonKey: "pages.mods.serverTargetUnsupported" };
 }
 
+/** 实例目标门禁：allowed=false 时 reasonKey 是给用户看的原因。 */
+export interface InstanceTargetGate {
+  allowed: boolean;
+  reasonKey: string | null;
+}
+
+/**
+ * 原版实例不能装模组 / 光影：没有加载器就没有加载器入口，装进去也不会被读。
+ * 资源包原版能用（客户端自带资源包系统），整合包本来就是新建实例，两者都不受此限。
+ */
+export function instanceTargetGate(kind: UiContentKind, loader: string): InstanceTargetGate {
+  if (kind !== "mod" && kind !== "shader") return { allowed: true, reasonKey: null };
+  if (loader !== "vanilla") return { allowed: true, reasonKey: null };
+  return { allowed: false, reasonKey: "pages.mods.instanceVanillaBlocked" };
+}
+
+/** 选好实例后要不要先挑版本：整合包新建实例、插件进服务端目录，都没有「对实例挑版本」这一步。 */
+export function needsVersionPick(kind: UiContentKind): boolean {
+  return kind !== "modpack" && kind !== "plugin";
+}
+
 /**
  * 「安装到…」弹窗里的两组目标。模组两组都能装；插件只进服务端（实例里没有 plugins 目录）；
  * 整合包/资源包/光影包只能进实例，服务端组根本不该出现。

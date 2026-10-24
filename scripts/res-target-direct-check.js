@@ -197,8 +197,11 @@ say("");
 say("=== 3) 按钮 title 与文案（title:" + lineOf(mods, "const installTargetTitle =")
   + " 文案:" + lineOf(mods, "const installTargetLabel =") + "，表达式真跑） ===");
 const titleExpr = statementAfter(mods, "const installTargetTitle =").replace(/^\s*=?\s*/, "");
-const evalTitle = (installTarget, serverBlockHint) => new Function("tr", "serverBlockHint", "installTarget",
-  "return (" + titleExpr.replace(/^\s*=\s*/, "") + ");")(tr, serverBlockHint, installTarget);
+// 0.4.3(B) 起 title 多一档：原版实例门禁原因排在最前（instanceBlockHint）
+const evalTitle = (installTarget, serverBlockHint, instanceBlockHint) => new Function(
+  "tr", "serverBlockHint", "installTarget", "instanceBlockHint",
+  "return (" + titleExpr.replace(/^\s*=\s*/, "") + ");",
+)(tr, serverBlockHint, installTarget, instanceBlockHint);
 const labelStmt = statementAfter(mods, "const installTargetLabel =");
 const labelExpr = labelStmt.replace(/^\s*=\s*/, "");
 const evalLabel = (kind, pluginServer, currentInstance) => new Function("tr", "kind", "pluginServer", "currentInstance",
@@ -206,12 +209,14 @@ const evalLabel = (kind, pluginServer, currentInstance) => new Function("tr", "k
 const titleWith = evalTitle({ kind: "instance", name: "26.1 Forge" }, null);
 const titleWithout = evalTitle(null, null);
 const titleBlocked = evalTitle(null, "该服务端只能装插件");
+const titleVanilla = evalTitle({ kind: "instance", name: "26.1 Forge" }, null, "原版实例不能装模组/光影");
 say("    有目标 → title = " + JSON.stringify(titleWith));
 say("    没目标 → title = " + JSON.stringify(titleWithout));
 ok(titleWith === "安装到「26.1 Forge」", "④ 有目标时 title 说明会装到哪", titleWith);
 ok(titleWithout === zh["pages.mods.chooseInstallTarget"] && titleWithout === "选择安装目标",
   "④ 没目标时 title = 「选择安装目标」（新增词条 pages.mods.chooseInstallTarget）", titleWithout);
 ok(titleBlocked === "该服务端只能装插件", "④ 被能力门禁拦住时 title 先给原因", titleBlocked);
+ok(titleVanilla === "原版实例不能装模组/光影", "④ 原版实例门禁原因优先于目标名（0.4.3 B）", titleVanilla);
 const labelWith = evalLabel("mod", null, inst26);
 const labelNoTarget = evalLabel("mod", null, null);
 const labelPluginNoServer = evalLabel("plugin", null, inst26);
@@ -233,7 +238,8 @@ ok(/data-target-name=\{installTarget\?\.name\}/.test(cardBtn), "data-target-name
 ok(/data-install-direct=\{installTarget \? "1" : "0"\}/.test(cardBtn), "data-install-direct 标出这一下是直装还是开弹窗");
 ok(/onClick=\{\(\) => void installFromCard\(mod\)\}/.test(cardBtn), "卡片按钮点击 = installFromCard（不是无条件开弹窗）");
 ok(/title=\{installTargetTitle\}/.test(cardBtn), "按钮 title 走 installTargetTitle");
-ok(/disabled=\{pluginBusyKey === key\}/.test(cardBtn), "安装中禁用逻辑不变（只看 pluginBusyKey）");
+// 0.4.3(B) 起：安装中 或 原版实例 + 模组/光影（instanceBlocked）
+ok(/disabled=\{pluginBusyKey === key \|\| instanceBlocked\}/.test(cardBtn), "禁用 = 安装中 或 原版实例门禁（instanceBlocked）");
 ok(/aria-haspopup=\{installTarget === null \? "dialog" : undefined\}/.test(cardBtn), "只有没目标时按钮才声明 aria-haspopup=dialog");
 ok(/\{installTarget === null \? <IconChevronDown size=\{14\} \/> : null\}/.test(cardBtn), "有目标时不再画「下拉」箭头（点了就是装）");
 const modalIndex = mods.indexOf("{targetModal ? (");
@@ -241,7 +247,7 @@ ok(modalIndex > 0 && /data-target-modal data-target-modal-kind/.test(mods.slice(
   "弹窗仍在：{targetModal ? ( → [data-target-modal]（ModsPage.tsx:" + lineOf(mods, "data-target-modal data-target-modal-kind") + "）");
 ok(/onInstall=\{\(\) => \{[\s\S]{0,400}?setTargetModal\(\{ mod: selected, file: sortedFiles\[0\] \?\? null \}\)/.test(mods),
   "详情面板按钮仍开弹窗（保留换目标入口，ModsPage.tsx:" + lineOf(mods, "setTargetModal({ mod: selected, file: sortedFiles[0] ?? null })") + "）");
-ok(/const pickTargetInstance = async \(mod: ModSearchResult, instance: InstanceMeta, file: ModFileInfo \| null\) => \{\s*setTargetModal\(null\);\s*setServerId\(""\);\s*setCurrentInstanceId\(instance\.id\);/.test(mods),
+ok(/const pickTargetVersion[\s\S]{0,400}?setServerId\(""\);\s*setCurrentInstanceId\(instance\.id\);/.test(mods),
   "弹窗选实例写回共享状态（setCurrentInstanceId / setServerId）");
 ok(/const pickTargetServer = async[\s\S]{0,600}?setServerId\(entry\.meta\.id\)/.test(mods),
   "弹窗选服务端写回共享状态（setServerId）");
