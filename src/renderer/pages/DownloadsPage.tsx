@@ -23,6 +23,7 @@ const KIND_KEY: Record<DownloadJob["kind"], string> = {
   loader: "pages.downloads.kindLoader",
   java: "pages.downloads.kindJava",
   content: "pages.downloads.kindContent",
+  download: "pages.downloads.kindDownload",
 };
 
 /** 进度条宽度与百分比共用的夹取，避免脏数据把条撑破。 */

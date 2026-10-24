@@ -11,12 +11,15 @@ import { Segmented } from "../components/Form";
 import { EmptyState, ErrorState, SkeletonRows } from "../components/State";
 import { IconCheck, IconDownload, IconJava, IconRefresh } from "../components/icons";
 
-/** 四个下载源：auto 会先测速再挑最快的那个。 */
+/** 七个下载源：auto 会先测速再挑最快的那个（Oracle JDK 因许可限制不参与 auto）。 */
 const SOURCE_TABS: Array<{ value: JavaSourceId; labelKey: string }> = [
   { value: "auto", labelKey: "pages.java.sourceAuto" },
   { value: "bellsoft", labelKey: "pages.java.sourceBellsoft" },
   { value: "adoptium", labelKey: "pages.java.sourceAdoptium" },
   { value: "tuna", labelKey: "pages.java.sourceTuna" },
+  { value: "zulu", labelKey: "pages.java.sourceZulu" },
+  { value: "oracle", labelKey: "pages.java.sourceOracle" },
+  { value: "dragonwell", labelKey: "pages.java.sourceDragonwell" },
 ];
 
 const SOURCE_LABEL_KEY: Record<JavaSourceId, string> = {
@@ -24,6 +27,9 @@ const SOURCE_LABEL_KEY: Record<JavaSourceId, string> = {
   bellsoft: "pages.java.sourceBellsoft",
   adoptium: "pages.java.sourceAdoptium",
   tuna: "pages.java.sourceTuna",
+  zulu: "pages.java.sourceZulu",
+  oracle: "pages.java.sourceOracle",
+  dragonwell: "pages.java.sourceDragonwell",
 };
 
 /** 已装 JDK 的来源徽标：source 缺失（老记录）显示「未知」。 */
@@ -31,6 +37,9 @@ const VENDOR_KEY: Record<JavaVendorId | "unknown", string> = {
   bellsoft: "pages.java.vendorBellsoft",
   adoptium: "pages.java.vendorAdoptium",
   tuna: "pages.java.vendorTuna",
+  zulu: "pages.java.vendorZulu",
+  oracle: "pages.java.vendorOracle",
+  dragonwell: "pages.java.vendorDragonwell",
   system: "pages.java.vendorSystem",
   unknown: "pages.java.vendorUnknown",
 };
@@ -161,7 +170,7 @@ export function JavaPage() {
                     <strong>Java {item.major}</strong>
                     <span className="java-version">{item.version}</span>
                     <span className="chip">{item.vendor}</span>
-                    {/* 来源徽标：bellsoft / adoptium / tuna / system，缺失时「未知」 */}
+                    {/* 来源徽标：六个安装源 + system，缺失时「未知」 */}
                     <span
                       className="chip java-source-chip"
                       data-java-installed-source={item.source ?? "unknown"}
@@ -201,6 +210,7 @@ export function JavaPage() {
                 aria-selected={source === tab.value}
                 className={`source-tab ${source === tab.value ? "active" : ""}`.trim()}
                 data-java-source={tab.value}
+                title={tab.value === "oracle" ? t("pages.java.oracleLicenseShort") : undefined}
                 disabled={switchingSource}
                 onClick={() => void changeSource(tab.value)}
               >
@@ -216,6 +226,13 @@ export function JavaPage() {
             <p className="java-source-probe">{t("pages.java.locked", { label: t(SOURCE_LABEL_KEY[source]) })}</p>
           )}
         </div>
+
+        {/* Oracle JDK 许可提示：镜像只是可选项，必须让用户看到这条限制 */}
+        {source === "oracle" ? (
+          <p className="java-source-probe" data-java-oracle-license>
+            {t("pages.java.oracleLicense")}
+          </p>
+        ) : null}
 
         <div className="filter-row">
           <Segmented value={majorFilter} options={majorOptions} onChange={setMajorFilter} />

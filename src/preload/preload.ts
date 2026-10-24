@@ -56,6 +56,14 @@ const api: NaiwaApi = {
     natfrpStart: (tunnelId) => invoke(IPC.natfrpStart, tunnelId),
     natfrpStop: () => invoke(IPC.natfrpStop),
   },
+  tera: {
+    status: () => invoke(IPC.teraStatus),
+    host: (player) => invoke(IPC.teraHost, player),
+    join: (room, player) => invoke(IPC.teraJoin, room, player),
+    reset: () => invoke(IPC.teraReset),
+    stop: () => invoke(IPC.teraStop),
+    log: () => invoke(IPC.teraLog),
+  },
   sources: {
     list: () => invoke(IPC.sourcesList),
     probe: () => invoke(IPC.sourcesProbe),
@@ -101,6 +109,11 @@ const api: NaiwaApi = {
     sources: () => invoke(IPC.javaSources),
     installed: () => invoke(IPC.javaInstalled),
     install: (major, version, source) => invoke(IPC.javaInstall, major, version, source),
+  },
+  github: {
+    probe: () => invoke(IPC.githubProbe),
+    download: (req) => invoke(IPC.githubDownload, req),
+    openDir: () => invoke(IPC.githubOpenDir),
   },
   mods: {
     search: (req) => invoke(IPC.modsSearch, req),

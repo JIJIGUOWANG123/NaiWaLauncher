@@ -1,11 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import type { ModContentKind, ModProviderId } from "../../shared/types";
 import type { ModInstallRequest } from "../../shared/ipc";
 import type { DownloadJob, LoaderKind, TaskKind, TaskProgress, TaskResult } from "../../shared/types";
-import { cancelledMessage, isCancelledError } from "../core/http";
+import { cancelledMessage, downloadFile, isCancelledError } from "../core/http";
+import { createTask } from "../core/events";
 import { logger } from "../core/logger";
 import { getPaths } from "../core/paths";
 import { getSettings } from "../core/settings";
@@ -25,7 +26,7 @@ const MAX_JOBS = 300;
 const HINT_TTL_MS = 15_000;
 
 const LOADER_KINDS: LoaderKind[] = ["vanilla", "fabric", "quilt", "forge", "neoforge", "liteloader"];
-const JOB_KINDS: DownloadJob["kind"][] = ["version", "loader", "java", "content"];
+const JOB_KINDS: DownloadJob["kind"][] = ["version", "loader", "java", "content", "download"];
 const JOB_STATUSES: DownloadJob["status"][] = ["running", "paused", "interrupted", "cancelled", "done", "failed"];
 const CONTENT_KINDS: ModContentKind[] = ["mod", "shader", "resourcepack", "modpack", "map"];
 const PROVIDER_IDS: ModProviderId[] = ["modrinth", "curseforge", "minekuai"];
@@ -676,8 +677,27 @@ function optionalString(params: Record<string, unknown>, key: string): string | 
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
+/**
+ * 直链下载任务（GitHub 加速等）的续传：resume 参数里带 resumeKind="github" 标记。
+ * 与 kind 无关 —— 这类记录没有「重放某个安装动作」的语义，只认这里存下来的地址与目标文件，
+ * 断点续传交给下载器自己的 .part/.part.json（同一个 dest、同一个源地址，字节才能对上）。
+ */
+async function replayGithubDownload(params: Record<string, unknown>, signal?: AbortSignal): Promise<void> {
+  // 字段名本身就说清了缺什么，不必为两条文案再进主进程字典
+  const url = requireString(params, "url", "url");
+  const dest = requireString(params, "dest", "dest");
+  const task = createTask("generic", basename(dest));
+  await downloadFile(url, dest, { task, signal });
+  task.done();
+}
+
 /** 按 kind 重放对应的安装操作（断点续传由下载器自己的 .part/.part.json 完成）。 */
 async function replay(job: DownloadJob, params: Record<string, unknown>, signal?: AbortSignal): Promise<void> {
+  // resumeKind 优先于 kind：直链下载记录不能落进「按 kind 重放安装」的分支
+  if (params.resumeKind === "github") {
+    await replayGithubDownload(params, signal);
+    return;
+  }
   switch (job.kind) {
     case "version": {
       const mcVersion = requireString(params, "mcVersion", mt("dl.param.mcVersion"));

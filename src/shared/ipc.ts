@@ -3,7 +3,7 @@ import type {
   ChangelogSection, DownloadJob, InstalledModInfo, InstalledContentRef, LocalCape, LocalSkin, LocalSkinSelection, SkinApplyResult, ServerBuildInfo, ServerConsoleLine, ServerCoreId, ServerCoreInfo, ServerEntry, ServerMeta, JavaRelease, LanAddress, MapEntry, NatfrpStatus, NatfrpTunnel, NatfrpUser, ModContentKind, MediaList, MicrosoftLoginState, ModDependency,
   PortProbeResult, SaveInfo, UpdateCheckResult, InstanceExportResult, InstanceImportResult,
   LoaderKind, LoaderVersionInfo, LogLine, ModCategory, ModFileInfo, ModFilterOptions, ModProviderId,
-  ApiBackground, JavaSourceId, JavaSourceProbe, WallpaperEntry,
+  ApiBackground, GithubAcceleratorProbe, JavaSourceId, JavaSourceProbe, WallpaperEntry,
   ModSearchResult, ModSourceFilter, Settings, SkinInfo, SkinProfile, ModDetail, SourceProbe, TaskProgress, TaskResult, VersionBrief,
   WardrobeSkin,
 } from "./types";
@@ -37,6 +37,13 @@ export const IPC = {
   natfrpStart: "net:natfrpStart",
   natfrpStop: "net:natfrpStop",
   natfrpNodes: "net:natfrpNodes",
+  // 陶瓦联机（Terracotta）：全部由主进程请求本地 HTTP API（无 CORS），渲染层只读快照
+  teraStatus: "tera:status",
+  teraHost: "tera:host",
+  teraJoin: "tera:join",
+  teraReset: "tera:reset",
+  teraStop: "tera:stop",
+  teraLog: "tera:log",
   openInstanceMods: "app:openInstanceMods",
   openInstanceContent: "app:openInstanceContent",
   openRootDir: "app:openRootDir",
@@ -95,6 +102,10 @@ export const IPC = {
   javaSources: "java:sources",
   javaInstalled: "java:installed",
   javaInstall: "java:install",
+
+  githubProbe: "github:probe",
+  githubDownload: "github:download",
+  githubOpenDir: "github:openDir",
 
   modsSearch: "mods:search",
   modsFiles: "mods:files",
@@ -194,11 +205,69 @@ export interface ModInstallRequest {
   installDependencies?: boolean;
 }
 
+/** GitHub 加速下载：一条直链 → 一条下载记录（进度见「管理」页）。 */
+export interface GithubDownloadRequest {
+  /** 原始地址；github.com / raw.githubusercontent.com 会被换成加速地址，其它地址直连。 */
+  url: string;
+  /** 保存目录；缺省用设置里的 githubDownloadDir，为空则 <启动器根目录>\DL。 */
+  targetDir?: string;
+  /** 落盘文件名；缺省从 URL 末段推导，重名自动加 (1)。 */
+  fileName?: string;
+}
+
 export interface ModInstallResult {
   fileName: string;
   path: string;
   /** 本次连带装上的前置（名称或文件名）。 */
   installedDependencies: string[];
+}
+
+/** 陶瓦联机（Terracotta）会话成员：来自 /state 的 profiles 数组。 */
+export interface TeraPlayer {
+  machineId: string;
+  name: string;
+  /** 客户端厂商（原版 / Fabric 等），陶瓦自己识别，只做展示。 */
+  vendor: string;
+  /** HOST / LOCAL / GUEST（原样保留陶瓦的枚举名）。 */
+  kind: string;
+}
+
+/** 陶瓦状态机：host-ok / guest-ok 带房间与成员，exception 带类型 0-5。 */
+export type TeraState =
+  | "waiting"
+  | "host-scanning"
+  | "host-starting"
+  | "host-ok"
+  | "guest-connecting"
+  | "guest-starting"
+  | "guest-ok"
+  | "exception";
+
+/** tera:status 返回的只读快照：主进程轮询 /state 合并 /meta 的结果。 */
+export interface TeraStatus {
+  /** 陶瓦 HTTP 服务可达（我们拉起的 worker，或复用了用户自己开的实例）。 */
+  running: boolean;
+  /** tools/terracotta 下的二进制是否已就绪（首次使用需要下载）。 */
+  binaryReady: boolean;
+  /** 已就绪二进制对应的陶瓦版本（/meta 的 version）。 */
+  version?: string;
+  /** EasyTier 版本（/meta 的 easytier_version）。 */
+  easytierVersion?: string;
+  /** true = 陶瓦的单实例锁被别人持有，我们复用了正在运行的实例（停止时不会杀掉它）。 */
+  secondary: boolean;
+  state: TeraState;
+  /** /state 的 index，单调递增且会跳号，只用于去重展示。 */
+  index: number;
+  room?: string;
+  /** guest-ok 的本机进服地址（127.0.0.1[:port]）。 */
+  url?: string;
+  /** guest-starting 的连线难度：UNKNOWN / EASIEST / SIMPLE / MEDIUM / TOUGH。 */
+  difficulty?: string;
+  players: TeraPlayer[];
+  /** exception 的类型 0-5。 */
+  exceptionType?: number;
+  /** 最近一次本地失败原因（启动/请求），成功时为空。 */
+  problem?: string;
 }
 
 /** The surface exposed on window.naiwa by the preload script. */
@@ -289,6 +358,21 @@ export interface NaiwaApi {
     /** 樱花穿透：停止。 */
     natfrpStop(): Promise<NatfrpStatus>;
   };
+  /** 陶瓦联机（Terracotta）：官方 HTTP API 只监听 127.0.0.1 且无 CORS，全部请求走主进程。 */
+  tera: {
+    /** 当前快照（meta + state 合并）；未启动时 running 为 false。 */
+    status(): Promise<TeraStatus>;
+    /** 房主：开始扫描本机局域网端口，之后在游戏里「对局域网开放」即可。 */
+    host(player?: string): Promise<TeraStatus>;
+    /** 加入方：room 支持宽松输入（自动补 U/ 与短横线）。 */
+    join(room: string, player?: string): Promise<TeraStatus>;
+    /** 复位回 waiting（exception 之后的唯一出口）。 */
+    reset(): Promise<TeraStatus>;
+    /** 停止陶瓦（复用的外部实例只断开，不强杀）。 */
+    stop(): Promise<TeraStatus>;
+    /** 陶瓦自己的 application.log 全文 + 本地启动记录。 */
+    log(): Promise<string>;
+  };
   sources: {
     list(): Promise<DownloadSourceInfo[]>;
     probe(): Promise<SourceProbe[]>;
@@ -355,6 +439,15 @@ export interface NaiwaApi {
     install(major: number, version: string, source?: JavaSourceId): Promise<InstalledJava>;
     /** 三个下载源的探测结果（耗时越低越优先）；「自动」按它挑源。 */
     sources(): Promise<JavaSourceProbe[]>;
+  };
+  /** GitHub 加速下载：四个节点测速 + 直链下载（进度自动出现在「管理」页）。 */
+  github: {
+    /** 四个节点的实测耗时（每次调用都重新测，对应界面上的「重新测速」）。 */
+    probe(): Promise<GithubAcceleratorProbe[]>;
+    /** 创建一条下载任务（默认存到 <root>\DL 或设置里的目录），返回该记录。 */
+    download(req: GithubDownloadRequest): Promise<DownloadJob>;
+    /** 打开（必要时先建）保存目录，返回实际路径。 */
+    openDir(): Promise<string>;
   };
   mods: {
     search(req: ModSearchRequest): Promise<ModSearchResult[]>;

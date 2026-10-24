@@ -16,8 +16,10 @@ export const BUILTIN_MICROSOFT_CLIENT_ID = "fd3e219a-6e6a-4188-8a39-e241f0e63324
 
 const SOURCE_IDS: DownloadSourceId[] = ["official", "bmclapi", "sjtu", "auto"];
 /** JDK 下载源（顺序即界面顺序）：auto 走测速，其余固定站点。 */
-const JAVA_SOURCES: JavaSourceId[] = ["auto", "bellsoft", "adoptium", "tuna"];
+const JAVA_SOURCES: JavaSourceId[] = ["auto", "bellsoft", "adoptium", "tuna", "zulu", "oracle", "dragonwell"];
 const CLOSE_ACTIONS: Array<"ask" | "tray" | "quit"> = ["ask", "tray", "quit"];
+/** GitHub 加速节点（auto = 测速挑最快）。 */
+const GITHUB_ACCELERATORS: Array<"auto" | "ghf" | "padao" | "ghfast" | "cnxiaobai"> = ["auto", "ghf", "padao", "ghfast", "cnxiaobai"];
 /** 背景来源：本地文件 / 随机图 API / Steam 壁纸引擎。 */
 const BACKGROUND_SOURCES: Array<"local" | "api" | "wallpaperEngine"> = ["local", "api", "wallpaperEngine"];
 
@@ -67,6 +69,8 @@ export function defaults(): Settings {
     backgroundApiUrl: "",
     closeAction: "ask",
     wallpaperEngineDir: "",
+    githubAccelerator: "auto",
+    githubDownloadDir: "",
     backgroundMusic: "",
     musicVolume: 0.5,
     titleBar: "compact",
@@ -191,6 +195,8 @@ function normalize(raw: unknown, base: Settings): Settings {
     backgroundApiUrl: pickString(src.backgroundApiUrl, base.backgroundApiUrl),
     closeAction: pickEnum(src.closeAction, CLOSE_ACTIONS, base.closeAction),
     wallpaperEngineDir: pickString(src.wallpaperEngineDir, base.wallpaperEngineDir),
+    githubAccelerator: pickEnum(src.githubAccelerator, GITHUB_ACCELERATORS, base.githubAccelerator),
+    githubDownloadDir: pickString(src.githubDownloadDir, base.githubDownloadDir),
     backgroundMusic: pickString(src.backgroundMusic, base.backgroundMusic),
     musicVolume: clampFloat(src.musicVolume, 0, 1, base.musicVolume),
     // 旧配置里的 "default"（系统标题栏）已移除，统一迁移到 "compact"

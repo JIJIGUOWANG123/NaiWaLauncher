@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from "react";
-import { IconLink, IconWifi } from "../components/icons";
+import { IconLink, IconWifi, IconZap } from "../components/icons";
 import { useT } from "../lib/i18n";
 import { NetFrpTab } from "./NetFrpTab";
 import { NetLanTab } from "./NetLanTab";
+import { NetTeraTab } from "./NetTeraTab";
 
-type NetTab = "lan" | "frp";
+type NetTab = "lan" | "frp" | "tera";
 
-/** 联机页的两种方式：局域网直连与内置樱花穿透。 */
+/** 联机页的三种方式：局域网直连、内置樱花穿透、陶瓦联机（第三方）。 */
 const TABS: Array<{ value: NetTab; titleKey: string; hintKey: string; icon: ReactNode }> = [
   {
     value: "lan",
@@ -20,9 +21,15 @@ const TABS: Array<{ value: NetTab; titleKey: string; hintKey: string; icon: Reac
     hintKey: "pages.net.frpHint",
     icon: <IconLink size={16} />,
   },
+  {
+    value: "tera",
+    titleKey: "pages.netTera.title",
+    hintKey: "pages.netTera.hint",
+    icon: <IconZap size={16} />,
+  },
 ];
 
-/** 联机页：顶部两个 Tab 在「局域网」与「樱花穿透（内置）」之间切换。 */
+/** 联机页：三个 Tab 在「局域网」「樱花穿透（内置）」与「陶瓦联机」之间切换。 */
 export function NetPage() {
   const [tab, setTab] = useState<NetTab>("lan");
   const t = useT();
@@ -33,7 +40,7 @@ export function NetPage() {
         <div>
           <h1 className="page-title">{t("pages.net.title")}</h1>
           <p className="page-sub">
-            {tab === "lan" ? t("pages.net.subLan") : t("pages.net.subFrp")}
+            {tab === "lan" ? t("pages.net.subLan") : tab === "frp" ? t("pages.net.subFrp") : t("pages.netTera.sub")}
           </p>
         </div>
       </header>
@@ -58,7 +65,7 @@ export function NetPage() {
         ))}
       </div>
 
-      {tab === "lan" ? <NetLanTab /> : <NetFrpTab />}
+      {tab === "lan" ? <NetLanTab /> : tab === "frp" ? <NetFrpTab /> : <NetTeraTab />}
     </section>
   );
 }

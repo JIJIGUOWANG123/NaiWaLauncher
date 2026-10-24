@@ -242,6 +242,10 @@ export async function scanProjectDir(id: string, dir: string): Promise<Wallpaper
   const previewPath = await findPreview(dir, meta.preview);
   // 图片候选：project.json.file 本身是图片优先，其次才是预览图
   const imagePath = (await findImageFile(dir, meta.file)) || previewPath;
+  // web 型壁纸是网页，启动器渲染不了（会显示成一张静态预览图，误导用户），直接不列出
+  if ((meta.type ?? "").toLowerCase() === "web") return undefined;
+  // scene 型同理：scene.pkg 需要壁纸引擎自己的渲染器，这里只能拿到预览图
+  if ((meta.type ?? "").toLowerCase() === "scene") return undefined;
   if (!videoPath) {
     // 静态图壁纸：必须声明了 type 且真的找到图片，否则视为不支持
     if (!meta.type || !imagePath) return undefined;

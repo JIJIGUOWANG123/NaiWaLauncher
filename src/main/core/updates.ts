@@ -7,18 +7,29 @@ const APP_VERSION_FALLBACK = "0.1.5";
 import { logger } from "./logger";
 import type { UpdateCheckResult } from "../../shared/types";
 import { mt } from "./i18n";
+import { accelerate, githubAcceleratedCandidates, githubAcceleratedPrefixes } from "../net/github";
 
 const log = logger("updates");
 const REPO = "JIJIGUOWANG123/NaiWaLauncher";
 
-/** 三个通道依次尝试：官方 API → gh-proxy 镜像 → jsDelivr（读仓库 package.json 的 version）。 */
-const CHANNELS: { id: UpdateCheckResult["channel"]; url: string }[] = [
-  { id: "github-api", url: `https://api.github.com/repos/${REPO}/releases/latest` },
-  { id: "gh-proxy", url: `https://gh-proxy.com/https://api.github.com/repos/${REPO}/releases/latest` },
-  { id: "sakuramoe", url: `https://ghproxy.sakuramoe.dev/https://raw.githubusercontent.com/${REPO}/main/package.json` },
-  { id: "jsdelivr", url: `https://cdn.jsdelivr.net/gh/${REPO}@main/package.json` },
-  { id: "raw", url: `https://raw.githubusercontent.com/${REPO}/main/package.json` },
-];
+/**
+ * 通道（依次尝试）：官方 API → 加速节点的 API 镜像 → jsDelivr → raw 直连 → 加速节点的 raw 镜像。
+ * 加速节点不再硬编码，统一走 githubAccelerator 的顺序（auto 先测速排序，固定节点优先）。
+ */
+async function buildChannels(): Promise<{ id: UpdateCheckResult["channel"]; url: string }[]> {
+  const apiUrl = "https://api.github.com/repos/" + REPO + "/releases/latest";
+  const rawUrl = "https://raw.githubusercontent.com/" + REPO + "/main/package.json";
+  // 每类只取排在最前面的两个节点：通道越多，全网被墙时等超时越久
+  const apiMirrors = (await githubAcceleratedPrefixes(2)).map((base) => accelerate(base, apiUrl));
+  const rawMirrors = await githubAcceleratedCandidates(rawUrl, 2);
+  return [
+    { id: "github-api", url: apiUrl },
+    ...apiMirrors.map((url) => ({ id: "gh-proxy" as const, url })),
+    { id: "jsdelivr", url: "https://cdn.jsdelivr.net/gh/" + REPO + "@main/package.json" },
+    { id: "raw", url: rawUrl },
+    ...rawMirrors.map((url) => ({ id: "gh-proxy" as const, url })),
+  ];
+}
 
 function parseVersion(input: string): number[] {
   return String(input).replace(/^v/i, "").split(/[.\-+]/).map((x) => Number.parseInt(x, 10) || 0);
@@ -70,7 +81,7 @@ function currentVersion(): string {
 export async function checkAppUpdates(): Promise<UpdateCheckResult> {
   const current = currentVersion();
   let lastError = "";
-  for (const channel of CHANNELS) {
+  for (const channel of await buildChannels()) {
     const { ok, data } = await fetchJson(channel.url);
     if (!ok || !data || typeof data !== "object") {
       lastError = mt("upd.channelUnavailable", { channel: channel.id });

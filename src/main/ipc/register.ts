@@ -3,9 +3,9 @@ import { join, relative, resolve } from "node:path";
 import { access, mkdir, readdir } from "node:fs/promises";
 import { IPC } from "../../shared/ipc";
 import type {
-  CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest,
+  CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModInstallResult, ModSearchRequest, TeraStatus,
 } from "../../shared/ipc";
-import type { Account, ApiBackground, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, ChangelogSection, JavaRelease, JavaSourceId, JavaSourceProbe, WallpaperEntry, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
+import type { Account, ApiBackground, AppInfo, DeviceCodeChallenge, DownloadJob, DownloadSourceId, InstanceMeta, InstalledContentRef, InstalledModInfo, LanAddress, ChangelogSection, JavaRelease, JavaSourceId, JavaSourceProbe, GithubAcceleratorProbe, WallpaperEntry, LocalCape, LocalSkin, LoaderKind, InstanceExportResult, InstanceImportResult, MapEntry, ModCategory, SkinApplyResult, SkinInfo, SkinProfile, WardrobeSkin, ModContentKind, ModFilterOptions, ModSourceFilter, NatfrpStatus, NatfrpTunnel, NatfrpUser, MediaList, MicrosoftLoginState, ModDependency, ModDetail, ModProviderId, PortProbeResult, SaveInfo, UpdateCheckResult, Settings } from "../../shared/types";
 import { getPaths, instanceModsDir } from "../core/paths";
 import { getSettings, updateSettings } from "../core/settings";
 import { syncTray } from "../tray";
@@ -14,6 +14,7 @@ import { getChangelog } from "../core/changelog";
 import { installUpdate } from "../core/updater";
 import { isPortListening, listLanAddresses, probeTcp } from "../net/index";
 import { natfrpCreate, natfrpNodes, natfrpStart, natfrpStatus, natfrpStop, natfrpTunnels, natfrpUser } from "../net/natfrp";
+import { terracottaHost, terracottaJoin, terracottaLog, terracottaReset, terracottaStatus, terracottaStop } from "../net/terracotta";
 import { createOffline, listAccounts, removeAccount, setActiveAccount } from "../auth/accounts";
 import { beginDeviceCode, pollDeviceCode } from "../auth/microsoft";
 import { loginYggdrasil, validateYggdrasilAccount } from "../auth/yggdrasil";
@@ -29,6 +30,8 @@ import { exportInstance, importInstance } from "../minecraft/share";
 import { launchInstance } from "../minecraft/launch";
 import { installLoader, listLoaderVersions } from "../loaders/index";
 import { installJava, listInstalledJava, listJavaReleases, listJavaSources } from "../java/index";
+import { githubDownloadDir, probeAccelerators, startGithubDownload } from "../net/github";
+import type { GithubDownloadRequest } from "../../shared/ipc";
 import { contentDirForInstance } from "../mods/install";
 import { listMapEntries } from "../mods/minekuai";
 import { checkUpdates, getModDependencies, getModDetail, installMod, installed, listInstalledContent, listInstalledMods, installModpack, listCategories, listFilterOptions, listModFiles, remove as removeMod, searchMods, update as updateMod } from "../mods/index";
@@ -172,6 +175,14 @@ export function registerIpc(): void {
   handle<NatfrpStatus>(IPC.natfrpStart, (tunnelId: number) => natfrpStart(tunnelId));
   handle<NatfrpStatus>(IPC.natfrpStop, () => natfrpStop());
 
+  // 陶瓦联机（Terracotta）：本地 HTTP API 无 CORS 且只监听 127.0.0.1，端口不外露给渲染进程
+  handle<TeraStatus>(IPC.teraStatus, () => terracottaStatus());
+  handle<TeraStatus>(IPC.teraHost, (player?: string) => terracottaHost(player));
+  handle<TeraStatus>(IPC.teraJoin, (room: string, player?: string) => terracottaJoin(room, player));
+  handle<TeraStatus>(IPC.teraReset, () => terracottaReset());
+  handle<TeraStatus>(IPC.teraStop, () => terracottaStop());
+  handle<string>(IPC.teraLog, () => terracottaLog());
+
   handle<LanAddress[]>(IPC.netInterfaces, () => listLanAddresses());
   handle<PortProbeResult>(IPC.netProbe, (host: string, port: number) => probeTcp(host, port));
   handle<boolean>(IPC.netPortCheck, (port: number) => isPortListening(port));
@@ -300,6 +311,16 @@ export function registerIpc(): void {
   handle(IPC.javaInstall, (major: number, version: string, source?: JavaSourceId) => {
     hintNextJob({ kind: "java", detail: `JDK ${major}`, resume: JSON.stringify({ major, version }) });
     return runCancellable((signal) => installJava(major, version, source, signal));
+  });
+
+  // GitHub 加速：测速只读不落盘；下载走 downloads 的记录，进度直接进「管理」页
+  handle<GithubAcceleratorProbe[]>(IPC.githubProbe, () => probeAccelerators());
+  handle<DownloadJob>(IPC.githubDownload, (req: GithubDownloadRequest) => startGithubDownload(req));
+  handle<string>(IPC.githubOpenDir, async () => {
+    const dir = githubDownloadDir();
+    await mkdir(dir, { recursive: true });
+    await shell.openPath(dir);
+    return dir;
   });
 
   handle(IPC.modsSearch, (req: ModSearchRequest) => searchMods(req));

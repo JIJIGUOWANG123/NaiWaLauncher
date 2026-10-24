@@ -330,3 +330,255 @@
 .net-frp-row-addr .net-addr-value {
   margin-left: 0;
 }
+
+/* ---------- 陶瓦联机（Terracotta） ---------- */
+
+.net-tera {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.net-tera-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent-2) 32%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+.net-tera-notice svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-2);
+}
+
+.net-tera-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.net-tera-state.is-on {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 36%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.net-tera-state.is-off {
+  color: var(--text-faint);
+}
+
+.net-tera-state-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.net-tera-difficulty {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-faint);
+}
+
+.net-tera-difficulty strong {
+  margin-left: 6px;
+  color: var(--accent-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.net-tera-hint,
+.net-tera-warn {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.net-tera-hint {
+  border: 1px solid var(--line);
+  background: var(--surface-recess);
+  color: var(--text-dim);
+}
+
+.net-tera-warn {
+  border: 1px solid color-mix(in srgb, var(--accent-2) 38%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 10%, transparent);
+  color: var(--text-dim);
+}
+
+.net-tera-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.net-tera-exception {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 36%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--danger);
+}
+
+.net-tera-exception svg {
+  flex: none;
+}
+
+.net-tera-exception strong {
+  margin-right: 2px;
+}
+
+.net-tera-exception .btn {
+  margin-left: auto;
+}
+
+.net-tera-forms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.net-tera-forms .panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.net-tera-forms .btn-primary {
+  align-self: flex-start;
+}
+
+.net-tera-input {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.06em;
+}
+
+.net-tera-code-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.net-tera-code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-tint);
+  border-radius: 10px;
+  padding: 8px 14px;
+  user-select: all;
+}
+
+.net-tera-members {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.net-tera-member {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.net-tera-member-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.net-tera-member-vendor {
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.net-tera-kind {
+  color: var(--accent-ink);
+  border-color: var(--accent-tint);
+  background: var(--accent-soft);
+}
+
+.net-tera-credit {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--text-faint);
+}
+
+.net-tera-credit strong {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.net-tera-credit-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--accent-ink);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.net-tera-credit-link:hover {
+  color: var(--text-strong);
+}
+
+.net-tera-log {
+  max-height: 420px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-recess);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-all;
+}

@@ -1,9 +1,9 @@
 // JDK 来源标记：安装时写一份记录，扫描时据此识别「这个 JDK 是谁装的」。
 // 识别优先级（从强到弱）：
 //   1) <home>/naiwa-source.json（本启动器安装时写的，最可靠）；
-//   2) 目录名前缀 bellsoft- / adoptium- / tuna-（我们自己定的命名规则）；
-//   3) JDK 自带的 release 文件里的 IMPLEMENTOR（BellSoft / Adoptium / Temurin）；
-//   4) 老版本启动器的 .naiwa.json 里 vendor 字符串（只有 Liberica 会命中）；
+//   2) 目录名前缀 bellsoft- / adoptium- / tuna- / zulu- / oracle- / dragonwell-（我们自己定的命名规则）；
+//   3) JDK 自带的 release 文件里的 IMPLEMENTOR（BellSoft / Adoptium / Azul / Oracle / Alibaba）；
+//   4) 老版本启动器的 .naiwa.json 里 vendor 字符串（Liberica / Temurin / Zulu / Oracle / Dragonwell）；
 //   都不满足就是 system（系统安装、Program Files 下的 JDK 等）。
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
@@ -13,7 +13,7 @@ import type { JavaVendorId } from "../../shared/types";
 /** 来源记录文件名（放在 JDK 根目录里，与 .naiwa.json 并存）。 */
 export const SOURCE_RECORD_FILE = "naiwa-source.json";
 
-/** 启动器自己装的三个源（system 不是「装出来的」）。 */
+/** 启动器自己装的源（system 不是「装出来的」）。 */
 export type ManagedSource = Exclude<JavaVendorId, "system">;
 
 export interface JavaSourceRecord {
@@ -23,7 +23,7 @@ export interface JavaSourceRecord {
   downloadUrl: string;
 }
 
-const MANAGED: ManagedSource[] = ["bellsoft", "adoptium", "tuna"];
+const MANAGED: ManagedSource[] = ["bellsoft", "adoptium", "tuna", "zulu", "oracle", "dragonwell"];
 
 export function isManagedSource(value: unknown): value is ManagedSource {
   return typeof value === "string" && (MANAGED as string[]).includes(value);
@@ -86,6 +86,10 @@ async function vendorFromReleaseFile(home: string): Promise<ManagedSource | unde
   if (!text.trim()) return undefined;
   if (text.includes("BELLSOFT") || text.includes("LIBERICA")) return "bellsoft";
   if (text.includes("ADOPTIUM") || text.includes("TEMURIN")) return "adoptium";
+  if (text.includes("AZUL")) return "zulu";
+  // Dragonwell 的 IMPLEMENTOR 是 "Alibaba"，实现版本串里也会出现 Dragonwell，两个都认
+  if (text.includes("ALIBABA") || text.includes("DRAGONWELL")) return "dragonwell";
+  if (text.includes("ORACLE")) return "oracle";
   return undefined;
 }
 
@@ -101,5 +105,8 @@ export async function detectVendor(home: string, metaVendor?: string): Promise<J
   const legacy = String(metaVendor ?? "").toUpperCase();
   if (legacy.includes("BELLSOFT") || legacy.includes("LIBERICA")) return "bellsoft";
   if (legacy.includes("ADOPTIUM") || legacy.includes("TEMURIN")) return "adoptium";
+  if (legacy.includes("AZUL")) return "zulu";
+  if (legacy.includes("ALIBABA") || legacy.includes("DRAGONWELL")) return "dragonwell";
+  if (legacy.includes("ORACLE")) return "oracle";
   return "system";
 }

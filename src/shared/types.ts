@@ -112,6 +112,10 @@ export interface Settings {
   closeAction: "ask" | "tray" | "quit";
   /** Wallpaper Engine 壁纸目录；留空表示自动探测 Steam 库。 */
   wallpaperEngineDir: string;
+  /** GitHub 加速节点：auto = 自动测速选最快；其余为固定节点。 */
+  githubAccelerator: "auto" | "ghf" | "padao" | "ghfast" | "cnxiaobai";
+  /** GitHub 下载文件的保存目录；留空表示 <启动器根目录>\DL。 */
+  githubDownloadDir: string;
   /** 背景音乐文件名（NaiWa/music 下），空串表示不播放。 */
   backgroundMusic: string;
   /** 背景音乐音量 0–1。 */
@@ -312,10 +316,10 @@ export interface LoaderVersionInfo {
 }
 
 /** JDK 下载源：auto = 自动测速挑最快；其余为具体站点。 */
-export type JavaSourceId = "auto" | "bellsoft" | "adoptium" | "tuna";
+export type JavaSourceId = "auto" | "bellsoft" | "adoptium" | "tuna" | "zulu" | "oracle" | "dragonwell";
 
 /** 具体（非 auto）的 JDK 来源，用来标记发行方与已安装来源。 */
-export type JavaVendorId = "bellsoft" | "adoptium" | "tuna" | "system";
+export type JavaVendorId = "bellsoft" | "adoptium" | "tuna" | "zulu" | "oracle" | "dragonwell" | "system";
 
 /** 随机图 API 解析出来的背景（主进程已落盘，url 是本地绝对路径）。 */
 export interface ApiBackground {
@@ -326,6 +330,16 @@ export interface ApiBackground {
 }
 
 /** 一个可下载的 JDK 版本。 */
+/** GitHub 加速节点探测结果（耗时越低越优先）。 */
+export interface GithubAcceleratorProbe {
+  id: "ghf" | "padao" | "ghfast" | "cnxiaobai";
+  label: string;
+  base: string;
+  /** 探测耗时（毫秒），失败为 null。 */
+  latencyMs: number | null;
+  ok: boolean;
+}
+
 /** 本地 Wallpaper Engine 壁纸（Steam 创意工坊 431960 下的项目）。 */
 export interface WallpaperEntry {
   /** 稳定 id：创意工坊 id（目录名）。 */
@@ -449,8 +463,8 @@ export interface ModFilterOptions {
 /** 下载/安装任务记录（持久化，重启后可继续）。 */
 export interface DownloadJob {
   id: string;
-  /** 任务类型：安装游戏版本 / 安装加载器 / 安装 Java / 下载模组。 */
-  kind: "version" | "loader" | "java" | "content";
+  /** 任务类型：安装游戏版本 / 安装加载器 / 安装 Java / 下载模组 / 下载单个文件（GitHub 加速等直链下载）。 */
+  kind: "version" | "loader" | "java" | "content" | "download";
   title: string;
   /** 目标描述（版本号、实例名等）。 */
   detail: string;

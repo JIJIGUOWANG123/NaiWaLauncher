@@ -1,9 +1,9 @@
 import type {
-  CreateInstanceRequest, ModFilesRequest, ModInstallRequest, ModSearchRequest, ModSourceFilter, NaiwaApi, ServerCreateRequest,
+  CreateInstanceRequest, GithubDownloadRequest, ModFilesRequest, ModInstallRequest, ModSearchRequest, ModSourceFilter, NaiwaApi, ServerCreateRequest,
 } from "../../shared/ipc";
 import type {
   Account, DownloadJob, InstalledContentRef, InstalledModInfo, InstanceMeta, InstalledJava, LanAddress, LoaderKind,
-  JavaRelease, JavaSourceId, JavaSourceProbe, JavaVendorId, LocalCape, LocalSkin, MapEntry, MicrosoftLoginState, ModCategory, ModContentKind, ModDependency, ModFilterOptions, ModProviderId,
+  GithubAcceleratorProbe, JavaRelease, JavaSourceId, JavaSourceProbe, JavaVendorId, LocalCape, LocalSkin, MapEntry, MicrosoftLoginState, ModCategory, ModContentKind, ModDependency, ModFilterOptions, ModProviderId,
   WallpaperEntry,
   ModSearchResult,
   NatfrpStatus, NatfrpTunnel, NatfrpUser, PortProbeResult, ServerConsoleLine, ServerCoreId, ServerEntry, ServerStatus,
@@ -21,6 +21,7 @@ import {
   MOCK_ROOT, MOCK_SAVES, MOCK_SCANNED_CONTENT, MOCK_SOURCES, MOCK_STARTUP_SOUND, MOCK_VERSIONS,
   mockDependencyFile, mockDetailFor, mockFiles, mockFindProject, mockIconUrl, mockLoaderVersions,
 } from "./data";
+import type { TeraStatus } from "../../shared/ipc";
 import { emitDone, emitProgress, mockBus } from "./emitter";
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -274,6 +275,14 @@ const MOCK_FRP_USER: NatfrpUser = {
 /** 启动后分配的假公网地址：与主进程真实链路返回的形态一致。 */
 const MOCK_FRP_ADDRESS = "cn-1.frp.one:34567";
 
+/** 陶瓦联机：预览用的初始快照与固定邀请码。 */
+const TERA_IDLE: TeraStatus = { running: false, binaryReady: false, secondary: false, state: "waiting", index: -1, players: [] };
+const MOCK_TERA_ROOM = "U/UX7Y-9M3E-X099-GMLW";
+let teraState: TeraStatus = { ...TERA_IDLE };
+function teraSnapshot(): TeraStatus {
+  return { ...teraState, players: [...teraState.players] };
+}
+
 /** 浏览器预览用的完整 NaiwaApi 实现：内存态 + 模拟进度事件。 */
 /** 下载管理演示数据：四条记录覆盖运行中 / 已中断 / 已完成 / 失败，updatedAt 故意错开以便验证倒序。 */
 function seedDownloadJobs(): DownloadJob[] {
@@ -331,16 +340,26 @@ const JAVA_VENDOR_LABEL: Record<Exclude<JavaSourceId, "auto">, string> = {
   bellsoft: "Liberica",
   adoptium: "Temurin",
   tuna: "Temurin (TUNA)",
+  zulu: "Azul Zulu",
+  oracle: "Oracle JDK",
+  dragonwell: "Dragonwell",
 };
 
 const JAVA_BASE_URL: Record<Exclude<JavaSourceId, "auto">, string> = {
   bellsoft: "https://download.bell-sw.com/java",
   adoptium: "https://github.com/adoptium/temurin-release/releases/download",
   tuna: "https://mirrors.tuna.tsinghua.edu.cn/Adoptium",
+  // 前两个是第三方镜像上的目录列表，最后一个走后者的官方 OSS 镜像
+  zulu: "https://d10.injdk.cn/openjdk/zulu",
+  oracle: "https://d10.injdk.cn/openjdk/oraclejdk",
+  dragonwell: "https://dragonwell.oss-cn-shanghai.aliyuncs.com",
 };
 
 function javaFileName(version: string, source: Exclude<JavaSourceId, "auto">): string {
   if (source === "bellsoft") return `bellsoft-jdk${version}-windows-amd64.zip`;
+  if (source === "zulu") return `zulu-ca-jdk${version}-win_x64.zip`;
+  if (source === "oracle") return `jdk-${version}_windows-x64_bin.zip`;
+  if (source === "dragonwell") return `Alibaba_Dragonwell_Standard_${version}_x64_windows.zip`;
   return `OpenJDK-${version}-windows-x64-${source}.zip`;
 }
 
@@ -858,6 +877,44 @@ export function createMockApi(): NaiwaApi {
       },
     },
 
+    // 陶瓦联机：预览里用内存态模拟「下载二进制 → 扫描 → 房主就绪」，只用于界面自检
+    tera: {
+      status: async (): Promise<TeraStatus> => teraSnapshot(),
+      host: async (player?: string): Promise<TeraStatus> => {
+        trace("tera.host", { player });
+        await sleep(500);
+        teraState = { ...TERA_IDLE, running: true, binaryReady: true, state: "host-scanning" };
+        setTimeout(() => {
+          teraState = { ...teraState, index: teraState.index + 3, state: "host-ok", room: MOCK_TERA_ROOM, players: [{ machineId: "host", name: player || "Steve", vendor: "vanilla", kind: "HOST" }] };
+        }, 1200);
+        return teraSnapshot();
+      },
+      join: async (room: string, player?: string): Promise<TeraStatus> => {
+        trace("tera.join", { room, player });
+        await sleep(500);
+        if (room.replace(/[^0-9A-Za-z]/g, "").length !== 17) throw new Error("邀请码格式不对：应为 U/XXXX-XXXX-XXXX-XXXX");
+        teraState = { ...TERA_IDLE, running: true, binaryReady: true, state: "guest-connecting" };
+        return teraSnapshot();
+      },
+      reset: async (): Promise<TeraStatus> => {
+        trace("tera.reset");
+        await sleep(200);
+        teraState = { ...teraState, state: "waiting", index: teraState.index + 1, room: undefined, players: [], exceptionType: undefined };
+        return teraSnapshot();
+      },
+      stop: async (): Promise<TeraStatus> => {
+        trace("tera.stop");
+        await sleep(300);
+        teraState = TERA_IDLE;
+        return teraSnapshot();
+      },
+      log: async (): Promise<string> => {
+        trace("tera.log");
+        await sleep(200);
+        return "[mock] 陶瓦联机日志\nSuccessfully join the global mutex, port = 13975\n[Core] Setting to state WAITING.";
+      },
+    },
+
     media: {
       // API 随机图：预览里在内置样例之间轮换；真实链路返回的是主进程下载好的绝对路径。
       apiBackground: async () => {
@@ -1368,6 +1425,45 @@ export function createMockApi(): NaiwaApi {
           installedJava.push(installed);
         }
         return { ...installed };
+      },
+    },
+
+    github: {
+      probe: async (): Promise<GithubAcceleratorProbe[]> => {
+        trace("github.probe");
+        await sleep(360);
+        // 预览下的假耗时：顺序固定，界面能直接看出「按耗时排序」的效果
+        return [
+          { id: "ghfast", label: "ghfast.top", base: "https://ghfast.top/", latencyMs: 58, ok: true },
+          { id: "padao", label: "gh.padao.fun", base: "https://gh.padao.fun/", latencyMs: 96, ok: true },
+          { id: "cnxiaobai", label: "github.cnxiaobai.com", base: "https://github.cnxiaobai.com/", latencyMs: 132, ok: true },
+          { id: "ghf", label: "ghf.无名氏.top", base: "https://ghf.无名氏.top/", latencyMs: null, ok: false },
+        ];
+      },
+      download: async (req: GithubDownloadRequest) => {
+        trace("github.download", { url: req.url, targetDir: req.targetDir ?? null, fileName: req.fileName ?? null });
+        await sleep(420);
+        if (!req.url.trim()) throw new Error("请先填写要下载的地址");
+        const name = req.fileName?.trim() || req.url.split("/").filter(Boolean).pop() || "download.bin";
+        const stamp = Date.now();
+        const dir = req.targetDir?.trim() || MOCK_ROOT + "\\DL";
+        return {
+          id: "mock-gh-" + stamp.toString(36),
+          kind: "content",
+          title: name,
+          detail: dir,
+          status: "running",
+          progress: 0,
+          createdAt: stamp,
+          updatedAt: stamp,
+          downloadedBytes: 0,
+          totalBytes: 0,
+        };
+      },
+      openDir: async () => {
+        trace("github.openDir");
+        await sleep(120);
+        return MOCK_ROOT + "\\DL";
       },
     },
 

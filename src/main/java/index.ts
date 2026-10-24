@@ -11,7 +11,7 @@ export async function listJavaReleases(source?: JavaSourceId): Promise<JavaRelea
   return releasesOfSource(source);
 }
 
-/** 三个下载源的探测结果（bellsoft / adoptium / tuna）。 */
+/** 各下载源的探测结果（bellsoft / adoptium / tuna / zulu / oracle / dragonwell）。 */
 export async function listJavaSources(): Promise<JavaSourceProbe[]> {
   return probeJavaSources();
 }

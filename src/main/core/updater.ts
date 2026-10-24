@@ -9,6 +9,7 @@ import { downloadFile } from "./http";
 import { getPaths } from "./paths";
 import { logger } from "./logger";
 import { mt } from "./i18n";
+import { githubUrlCandidates } from "../net/github";
 
 const log = logger("updater");
 
@@ -54,13 +55,12 @@ export function canSelfUpdate(): boolean {
   return true;
 }
 
-/** 生成候选下载地址：官方直链 → gh-proxy 镜像 → ghproxy.net 镜像。 */
-function downloadCandidates(url: string): string[] {
-  const list = [url];
-  if (/^https?:\/\/github\.com\//i.test(url)) {
-    list.push(`https://ghproxy.sakuramoe.dev/${url}`, `https://gh-proxy.com/${url}`, `https://ghproxy.net/${url}`);
-  }
-  return list;
+/**
+ * 生成候选下载地址：四个 GitHub 加速节点在前（按设置顺序：auto 先测速排序，固定节点优先），
+ * 原始地址最后兜底。非 GitHub 地址只有它自己。
+ */
+async function downloadCandidates(url: string): Promise<string[]> {
+  return githubUrlCandidates(url);
 }
 
 /** 下载新版本到 NaiWa/update，返回文件路径；直连失败会自动换镜像。 */
@@ -69,7 +69,7 @@ async function downloadToStaging(url: string): Promise<string> {
   await mkdir(dir, { recursive: true });
   const dest = join(dir, SINGLE_EXE_NAME);
   let lastError = "";
-  for (const candidate of downloadCandidates(url)) {
+  for (const candidate of await downloadCandidates(url)) {
     await rm(dest, { force: true });
     try {
       log.info(`[updater] 下载更新包：${candidate}`);
@@ -151,7 +151,7 @@ async function downloadSetup(url: string): Promise<string> {
   await mkdir(dir, { recursive: true });
   const dest = join(dir, "NaiWaLauncher-Setup.exe");
   let lastError = "";
-  for (const candidate of downloadCandidates(url)) {
+  for (const candidate of await downloadCandidates(url)) {
     await rm(dest, { force: true });
     try {
       log.info("[updater] 下载安装包：" + candidate);

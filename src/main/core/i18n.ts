@@ -620,6 +620,13 @@ export const DICT: Record<string, Entry> = {
   "upd.githubUnreachable": D("无法连接 GitHub（网络受限）", "Cannot reach GitHub (network restricted)", "GitHub に接続できません（ネットワーク制限）"),
   "changelog.unlabeled": D("未标注", "unlabelled", "未記載"),
 
+  // ---- GitHub 加速下载 ----
+  "github.urlRequired": D("请先填写要下载的 GitHub 地址", "Enter the GitHub URL to download first", "ダウンロードする GitHub の URL を入力してください"),
+  "github.urlInvalid": D("地址格式不正确：{url}", "Invalid URL: {url}", "URL の形式が正しくありません：{url}"),
+  "github.urlScheme": D("只支持 http(s) 地址：{url}", "Only http(s) URLs are supported: {url}", "http(s) の URL のみ対応しています：{url}"),
+  "github.stageDownload": D("下载中", "Downloading", "ダウンロード中"),
+  "github.jobMissing": D("下载任务创建失败，请稍后重试", "Could not create the download job — please try again", "ダウンロードタスクを作成できませんでした。後でもう一度お試しください"),
+
   "mods.cfNoKeySearch": D("无 Key 模式下 CurseForge 不支持关键词搜索，请粘贴模组链接（curseforge.com/minecraft/mc-mods/xxx）或到设置填写 API Key", "Without an API key, CurseForge does not support keyword search — paste a mod link (curseforge.com/minecraft/mc-mods/xxx) or set an API key in settings", "API キーがない場合、CurseForge はキーワード検索に対応しません。MOD のリンク（curseforge.com/minecraft/mc-mods/xxx）を貼るか、設定で API キーを入力してください"),
   "mods.missingKey": D("请先在设置中填写 CurseForge API Key", "Enter the CurseForge API key in settings first", "先に設定で CurseForge の API キーを入力してください"),
   "mods.keyRejected": D("CurseForge 拒绝了该 API Key，请到设置里检查或重新填写", "CurseForge rejected the API key — check or re-enter it in settings", "CurseForge が API キーを拒否しました。設定で確認するか再入力してください"),

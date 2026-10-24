@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { DownloadSourceId, Settings } from "../../shared/types";
+import type { DownloadSourceId, GithubAcceleratorProbe, Settings } from "../../shared/types";
 import { api } from "../lib/api";
 import { useT } from "../lib/i18n";
 import { usePersist } from "../lib/persist";
@@ -90,11 +90,198 @@ export function OtherSettingsPage() {
       {settingsError ? <ErrorState message={settingsError} /> : null}
 
       <div className="settings-grid">
+        <GithubCard settings={settings} />
         <DownloadCard settings={settings} />
         <CommunityCard settings={settings} />
         <AssistCard settings={settings} />
       </div>
     </section>
+  );
+}
+
+/** 四个节点的展示名（与主进程的 GITHUB_NODES 一一对应）：还没测出耗时时下拉也得有得选。 */
+const GITHUB_NODE_LABELS: Array<{ id: GithubAcceleratorProbe["id"]; label: string }> = [
+  { id: "ghf", label: "ghf.无名氏.top" },
+  { id: "padao", label: "gh.padao.fun" },
+  { id: "ghfast", label: "ghfast.top" },
+  { id: "cnxiaobai", label: "github.cnxiaobai.com" },
+];
+
+/** GitHub 加速下载：把一条直链丢进「管理」页的下载列表，顺带管节点与保存目录。 */
+function GithubCard({ settings }: { settings: Settings }) {
+  const { info } = useApp();
+  const persist = usePersist();
+  const { push } = useToast();
+  const tr = useT();
+
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [probing, setProbing] = useState(false);
+  const [probes, setProbes] = useState<GithubAcceleratorProbe[]>([]);
+  const [dirDraft, setDirDraft] = useState(settings.githubDownloadDir);
+
+  useEffect(() => setDirDraft(settings.githubDownloadDir), [settings.githubDownloadDir]);
+
+  const reprobe = async () => {
+    setProbing(true);
+    try {
+      setProbes(await api.github.probe());
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      setProbing(false);
+    }
+  };
+
+  // 进页面先测一轮：耗时是这一栏的主要信息，不该让用户先点一次按钮才看得到。
+  // 之后的重测由「重新测速」按钮触发，所以这里只跑一次。
+  useEffect(() => {
+    let alive = true;
+    setProbing(true);
+    api.github
+      .probe()
+      .then((list) => {
+        if (alive) setProbes(list);
+      })
+      .catch((error: unknown) => {
+        if (alive) push(errorMessage(error), "error");
+      })
+      .finally(() => {
+        if (alive) setProbing(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const defaultDir = info && info.rootDir ? info.rootDir.replace(/[\\/]+$/, "") + "\\DL" : "";
+  const effectiveDir = settings.githubDownloadDir.trim() || defaultDir;
+
+  const nodeOptions = [
+    { value: "auto", label: tr("pages.otherSettings.githubNodeAuto") },
+    ...GITHUB_NODE_LABELS.map((node) => {
+      const probe = probes.find((item) => item.id === node.id);
+      const suffix = !probe
+        ? ""
+        : probe.ok
+          ? " · " + String(probe.latencyMs ?? 0) + " ms"
+          : " · " + tr("pages.otherSettings.githubNodeFailed");
+      return { value: node.id as string, label: node.label + suffix };
+    }),
+  ];
+
+  const submit = async () => {
+    const target = url.trim();
+    if (!target) {
+      push(tr("pages.otherSettings.githubUrlRequired"), "error");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.github.download({ url: target });
+      push(tr("pages.otherSettings.githubQueued"), "success");
+      setUrl("");
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveDir = () => {
+    const next = dirDraft.trim();
+    if (next === settings.githubDownloadDir) return;
+    void persist({ githubDownloadDir: next }, tr("pages.otherSettings.githubPersistDir"));
+  };
+
+  const openDir = async () => {
+    try {
+      const dir = await api.github.openDir();
+      push(tr("pages.otherSettings.openedPath", { label: tr("pages.otherSettings.githubDirLabel"), path: dir }), "success");
+    } catch (error: unknown) {
+      push(errorMessage(error), "error");
+    }
+  };
+
+  return (
+    <div className="panel" data-card="github">
+      <div className="panel-head">
+        <h2 className="panel-title">{tr("pages.otherSettings.githubTitle")}</h2>
+        <span className="panel-count">{tr("pages.otherSettings.githubCount")}</span>
+      </div>
+
+      <div className="form-grid">
+        <Field label={tr("pages.otherSettings.githubUrlLabel")} hint={tr("pages.otherSettings.githubUrlHint")}>
+          <div className="key-row">
+            <TextInput
+              value={url}
+              aria-label={tr("pages.otherSettings.githubUrlLabel")}
+              placeholder="https://github.com/owner/repo/releases/download/v1.0.0/file.zip"
+              onChange={(event) => setUrl(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void submit();
+              }}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => void submit()}
+              disabled={busy}
+              data-action="github-download"
+            >
+              {busy ? tr("pages.otherSettings.githubDownloading") : tr("pages.otherSettings.githubDownload")}
+            </button>
+          </div>
+        </Field>
+
+        <Field label={tr("pages.otherSettings.githubNodeLabel")} hint={tr("pages.otherSettings.githubNodeHint")}>
+          <div className="key-row">
+            <Select
+              value={settings.githubAccelerator}
+              options={nodeOptions}
+              ariaLabel={tr("pages.otherSettings.githubNodeLabel")}
+              onChange={(value) => void persist({ githubAccelerator: value as Settings["githubAccelerator"] }, tr("pages.otherSettings.githubPersistNode"))}
+            />
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => void reprobe()}
+              disabled={probing}
+              data-action="github-reprobe"
+            >
+              {probing ? tr("pages.otherSettings.githubProbing") : tr("pages.otherSettings.githubReprobe")}
+            </button>
+          </div>
+        </Field>
+
+        <Field label={tr("pages.otherSettings.githubDirLabel")} hint={tr("pages.otherSettings.githubDirHint")}>
+          <div className="key-row">
+            <TextInput
+              value={dirDraft}
+              aria-label={tr("pages.otherSettings.githubDirLabel")}
+              placeholder={defaultDir}
+              onChange={(event) => setDirDraft(event.target.value)}
+              onBlur={saveDir}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") saveDir();
+              }}
+              spellCheck={false}
+              autoComplete="off"
+            />
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void openDir()} data-action="github-open-dir">
+              <IconFolder size={14} />
+              {tr("pages.otherSettings.open")}
+            </button>
+          </div>
+        </Field>
+
+        <p className="field-hint" data-github-dir>
+          {tr("pages.otherSettings.githubDirCurrent", { path: effectiveDir || tr("pages.otherSettings.readingPath") })}
+        </p>
+      </div>
+    </div>
   );
 }
 
